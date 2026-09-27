@@ -14,7 +14,7 @@ export function LoginForm() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    console.log('Form submitted', { firstName, lastName })
+    console.log('=== Form submitted ===', { firstName, lastName, loading })
     setError('')
     if (!firstName.trim() || !lastName.trim()) {
       setError('Veuillez remplir tous les champs')
@@ -22,9 +22,11 @@ export function LoginForm() {
     }
 
     try {
+      console.log('Calling createUserProfile...')
       createUserProfile(firstName.trim(), lastName.trim())
-      console.log('User created successfully')
+      console.log('User created successfully, navigating...')
       navigate('/')
+      console.log('Navigation triggered')
     } catch (err) {
       console.error('Error creating user:', err)
       setError('Erreur lors de la création du profil')

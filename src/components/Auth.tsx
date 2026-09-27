@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { User, Mail, Lock, User as UserIcon, LogOut, ChevronDown } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Card, CardContent } from './ui/Card'
@@ -6,6 +7,7 @@ import { useAuth } from '../hooks/useAuth'
 
 export function LoginForm() {
   const { createUserProfile, loading } = useAuth()
+  const navigate = useNavigate()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [error, setError] = useState('')
@@ -22,6 +24,7 @@ export function LoginForm() {
     try {
       createUserProfile(firstName.trim(), lastName.trim())
       console.log('User created successfully')
+      navigate('/')
     } catch (err) {
       console.error('Error creating user:', err)
       setError('Erreur lors de la création du profil')

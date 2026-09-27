@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { User, Mail, Lock, User as UserIcon, LogOut, ChevronDown } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Card, CardContent } from './ui/Card'
@@ -25,7 +24,7 @@ export function LoginForm() {
       console.log('Calling createUserProfile...')
       createUserProfile(firstName.trim(), lastName.trim())
       console.log('User created successfully, navigating...')
-      navigate('/')
+      window.location.href = '/'
       console.log('Navigation triggered')
     } catch (err) {
       console.error('Error creating user:', err)

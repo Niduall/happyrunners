@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { User, Mail, Lock, User as UserIcon, LogOut, ChevronDown } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Card, CardContent } from './ui/Card'

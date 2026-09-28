@@ -17,8 +17,22 @@ export function parseGPX(gpxContent: string): Parcours | null {
     console.log('First 500 chars:', cleanContent.substring(0, 500))
     console.log('Last 200 chars:', cleanContent.substring(Math.max(0, cleanContent.length - 200)))
     
+    // Essayer de parser en JSON d'abord (format Strava JSON export)
+    let parsedJson = null
+    try {
+      parsedJson = JSON.parse(cleanContent)
+    } catch (e) {
+      // Pas du JSON valide, on continue
+    }
+    
+    // Si c'est du JSON avec un tableau "points", traiter comme format JSON Strava
+    if (parsedJson && parsedJson.points && Array.isArray(parsedJson.points)) {
+      console.log('Format JSON Strava détecté')
+      return parseJSONStrava(parsedJson)
+    }
+    
+    // Sinon, format XML GPX standard
     // Check plus robuste (case-insensitive, ignore BOM/espace)
-    // Cherche gpx, trk, rte, wpt - tous les tags GPX possibles
     const hasGPX = /<gpx/i.test(cleanContent) || /<trk/i.test(cleanContent) || /<rte/i.test(cleanContent) || /<wpt/i.test(cleanContent)
     if (!hasGPX) {
       console.error('Pas un fichier GPX valide - pas de balise <gpx>, <trk>, <rte> ou <wpt>')
@@ -174,6 +188,41 @@ function buildParcoursFromWaypoints(waypoints: any[]): Parcours | null {
 
   if (points.length === 0) return null
   return buildParcours('Parcours waypoints', undefined, points)
+}
+
+// Parser pour le format JSON Strava (export récent)
+function parseJSONStrava(json: any): Parcours | null {
+  if (!json.points || !Array.isArray(json.points) || json.points.length === 0) {
+    console.error('Format JSON invalide: pas de tableau points')
+    return null
+  }
+
+  console.log(`Parsing JSON Strava: ${json.points.length} points`)
+
+  const points: GPXPoint[] = []
+  
+  for (const point of json.points) {
+    if (point.lat != null && point.lng != null) {
+      points.push({
+        lat: Number(point.lat),
+        lng: Number(point.lng),
+        ele: point.ele != null ? Number(point.ele) : undefined,
+        time: point.time,
+      })
+    }
+  }
+
+  if (points.length === 0) {
+    console.error('Aucun point valide dans le JSON')
+    return null
+  }
+
+  console.log(`Successfully parsed ${points.length} points from JSON`)
+  
+  // Utiliser le nom du fichier ou un nom par défaut
+  const name = json.name || json.title || 'Parcours Strava'
+  
+  return buildParcours(name, json.description, points)
 }
 
 function buildParcours(name: string | undefined, desc: string | undefined, points: GPXPoint[]): Parcours {

@@ -55,12 +55,23 @@ export function useParcours() {
     const parsed = parseGPX(gpxContent)
     if (!parsed) throw new Error('Fichier GPX invalide')
 
+    // Vérifier si l'ID utilisateur est un UUID valide (Supabase Auth)
+    // Les IDs localStorage sont au format "user_xxx" (pas UUID)
+    const isValidUUID = (id: string | null | undefined) => {
+      if (!id) return false
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      return uuidRegex.test(id)
+    }
+
+    const userId = user?.id
+    const created_by = userId && isValidUUID(userId) ? userId : null
+
     const parcoursData: ParcoursInsert = {
       name,
       distance_km: parsed.distance ?? 0,
       elevation_gain_m: parsed.elevationGain ?? 0,
       points: parsed.points,
-      created_by: user?.id || '',
+      created_by,
     }
 
     return addParcours(parcoursData)

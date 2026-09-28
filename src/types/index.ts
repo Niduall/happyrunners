@@ -19,7 +19,7 @@ export interface Parcours {
   elevationGain?: number
   elevation_gain_m?: number
   points: GPXPoint[]
-  created_by?: string
+  created_by?: string | null
   createdAt?: string
   created_at?: string
   updatedAt?: string

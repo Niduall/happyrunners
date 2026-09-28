@@ -20,7 +20,7 @@ export interface Parcours {
   distance_km: number
   elevation_gain_m?: number
   points: GPXPoint[]
-  created_by: string
+  created_by: string | null
   created_at: string
   updated_at: string
 }
@@ -40,7 +40,7 @@ export interface ParcoursInsert {
   distance_km: number
   elevation_gain_m?: number
   points: GPXPoint[]
-  created_by: string
+  created_by: string | null
 }
 
 export interface ParticipationInsert {

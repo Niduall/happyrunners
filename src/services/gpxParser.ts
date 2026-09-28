@@ -11,11 +11,18 @@ export function parseGPX(gpxContent: string): Parcours | null {
       return null
     }
 
+    // Debug: afficher plus d'infos pour diagnostic
+    console.log('=== GPX DEBUG ===')
+    console.log('Content length:', cleanContent.length)
+    console.log('First 500 chars:', cleanContent.substring(0, 500))
+    console.log('Last 200 chars:', cleanContent.substring(Math.max(0, cleanContent.length - 200)))
+    
     // Check plus robuste (case-insensitive, ignore BOM/espace)
-    const hasGPX = /<gpx/i.test(cleanContent) || /<trk/i.test(cleanContent)
+    // Cherche gpx, trk, rte, wpt - tous les tags GPX possibles
+    const hasGPX = /<gpx/i.test(cleanContent) || /<trk/i.test(cleanContent) || /<rte/i.test(cleanContent) || /<wpt/i.test(cleanContent)
     if (!hasGPX) {
-      console.error('Pas un fichier GPX valide - pas de balise <gpx> ou <trk>')
-      console.debug('Premiers 200 chars:', cleanContent.substring(0, 200))
+      console.error('Pas un fichier GPX valide - pas de balise <gpx>, <trk>, <rte> ou <wpt>')
+      console.debug('Premiers 500 chars:', cleanContent.substring(0, 500))
       return null
     }
 

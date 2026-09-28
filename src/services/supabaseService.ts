@@ -96,27 +96,28 @@ export async function getParticipations(parcoursId?: string): Promise<Participat
   return data || []
 }
 
-export async function getMyVote(parcoursId: string, userId: string): Promise<'yes' | 'no' | null> {
+export async function getMyVote(parcoursId: string, localUserId: string): Promise<'yes' | 'no' | null> {
   const { data, error } = await supabase
     .from('participations')
     .select('status')
     .eq('parcours_id', parcoursId)
-    .eq('user_id', userId)
+    .eq('local_user_id', localUserId)
     .single()
 
   if (error && error.code !== 'PGRST116') throw error
   return data?.status || null
 }
 
-export async function vote(parcoursId: string, userId: string, status: 'yes' | 'no'): Promise<Participation> {
+export async function vote(parcoursId: string, localUserId: string, status: 'yes' | 'no'): Promise<Participation> {
   const { data, error } = await supabase
     .from('participations')
     .upsert({
       parcours_id: parcoursId,
-      user_id: userId,
+      user_id: null,
+      local_user_id: localUserId,
       status,
     } as ParticipationInsert, {
-      onConflict: 'parcours_id,user_id',
+      onConflict: 'parcours_id,local_user_id',
     })
     .select()
     .single()

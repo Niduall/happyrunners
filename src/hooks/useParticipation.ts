@@ -24,6 +24,7 @@ export function useParticipation(parcoursId: string) {
   const loadMyVote = useCallback(async () => {
     if (!user || !parcoursId) return
     try {
+      // Utiliser l'ID localStorage comme local_user_id
       const myVoteData = await getMyVote(parcoursId, user.id)
       setMyVote(myVoteData)
     } catch (err) {
@@ -54,8 +55,8 @@ export function useParticipation(parcoursId: string) {
         setYesCount(yes)
         setNoCount(no)
 
-        // Mon vote
-        const myParticipation = participations.find((p: any) => p.user_id === user?.id)
+        // Mon vote - utilise local_user_id
+        const myParticipation = participations.find((p: any) => p.local_user_id === user?.id)
         if (myParticipation) {
           setMyVote(myParticipation.status)
         }
@@ -79,6 +80,7 @@ export function useParticipation(parcoursId: string) {
   const setVote = useCallback(async (status: 'yes' | 'no') => {
     if (!user || !parcoursId) return
     try {
+      // Utiliser l'ID localStorage comme local_user_id
       await vote(parcoursId, user.id, status)
       setMyVote(status)
       if (status === 'yes') {

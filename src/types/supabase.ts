@@ -28,7 +28,8 @@ export interface Parcours {
 export interface Participation {
   id: string
   parcours_id: string
-  user_id: string
+  user_id: string | null
+  local_user_id: string | null
   status: 'yes' | 'no'
   created_at: string
   updated_at: string
@@ -45,6 +46,7 @@ export interface ParcoursInsert {
 
 export interface ParticipationInsert {
   parcours_id: string
-  user_id: string
+  user_id: string | null
+  local_user_id: string | null
   status: 'yes' | 'no'
 }

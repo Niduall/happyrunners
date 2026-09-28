@@ -36,6 +36,7 @@ export function useAuth() {
   const logout = useCallback(() => {
     localStorage.removeItem('running_user')
     setUser(null)
+    window.location.href = '/'
   }, [])
 
   return {

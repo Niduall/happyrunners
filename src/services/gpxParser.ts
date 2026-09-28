@@ -21,14 +21,25 @@ export function parseGPX(gpxContent: string): Parcours | null {
     let parsedJson = null
     try {
       parsedJson = JSON.parse(cleanContent)
+      console.log('JSON parsed successfully:', Object.keys(parsedJson))
+      console.log('Has points:', !!parsedJson.points, 'isArray:', Array.isArray(parsedJson.points))
+      if (parsedJson.points) {
+        console.log('Points length:', parsedJson.points.length)
+        console.log('First point:', parsedJson.points[0])
+      }
     } catch (e) {
-      // Pas du JSON valide, on continue
+      console.log('Not valid JSON, trying XML GPX')
     }
     
     // Si c'est du JSON avec un tableau "points", traiter comme format JSON Strava
     if (parsedJson && parsedJson.points && Array.isArray(parsedJson.points)) {
       console.log('Format JSON Strava détecté')
       return parseJSONStrava(parsedJson)
+    }
+    
+    // Si JSON mais pas de points, essayer quand même si c'est un objet avec points
+    if (parsedJson && typeof parsedJson === 'object') {
+      console.log('JSON parsed but no points array, keys:', Object.keys(parsedJson))
     }
     
     // Sinon, format XML GPX standard

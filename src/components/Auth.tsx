@@ -77,10 +77,14 @@ export function LoginForm() {
           setError('Le PIN doit faire 4 chiffres')
           return
         }
-        createUserProfile(firstName.trim(), lastName.trim(), showPin ? pin : undefined)
-        window.location.href = '/' // Recharger seulement à la 1ère connexion
+        const result = await createUserProfile(firstName.trim(), lastName.trim(), showPin ? pin : undefined)
+        if (result) {
+          // Compte créé avec succès -> recharger
+          window.location.href = '/'
+        }
+        // Si result === null -> mode PIN activé, l'UI se met à jour automatiquement
       } else if (needsPin) {
-        const ok = verifyUserPin(pin)
+        const ok = await verifyUserPin(pin)
         if (!ok) {
           setError('PIN incorrect')
           setPin('')

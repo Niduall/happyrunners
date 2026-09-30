@@ -63,6 +63,21 @@ export function useAuth() {
 
   const createUserProfile = useCallback(async (firstName: string, lastName: string, pin?: string) => {
     const localUserId = generateUserId(firstName, lastName)
+    
+    // D'abord vérifier si un profil existe déjà en base pour ce nom
+    try {
+      const existingProfile = await getUserProfile(localUserId)
+      if (existingProfile && existingProfile.pin_hash) {
+        // Profil existe AVEC PIN -> basculer en mode vérification PIN
+        setMode('pin_verification')
+        setPendingUser({ firstName, lastName, localUserId })
+        return null // Ne pas créer, attendre vérification PIN
+      }
+      // Profil existe SANS PIN ou pas de profil -> continuer création
+    } catch (err) {
+      console.error('Erreur vérification profil existant:', err)
+    }
+    
     const newUser = createUser(firstName, lastName)
     setUser(newUser)
     

@@ -39,8 +39,8 @@ export function ParticipationBtn({ parcoursId, userName }: ParticipationBtnProps
       setYesCount(yes)
       setNoCount(no)
 
-      // Mon vote
-      const myParticipation = participations.find((p: any) => p.user_id === user?.id)
+      // Mon vote - utilise local_user_id
+      const myParticipation = participations.find((p: any) => p.local_user_id === user?.id)
       if (myParticipation) {
         setStatus(myParticipation.status)
       }

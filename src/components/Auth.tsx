@@ -48,14 +48,13 @@ function PinInput({ value, onChange, onSubmit, label, error, autoFocus }: {
 }
 
 export function LoginForm() {
-  const { createUserProfile, verifyUserPin, needsPin, pendingUser, loading } = useAuth()
+  const { createUserProfile, verifyUserPin, isFirstLogin, needsPin, pendingUser, loading, isAuthenticated } = useAuth()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [pin, setPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
   const [error, setError] = useState('')
   const [showPin, setShowPin] = useState(false)
-  const isFirstLogin = !needsPin && !pendingUser
 
   const doSubmit = async () => {
     setError('')
@@ -63,7 +62,7 @@ export function LoginForm() {
       setError('Veuillez remplir tous les champs')
       return
     }
-    if (!isFirstLogin && (!pin || pin.length !== 4)) {
+    if (needsPin && (!pin || pin.length !== 4)) {
       setError('Veuillez entrer votre PIN à 4 chiffres')
       return
     }
@@ -80,7 +79,7 @@ export function LoginForm() {
         }
         createUserProfile(firstName.trim(), lastName.trim(), showPin ? pin : undefined)
         window.location.href = '/' // Recharger seulement à la 1ère connexion
-      } else {
+      } else if (needsPin) {
         const ok = verifyUserPin(pin)
         if (!ok) {
           setError('PIN incorrect')
@@ -99,6 +98,9 @@ export function LoginForm() {
     e.preventDefault()
     doSubmit()
   }
+
+  // Si déjà authentifié, ne rien afficher (le parent gère)
+  if (isAuthenticated) return null
 
   return (
     <Card className="w-full max-w-md mx-auto">

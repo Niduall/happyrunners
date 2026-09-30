@@ -79,6 +79,7 @@ export function LoginForm() {
           return
         }
         createUserProfile(firstName.trim(), lastName.trim(), showPin ? pin : undefined)
+        window.location.href = '/' // Recharger seulement à la 1ère connexion
       } else {
         const ok = verifyUserPin(pin)
         if (!ok) {
@@ -86,8 +87,8 @@ export function LoginForm() {
           setPin('')
           return
         }
+        // PIN correct : l'état React se met à jour (isAuthenticated=true), pas de rechargement
       }
-      window.location.href = '/'
     } catch (err) {
       console.error('Error:', err)
       setError('Erreur lors de la connexion')

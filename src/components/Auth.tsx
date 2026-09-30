@@ -1,20 +1,64 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, Mail, Lock, User as UserIcon, LogOut, ChevronDown } from 'lucide-react'
+import { User, Mail, Lock, User as UserIcon, LogOut, ChevronDown, Eye, EyeOff, Shield } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Card, CardContent } from './ui/Card'
+import { Input } from './ui/Input'
 import { useAuth } from '../hooks/useAuth'
 
+function PinInput({ value, onChange, onSubmit, label, error, autoFocus }: {
+  value: string
+  onChange: (v: string) => void
+  onSubmit: () => void
+  label: string
+  error?: string
+  autoFocus?: boolean
+}) {
+  const [show, setShow] = useState(false)
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') onSubmit()
+  }
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <div className="relative">
+        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <input
+          type={show ? 'text' : 'password'}
+          value={value}
+          onChange={e => onChange(e.target.value.replace(/\D/g, '').slice(0, 4))}
+          onKeyDown={handleKeyDown}
+          placeholder="••••"
+          className="w-full pl-10 pr-12 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-center tracking-widest text-lg"
+          autoFocus={autoFocus}
+          maxLength={4}
+          inputMode="numeric"
+        />
+        <button
+          type="button"
+          onClick={() => setShow(!show)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+        >
+          {show ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+        </button>
+      </div>
+      {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
+    </div>
+  )
+}
+
 export function LoginForm() {
-  const { createUserProfile, loading } = useAuth()
-  const navigate = useNavigate()
+  const { createUserProfile, verifyUserPin, needsPin, pendingUser, loading } = useAuth()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
+  const [pin, setPin] = useState('')
+  const [confirmPin, setConfirmPin] = useState('')
   const [error, setError] = useState('')
+  const [showPin, setShowPin] = useState(false)
+  const isFirstLogin = !needsPin && !pendingUser
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    console.log('=== Form submitted ===', { firstName, lastName, loading })
     setError('')
     if (!firstName.trim() || !lastName.trim()) {
       setError('Veuillez remplir tous les champs')
@@ -22,14 +66,34 @@ export function LoginForm() {
     }
 
     try {
-      console.log('Calling createUserProfile...')
-      createUserProfile(firstName.trim(), lastName.trim())
-      console.log('User created successfully, navigating...')
+      if (isFirstLogin) {
+        // Première connexion : PIN optionnel
+        if (showPin && pin !== confirmPin) {
+          setError('Les PIN ne correspondent pas')
+          return
+        }
+        if (showPin && pin.length !== 4) {
+          setError('Le PIN doit faire 4 chiffres')
+          return
+        }
+        createUserProfile(firstName.trim(), lastName.trim(), showPin ? pin : undefined)
+      } else {
+        // Connexion avec PIN existant
+        if (!pin || pin.length !== 4) {
+          setError('Veuillez entrer votre PIN à 4 chiffres')
+          return
+        }
+        const ok = verifyUserPin(pin)
+        if (!ok) {
+          setError('PIN incorrect')
+          setPin('')
+          return
+        }
+      }
       window.location.href = '/'
-      console.log('Navigation triggered')
     } catch (err) {
-      console.error('Error creating user:', err)
-      setError('Erreur lors de la création du profil')
+      console.error('Error:', err)
+      setError('Erreur lors de la connexion')
     }
   }
 
@@ -37,12 +101,13 @@ export function LoginForm() {
     <Card className="w-full max-w-md mx-auto">
       <CardContent className="p-6">
         <div className="text-center mb-6">
-          <svg className="w-16 h-16 text-primary mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
+          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Shield className="w-8 h-8 text-primary" />
+          </div>
           <h3 className="text-xl font-semibold text-gray-900">HappyRunners</h3>
-          <p className="text-gray-500 mt-1">Entrez votre prénom et nom pour rejoindre le groupe</p>
+          <p className="text-gray-500 mt-1">
+            {isFirstLogin ? 'Entrez votre prénom et nom pour rejoindre le groupe' : `Bonjour ${pendingUser?.firstName}, entrez votre PIN`}
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -52,43 +117,84 @@ export function LoginForm() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
-              <div className="relative">
-                <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  value={firstName}
-                  onChange={e => setFirstName(e.target.value)}
-                  placeholder="Prénom"
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                  autoFocus
-                />
+          {isFirstLogin && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
+                <div className="relative">
+                  <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <Input
+                    type="text"
+                    value={firstName}
+                    onChange={e => setFirstName(e.target.value)}
+                    placeholder="Prénom"
+                    className="pl-10"
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
+                <div className="relative">
+                  <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <Input
+                    type="text"
+                    value={lastName}
+                    onChange={e => setLastName(e.target.value)}
+                    placeholder="Nom"
+                    className="pl-10"
+                  />
+                </div>
               </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
-              <div className="relative">
-                <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  value={lastName}
-                  onChange={e => setLastName(e.target.value)}
-                  placeholder="Nom"
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                />
-              </div>
-            </div>
-          </div>
+          )}
 
-          <Button type="submit" className="w-full" disabled={loading || !firstName.trim() || !lastName.trim()}>
-            {loading ? 'Connexion...' : 'Rejoindre le groupe'}
+          {!isFirstLogin && (
+            <div className="text-center mb-2">
+              <p className="text-sm text-gray-500">Connecté en tant que <strong>{pendingUser?.firstName} {pendingUser?.lastName}</strong></p>
+            </div>
+          )}
+
+          {(isFirstLogin && showPin) || (!isFirstLogin && needsPin) ? (
+            <PinInput
+              value={pin}
+              onChange={setPin}
+              onSubmit={handleSubmit}
+              label={isFirstLogin ? 'Créer un PIN (4 chiffres, optionnel)' : 'PIN à 4 chiffres'}
+              error={error}
+              autoFocus={!isFirstLogin}
+            />
+          ) : (
+            <div className="text-center">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowPin(true)}
+                className="text-primary hover:text-primary/80"
+              >
+                {isFirstLogin ? 'Ajouter un PIN de protection (optionnel)' : 'J\'ai oublié mon PIN'}
+              </Button>
+            </div>
+          )}
+
+          {isFirstLogin && showPin && (
+            <PinInput
+              value={confirmPin}
+              onChange={setConfirmPin}
+              onSubmit={handleSubmit}
+              label="Confirmer le PIN"
+              autoFocus
+            />
+          )}
+
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? 'Connexion...' : isFirstLogin ? (showPin ? 'Créer mon compte' : 'Rejoindre le groupe') : 'Se connecter'}
           </Button>
         </form>
 
         <p className="mt-4 text-center text-xs text-gray-400">
-          Votre nom sera mémorisé sur cet appareil
+          {isFirstLogin ? 'Votre nom sera mémorisé sur cet appareil' : 'Le PIN protège votre vote sur cet appareil'}
         </p>
       </CardContent>
     </Card>
@@ -121,8 +227,6 @@ export function UserMenu() {
     setEditing(true)
   }
 
-  if (!isAuthenticated) return null
-
   return (
     <div className="relative">
       <Button
@@ -146,25 +250,26 @@ export function UserMenu() {
         <div className="fixed right-4 top-12 z-50 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2">
           <div className="px-4 py-3 border-b border-gray-100">
             <p className="font-medium text-gray-900">{user?.name || 'Coureur'}</p>
+            <p className="text-xs text-gray-500">Connecté sur cet appareil</p>
           </div>
 
           <div className="p-2">
             {editing ? (
               <div className="flex flex-col gap-2">
                 <div className="flex gap-2">
-                  <input
+                  <Input
                     type="text"
                     value={firstName}
                     onChange={e => setFirstName(e.target.value)}
-                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    className="flex-1"
                     placeholder="Prénom"
                     autoFocus
                   />
-                  <input
+                  <Input
                     type="text"
                     value={lastName}
                     onChange={e => setLastName(e.target.value)}
-                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    className="flex-1"
                     placeholder="Nom"
                   />
                 </div>

@@ -63,4 +63,5 @@ export interface User {
   firstName: string
   lastName: string
   name: string // computed: "Prénom Nom"
+  pin?: string // 4-digit PIN hash (optional, for security)
 }

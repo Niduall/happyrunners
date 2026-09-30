@@ -227,3 +227,50 @@ export async function getUser() {
   const { data } = await supabase.auth.getUser()
   return data.user
 }
+
+// ===== USER PROFILES (PIN cross-device) =====
+
+export async function getUserProfile(localUserId: string): Promise<UserProfile | null> {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('local_user_id', localUserId)
+    .single()
+
+  if (error && error.code !== 'PGRST116') throw error
+  return data || null
+}
+
+export async function createUserProfile(profile: UserProfileInsert): Promise<UserProfile> {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .insert(profile)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function updateUserProfile(localUserId: string, updates: UserProfileUpdate): Promise<UserProfile> {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('local_user_id', localUserId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function upsertUserProfile(profile: UserProfileInsert): Promise<UserProfile> {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .upsert(profile)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}

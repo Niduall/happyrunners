@@ -1,37 +1,83 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getUser, createUser, verifyPin, generateUserId, setUser as setUserStorage } from '../services/storage'
+import { getUser, createUser, generateUserId, setUser as setUserStorage } from '../services/storage'
+import { getUserProfile, upsertUserProfile } from '../services/supabaseService'
 import type { User } from '../types'
 
 type AuthMode = 'loading' | 'first_login' | 'pin_verification' | 'authenticated'
 
+// Simple hash pour le PIN (même algo côté client pour envoyer à Supabase)
+function hashPin(pin: string): string {
+  let hash = 0
+  for (let i = 0; i < pin.length; i++) {
+    hash = ((hash << 5) - hash) + pin.charCodeAt(i)
+    hash |= 0
+  }
+  return 'pin_' + Math.abs(hash).toString(36)
+}
+
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
   const [mode, setMode] = useState<AuthMode>('loading')
-  const [pendingUser, setPendingUser] = useState<{ firstName: string; lastName: string } | null>(null)
+  const [pendingUser, setPendingUser] = useState<{ firstName: string; lastName: string; localUserId: string } | null>(null)
 
   // Charger l'utilisateur au montage
   useEffect(() => {
     const storedUser = getUser()
     if (storedUser) {
-      if (storedUser.pin) {
-        // PIN configuré -> mode vérification PIN
-        setMode('pin_verification')
-        setPendingUser({ firstName: storedUser.firstName, lastName: storedUser.lastName })
-      } else {
-        // Pas de PIN -> connecté direct
-        setUser(storedUser)
-        setMode('authenticated')
-      }
+      // Vérifier s'il a un PIN en base (cross-device)
+      checkPinInDatabase(storedUser.id, storedUser.firstName, storedUser.lastName)
     } else {
-      // Aucun utilisateur -> 1ère connexion
       setMode('first_login')
     }
-    // loading géré par le mode
   }, [])
 
-  const createUserProfile = useCallback((firstName: string, lastName: string, pin?: string) => {
-    const newUser = createUser(firstName, lastName, pin)
+  const checkPinInDatabase = async (localUserId: string, firstName: string, lastName: string) => {
+    try {
+      const profile = await getUserProfile(localUserId)
+      if (profile && profile.pin_hash) {
+        // PIN existe en base -> mode vérification PIN
+        setMode('pin_verification')
+        setPendingUser({ firstName, lastName, localUserId })
+      } else {
+        // Pas de PIN en base -> connecté direct
+        const user = getUser() // recharge au cas où
+        if (user) {
+          setUser(user)
+          setMode('authenticated')
+        } else {
+          setMode('first_login')
+        }
+      }
+    } catch (err) {
+      console.error('Erreur vérification PIN base:', err)
+      // En cas d'erreur réseau, fallback sur localStorage
+      const user = getUser()
+      if (user) {
+        setUser(user)
+        setMode('authenticated')
+      } else {
+        setMode('first_login')
+      }
+    }
+  }
+
+  const createUserProfile = useCallback(async (firstName: string, lastName: string, pin?: string) => {
+    const localUserId = generateUserId(firstName, lastName)
+    const newUser = createUser(firstName, lastName)
     setUser(newUser)
+    
+    // Sauvegarder le profil en base (avec PIN hashé si fourni)
+    try {
+      await upsertUserProfile({
+        local_user_id: localUserId,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        pin_hash: pin ? hashPin(pin) : null,
+      })
+    } catch (err) {
+      console.error('Erreur sauvegarde profil:', err)
+    }
+    
     setMode('authenticated')
     setPendingUser(null)
     return newUser
@@ -49,18 +95,38 @@ export function useAuth() {
     setUser(updatedUser)
   }, [user])
 
-  const verifyUserPin = useCallback((pin: string) => {
+  const verifyUserPin = useCallback(async (pin: string) => {
     if (!pendingUser) return false
-    const storedUser = getUser()
-    if (!storedUser) return false
     
-    if (verifyPin(storedUser, pin)) {
-      setUser(storedUser)
-      setMode('authenticated')
-      setPendingUser(null)
-      return true
+    try {
+      const profile = await getUserProfile(pendingUser.localUserId)
+      if (!profile || !profile.pin_hash) {
+        // Pas de PIN en base -> connecté direct
+        const user = getUser()
+        if (user) {
+          setUser(user)
+          setMode('authenticated')
+          setPendingUser(null)
+          return true
+        }
+        return false
+      }
+      
+      // Vérifier le PIN
+      if (profile.pin_hash === hashPin(pin)) {
+        const user = getUser()
+        if (user) {
+          setUser(user)
+          setMode('authenticated')
+          setPendingUser(null)
+          return true
+        }
+      }
+      return false
+    } catch (err) {
+      console.error('Erreur vérification PIN:', err)
+      return false
     }
-    return false
   }, [pendingUser])
 
   const logout = useCallback(() => {

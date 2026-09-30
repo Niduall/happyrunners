@@ -83,17 +83,7 @@ export function setUser(user: User): void {
   localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user))
 }
 
-// Simple hash pour le PIN (pas crypto, juste obscurcissement localStorage)
-function hashPin(pin: string): string {
-  let hash = 0
-  for (let i = 0; i < pin.length; i++) {
-    hash = ((hash << 5) - hash) + pin.charCodeAt(i)
-    hash |= 0
-  }
-  return 'pin_' + Math.abs(hash).toString(36)
-}
-
-export function createUser(firstName: string, lastName: string, pin?: string): User {
+export function createUser(firstName: string, lastName: string): User {
   const trimmedFirst = firstName.trim()
   const trimmedLast = lastName.trim()
   const name = `${trimmedFirst} ${trimmedLast}`
@@ -102,15 +92,9 @@ export function createUser(firstName: string, lastName: string, pin?: string): U
     firstName: trimmedFirst,
     lastName: trimmedLast,
     name,
-    pin: pin ? hashPin(pin) : undefined,
   }
   setUser(user)
   return user
-}
-
-export function verifyPin(user: User, pin: string): boolean {
-  if (!user.pin) return true // Pas de PIN configuré = accès libre
-  return user.pin === hashPin(pin)
 }
 
 export function generateUserId(firstName: string, lastName: string): string {

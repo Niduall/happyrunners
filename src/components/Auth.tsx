@@ -90,7 +90,8 @@ export function LoginForm() {
           setPin('')
           return
         }
-        // PIN correct : l'état React se met à jour (isAuthenticated=true), pas de rechargement
+        // PIN correct : recharger pour hydratation propre
+        window.location.href = '/'
       }
     } catch (err) {
       console.error('Error:', err)

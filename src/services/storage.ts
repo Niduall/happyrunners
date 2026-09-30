@@ -84,18 +84,27 @@ export function setUser(user: User): void {
 }
 
 export function createUser(firstName: string, lastName: string): User {
+  const trimmedFirst = firstName.trim()
+  const trimmedLast = lastName.trim()
+  const name = `${trimmedFirst} ${trimmedLast}`
   const user: User = {
-    id: generateUserId(),
-    firstName: firstName.trim(),
-    lastName: lastName.trim(),
-    name: `${firstName.trim()} ${lastName.trim()}`,
+    id: generateUserId(trimmedFirst, trimmedLast),
+    firstName: trimmedFirst,
+    lastName: trimmedLast,
+    name,
   }
   setUser(user)
   return user
 }
 
-export function generateUserId(): string {
-  return 'user_' + Math.random().toString(36).substr(2, 9)
+export function generateUserId(firstName: string, lastName: string): string {
+  // Utiliser Prénom + Nom comme identifiant unique (normalisé)
+  return (firstName + ' ' + lastName)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // retirer accents
+    .replace(/[^a-z0-9\s]/g, '') // garder lettres, chiffres, espaces
+    .replace(/\s+/g, '_') // espaces -> underscores
 }
 
 // --- Export/Import ---

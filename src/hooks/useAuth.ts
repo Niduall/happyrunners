@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getUser, createUser, verifyPin, generateUserId } from '../services/storage'
+import { getUser, createUser, verifyPin, generateUserId, setUser as setUserStorage } from '../services/storage'
 import type { User } from '../types'
 
 export function useAuth() {
@@ -32,6 +32,18 @@ export function useAuth() {
     return user
   }, [])
 
+  const updateName = useCallback((firstName: string, lastName: string) => {
+    if (!user) return
+    const updatedUser: User = {
+      ...user,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      name: `${firstName.trim()} ${lastName.trim()}`,
+    }
+    setUserStorage(updatedUser)
+    setUser(updatedUser)
+  }, [user])
+
   const verifyUserPin = useCallback((pin: string) => {
     if (!pendingUser) return false
     const storedUser = getUser()
@@ -61,6 +73,7 @@ export function useAuth() {
     needsPin,
     pendingUser,
     createUserProfile,
+    updateName,
     verifyUserPin,
     logout,
   }

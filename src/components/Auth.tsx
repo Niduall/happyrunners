@@ -57,17 +57,19 @@ export function LoginForm() {
   const [showPin, setShowPin] = useState(false)
   const isFirstLogin = !needsPin && !pendingUser
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
+  const doSubmit = async () => {
     setError('')
-    if (!firstName.trim() || !lastName.trim()) {
+    if (isFirstLogin && (!firstName.trim() || !lastName.trim())) {
       setError('Veuillez remplir tous les champs')
+      return
+    }
+    if (!isFirstLogin && (!pin || pin.length !== 4)) {
+      setError('Veuillez entrer votre PIN à 4 chiffres')
       return
     }
 
     try {
       if (isFirstLogin) {
-        // Première connexion : PIN optionnel
         if (showPin && pin !== confirmPin) {
           setError('Les PIN ne correspondent pas')
           return
@@ -78,11 +80,6 @@ export function LoginForm() {
         }
         createUserProfile(firstName.trim(), lastName.trim(), showPin ? pin : undefined)
       } else {
-        // Connexion avec PIN existant
-        if (!pin || pin.length !== 4) {
-          setError('Veuillez entrer votre PIN à 4 chiffres')
-          return
-        }
         const ok = verifyUserPin(pin)
         if (!ok) {
           setError('PIN incorrect')
@@ -95,6 +92,11 @@ export function LoginForm() {
       console.error('Error:', err)
       setError('Erreur lors de la connexion')
     }
+  }
+
+  const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    doSubmit()
   }
 
   return (
@@ -159,7 +161,7 @@ export function LoginForm() {
             <PinInput
               value={pin}
               onChange={setPin}
-              onSubmit={handleSubmit}
+              onSubmit={doSubmit}
               label={isFirstLogin ? 'Créer un PIN (4 chiffres, optionnel)' : 'PIN à 4 chiffres'}
               error={error}
               autoFocus={!isFirstLogin}
@@ -182,7 +184,7 @@ export function LoginForm() {
             <PinInput
               value={confirmPin}
               onChange={setConfirmPin}
-              onSubmit={handleSubmit}
+              onSubmit={doSubmit}
               label="Confirmer le PIN"
               autoFocus
             />

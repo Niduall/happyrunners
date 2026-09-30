@@ -116,26 +116,29 @@ export function useAuth() {
     try {
       const profile = await getUserProfile(pendingUser.localUserId)
       if (!profile || !profile.pin_hash) {
-        // Pas de PIN en base -> connecté direct
-        const user = getUser()
-        if (user) {
-          setUser(user)
-          setMode('authenticated')
-          setPendingUser(null)
-          return true
+        // Pas de PIN en base -> connecté direct (créer user local si nécessaire)
+        let user = getUser()
+        if (!user) {
+          user = createUser(pendingUser.firstName, pendingUser.lastName)
         }
-        return false
+        setUser(user)
+        setMode('authenticated')
+        setPendingUser(null)
+        return true
       }
       
       // Vérifier le PIN
       if (profile.pin_hash === hashPin(pin)) {
-        const user = getUser()
-        if (user) {
-          setUser(user)
-          setMode('authenticated')
-          setPendingUser(null)
-          return true
+        // PIN correct : créer/récupérer user local
+        let user = getUser()
+        if (!user) {
+          // Nouvel appareil : créer le user local depuis les infos du profil
+          user = createUser(profile.first_name, profile.last_name)
         }
+        setUser(user)
+        setMode('authenticated')
+        setPendingUser(null)
+        return true
       }
       return false
     } catch (err) {

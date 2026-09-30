@@ -6,6 +6,9 @@ import type {
   ParticipationInsert,
   Profile,
   GPXPoint,
+  UserProfile,
+  UserProfileInsert,
+  UserProfileUpdate,
 } from '../types/supabase'
 
 // ===== PARCOURS =====

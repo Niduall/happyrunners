@@ -99,9 +99,6 @@ export function LoginForm() {
     doSubmit()
   }
 
-  // Si déjà authentifié, ne rien afficher (le parent gère)
-  if (isAuthenticated) return null
-
   return (
     <Card className="w-full max-w-md mx-auto">
       <CardContent className="p-6">

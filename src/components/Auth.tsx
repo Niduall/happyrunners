@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { User, Mail, Lock, User as UserIcon, LogOut, ChevronDown, Eye, EyeOff, Shield } from 'lucide-react'
+import { Lock, User as UserIcon, LogOut, ChevronDown, Eye, EyeOff, Shield } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Card, CardContent } from './ui/Card'
 import { Input } from './ui/Input'
@@ -48,60 +47,61 @@ function PinInput({ value, onChange, onSubmit, label, error, autoFocus }: {
 }
 
 export function LoginForm() {
-  const { createUserProfile, verifyUserPin, isFirstLogin, needsPin, pendingUser, loading, isAuthenticated } = useAuth()
+  const { createUserProfile, verifyUserPin, isFirstLogin, needsPin, pendingUser, loading, logout } = useAuth()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [pin, setPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
   const [error, setError] = useState('')
   const [showPin, setShowPin] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   const doSubmit = async () => {
+    if (submitting) return
     setError('')
+
     if (isFirstLogin && (!firstName.trim() || !lastName.trim())) {
       setError('Veuillez remplir tous les champs')
       return
     }
-    if (needsPin && (!pin || pin.length !== 4)) {
+    if (needsPin && pin.length !== 4) {
       setError('Veuillez entrer votre PIN à 4 chiffres')
       return
     }
+    if (isFirstLogin && showPin) {
+      if (pin.length !== 4) {
+        setError('Le PIN doit faire 4 chiffres')
+        return
+      }
+      if (pin !== confirmPin) {
+        setError('Les PIN ne correspondent pas')
+        return
+      }
+    }
 
+    setSubmitting(true)
     try {
       if (isFirstLogin) {
-        if (showPin && pin !== confirmPin) {
-          setError('Les PIN ne correspondent pas')
-          return
-        }
-        if (showPin && pin.length !== 4) {
-          setError('Le PIN doit faire 4 chiffres')
-          return
-        }
-        const result = await createUserProfile(firstName.trim(), lastName.trim(), showPin ? pin : undefined)
-        if (result) {
-          // Compte créé avec succès -> recharger
-          window.location.href = '/'
-        }
-        // Si result === null -> mode PIN activé, l'UI se met à jour automatiquement
+        await createUserProfile(firstName.trim(), lastName.trim(), showPin ? pin : undefined)
+        // Pas de reload : le hook passe en 'authenticated' ou bascule en 'pin_verification'
       } else if (needsPin) {
         const ok = await verifyUserPin(pin)
         if (!ok) {
           setError('PIN incorrect')
           setPin('')
-          return
         }
-        // PIN correct : recharger pour hydratation propre
-        window.location.href = '/'
       }
     } catch (err) {
-      console.error('Error:', err)
+      console.error('[AUTH] Erreur connexion:', err)
       setError('Erreur lors de la connexion')
+    } finally {
+      setSubmitting(false)
     }
   }
 
   const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    doSubmit()
+    void doSubmit()
   }
 
   return (
@@ -113,7 +113,9 @@ export function LoginForm() {
           </div>
           <h3 className="text-xl font-semibold text-gray-900">HappyRunners</h3>
           <p className="text-gray-500 mt-1">
-            {isFirstLogin ? 'Entrez votre prénom et nom pour rejoindre le groupe' : `Bonjour ${pendingUser?.firstName}, entrez votre PIN`}
+            {isFirstLogin
+              ? 'Entrez votre prénom et nom pour rejoindre le groupe'
+              : `Bonjour ${pendingUser?.firstName} ${pendingUser?.lastName}, entrez votre PIN`}
           </p>
         </div>
 
@@ -156,22 +158,7 @@ export function LoginForm() {
             </div>
           )}
 
-          {!isFirstLogin && (
-            <div className="text-center mb-2">
-              <p className="text-sm text-gray-500">Connecté en tant que <strong>{pendingUser?.firstName} {pendingUser?.lastName}</strong></p>
-            </div>
-          )}
-
-          {(isFirstLogin && showPin) || (!isFirstLogin && needsPin) ? (
-            <PinInput
-              value={pin}
-              onChange={setPin}
-              onSubmit={doSubmit}
-              label={isFirstLogin ? 'Créer un PIN (4 chiffres, optionnel)' : 'PIN à 4 chiffres'}
-              error={error}
-              autoFocus={!isFirstLogin}
-            />
-          ) : (
+          {isFirstLogin && !showPin && (
             <div className="text-center">
               <Button
                 type="button"
@@ -180,28 +167,61 @@ export function LoginForm() {
                 onClick={() => setShowPin(true)}
                 className="text-primary hover:text-primary/80"
               >
-                {isFirstLogin ? 'Ajouter un PIN de protection (optionnel)' : 'J\'ai oublié mon PIN'}
+                Ajouter un PIN de protection (recommandé)
               </Button>
             </div>
           )}
 
           {isFirstLogin && showPin && (
+            <>
+              <PinInput
+                value={pin}
+                onChange={setPin}
+                onSubmit={() => void doSubmit()}
+                label="PIN à 4 chiffres"
+                autoFocus
+              />
+              <PinInput
+                value={confirmPin}
+                onChange={setConfirmPin}
+                onSubmit={() => void doSubmit()}
+                label="Confirmer le PIN"
+              />
+            </>
+          )}
+
+          {needsPin && (
             <PinInput
-              value={confirmPin}
-              onChange={setConfirmPin}
-              onSubmit={doSubmit}
-              label="Confirmer le PIN"
+              value={pin}
+              onChange={setPin}
+              onSubmit={() => void doSubmit()}
+              label="PIN à 4 chiffres"
+              error={error}
               autoFocus
             />
           )}
 
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Connexion...' : isFirstLogin ? (showPin ? 'Créer mon compte' : 'Rejoindre le groupe') : 'Se connecter'}
+          {needsPin && (
+            <div className="text-center">
+              <Button type="button" variant="ghost" size="sm" onClick={logout} className="text-gray-500">
+                J'ai oublié mon PIN
+              </Button>
+            </div>
+          )}
+
+          <Button type="submit" className="w-full" disabled={loading || submitting}>
+            {loading || submitting
+              ? 'Connexion...'
+              : isFirstLogin
+                ? (showPin ? 'Créer mon compte' : 'Rejoindre le groupe')
+                : 'Se connecter'}
           </Button>
         </form>
 
         <p className="mt-4 text-center text-xs text-gray-400">
-          {isFirstLogin ? 'Votre nom sera mémorisé sur cet appareil' : 'Le PIN protège votre vote sur cet appareil'}
+          {isFirstLogin
+            ? 'Votre nom vous identifie sur tous vos appareils'
+            : 'Le PIN protège votre compte sur tous vos appareils'}
         </p>
       </CardContent>
     </Card>

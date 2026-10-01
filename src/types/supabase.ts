@@ -5,14 +5,6 @@ export interface GPXPoint {
   time?: string
 }
 
-export interface Profile {
-  id: string
-  name: string
-  avatar_url?: string
-  created_at: string
-  updated_at: string
-}
-
 export interface Parcours {
   id: string
   name: string

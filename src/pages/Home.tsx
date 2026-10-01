@@ -10,7 +10,6 @@ import { LoginForm, UserMenu } from '../components/Auth'
 import { useAuth } from '../hooks/useAuth'
 import { useWeather } from '../hooks/useWeather'
 import { useParcours } from '../hooks/useParcours'
-import { useParticipation } from '../hooks/useParticipation'
 import { getNextWednesdayNoon, getWednesdayForecast } from '../services/weatherApi'
 import type { Parcours } from '../types'
 

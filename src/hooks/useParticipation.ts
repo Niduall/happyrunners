@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { vote, getMyVote, getParticipationCounts, subscribeToParticipations } from '../services/supabaseService'
+import { vote, getMyVote, getParticipationCounts } from '../services/supabaseService'
 import { useAuth } from './useAuth'
+
+const POLL_INTERVAL_MS = 30000
 
 export function useParticipation(parcoursId: string) {
   const { user, loading: authLoading } = useAuth()
@@ -8,106 +10,84 @@ export function useParticipation(parcoursId: string) {
   const [yesCount, setYesCount] = useState(0)
   const [noCount, setNoCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const loadCounts = useCallback(async () => {
-    if (!user || !parcoursId) return
+    if (!parcoursId) return
     try {
       const counts = await getParticipationCounts(parcoursId)
       setYesCount(counts.yes)
       setNoCount(counts.no)
     } catch (err) {
-      console.error('Erreur chargement compteurs:', err)
+      console.error('[VOTE] Erreur chargement compteurs:', err)
     }
-  }, [parcoursId, user])
+  }, [parcoursId])
 
   const loadMyVote = useCallback(async () => {
-    if (!user || !parcoursId) return
+    if (!user?.id || !parcoursId) return
     try {
-      // Utiliser l'ID localStorage comme local_user_id
-      const myVoteData = await getMyVote(parcoursId, user.id)
-      setMyVote(myVoteData)
+      const voteStatus = await getMyVote(parcoursId, user.id)
+      setMyVote(voteStatus)
     } catch (err) {
-      console.error('Erreur chargement vote:', err)
+      console.error('[VOTE] Erreur chargement vote:', err)
     }
-  }, [parcoursId, user])
+  }, [parcoursId, user?.id])
 
-  const loadVote = useCallback(async () => {
-    await Promise.all([loadMyVote(), loadCounts()])
-    setLoading(false)
-  }, [loadMyVote, loadCounts])
-
+  // Chargement initial + polling 30s
   useEffect(() => {
-    if (!authLoading) {
-      loadVote()
-    }
-  }, [authLoading, loadVote])
+    if (authLoading || !parcoursId) return
 
-  useEffect(() => {
-    if (!parcoursId) return
+    let cancelled = false
 
-    // Temps réel Supabase (peut échouer sur plan gratuit)
-    let unsubscribeRealtime = () => {}
-    try {
-      unsubscribeRealtime = subscribeToParticipations(parcoursId, (participations) => {
-        const yes = participations.filter((p: any) => p.status === 'yes').length
-        const no = participations.filter((p: any) => p.status === 'no').length
-        setYesCount(yes)
-        setNoCount(no)
-
-        // Mon vote - utilise local_user_id
-        const myParticipation = participations.find((p: any) => p.local_user_id === user?.id)
-        if (myParticipation) {
-          setMyVote(myParticipation.status)
-        }
-      })
-    } catch (err) {
-      console.warn('Realtime non disponible pour participations:', err)
+    const refresh = async () => {
+      await Promise.all([loadMyVote(), loadCounts()])
+      if (!cancelled) setLoading(false)
     }
 
-    // Polling de secours (30s) - simule le temps réel sur plan gratuit
+    void refresh()
     pollingRef.current = setInterval(() => {
-      loadCounts()
-      loadMyVote()
-    }, 30000)
+      void loadMyVote()
+      void loadCounts()
+    }, POLL_INTERVAL_MS)
 
     return () => {
-      unsubscribeRealtime()
-      if (pollingRef.current) clearInterval(pollingRef.current)
-    }
-  }, [parcoursId, user, loadCounts, loadMyVote])
-
-  const setVote = useCallback(async (status: 'yes' | 'no') => {
-    if (!user || !parcoursId) return
-    try {
-      // Utiliser l'ID localStorage comme local_user_id
-      await vote(parcoursId, user.id, status)
-      setMyVote(status)
-      if (status === 'yes') {
-        setYesCount(c => c + 1)
-      } else {
-        setNoCount(c => c + 1)
+      cancelled = true
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
       }
-      // Si on change de vote, décrémenter l'autre
-      if (myVote && myVote !== status) {
-        if (myVote === 'yes') setYesCount(c => c - 1)
-        else setNoCount(c => c - 1)
-      }
-    } catch (err) {
-      console.error('Erreur vote:', err)
-      throw err
     }
-  }, [user, parcoursId, myVote])
+  }, [authLoading, parcoursId, user?.id, loadMyVote, loadCounts])
 
-  const hasVoted = myVote !== null
+  const setVote = useCallback(
+    async (status: 'yes' | 'no') => {
+      if (!user?.id || !parcoursId) return
+      setSaving(true)
+      const previous = myVote
+      try {
+        await vote(parcoursId, user.id, status)
+        setMyVote(status)
+        // Recalcul optimiste des compteurs
+        setYesCount(c => c + (status === 'yes' ? 1 : 0) - (previous === 'yes' ? 1 : 0))
+        setNoCount(c => c + (status === 'no' ? 1 : 0) - (previous === 'no' ? 1 : 0))
+      } catch (err) {
+        console.error('[VOTE] Erreur vote:', err)
+        throw err
+      } finally {
+        setSaving(false)
+      }
+    },
+    [user?.id, parcoursId, myVote]
+  )
 
   return {
-    user,
     myVote,
     yesCount,
     noCount,
-    loading: loading || true,
+    loading: loading || authLoading,
+    saving,
     setVote,
-    hasVoted,
+    hasVoted: myVote !== null,
   }
 }

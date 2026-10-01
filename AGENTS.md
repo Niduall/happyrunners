@@ -1,91 +1,155 @@
 # AGENTS.md - Running Club App
 
+## ⛔ RÈGLE ABSOLUE — NE JAMAIS PUSHER SANS ACCORD
+
+**`git push` est interdit tant que l'utilisateur n'a pas explicitement validé.**
+
+Avant chaque push, tu DOIS :
+1. Lister les fichiers modifiés
+2. Expliquer ce que chaque changement fait et **pourquoi**
+3. Montrer le résultat de `npm test` et `npm run build`
+4. Attendre un accord explicite (« go », « ok », « validé », « pousse »)
+
+`git commit` local est autorisé. `git push` ne l'est pas.
+
+Cette règle a été ajoutée parce que des modifications non testées ont été poussées en production et ont cassé l'auth à plusieurs reprises.
+
+---
+
 ## Project Overview
-PWA for organizing Wednesday lunch runs with colleagues. React 18 + TypeScript + Vite + Tailwind v4 + Leaflet + Supabase (optional).
+PWA pour organiser les courses du mercredi midi entre collègues.
+React 18 + TypeScript + Vite + Tailwind v4 + Leaflet + Supabase.
+
+**Voir `ARCHITECTURE.md` pour la cartographie complète** (machine à états, tables, flux, points d'attention).
 
 ## Key Commands
 ```bash
 npm run dev        # Dev server
-npm run build      # TypeScript check + Vite build (outputs to dist/)
+npm run build      # TypeScript check + Vite build
 npm run preview    # Preview production build
+npm test           # Unit + integration tests (Vitest)
+npm test:watch     # Watch mode
 ```
 
-## Build & Deploy
-- **Build**: `npm run build` → outputs to `dist/`
-- **Deploy**: Push to GitHub → Vercel auto-deploys (connected to GitHub)
-- **Env vars on Vercel**: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_OPENWEATHER_API_KEY`
+## Workflow obligatoire avant livraison
+```bash
+npm test           # 30 tests doivent passer
+npm run build      # 0 erreur TypeScript
+# puis : présenter les changements, attendre validation, puis push
+```
 
-## Architecture
-- **SPA**: React 18 + React Router (client-side routing)
-- **PWA**: vite-plugin-pwa with autoUpdate, service worker
-- **State**: LocalStorage only (no backend) - user profile, parcours, participations
-- **Auth**: Simple firstName/lastName stored in localStorage (no email/password)
-- **Polling**: 30s intervals for real-time updates (parcours + participations) - replaces Supabase Realtime on free tier
+## Architecture (résumé)
+- **SPA**: React 18 + React Router
+- **PWA**: vite-plugin-pwa, autoUpdate
+- **Auth**: Prénom/Nom → `generateUserId()` déterministe. PIN 4 chiffres hashé stocké en base (`user_profiles.pin_hash`), jamais en localStorage
+- **State**: Supabase = source de vérité. localStorage = cache utilisateur local
+- **Polling**: 30s pour parcours + participations
 
 ## Key Files
 | File | Purpose |
 |------|---------|
-| `src/hooks/useAuth.ts` | LocalStorage auth (firstName/lastName) |
+| `src/hooks/useAuth.tsx` | `AuthProvider` (Context) + `useAuth` + `hashPin` |
 | `src/hooks/useParcours.ts` | Parcours CRUD + 30s polling |
-| `src/hooks/useParticipation.ts` | Participation votes + 30s polling |
-| `src/services/gpxParser.ts` | GPX parsing (Strava export format) |
-| `src/services/weatherApi.ts` | OpenWeatherMap integration |
-| `src/services/storage.ts` | LocalStorage wrappers |
-| `src/services/weatherApi.ts` | Weather API (OpenWeatherMap) |
-| `src/components/Auth.tsx` | Login form + UserMenu |
+| `src/hooks/useParticipation.ts` | Votes + 30s polling — **source unique** |
+| `src/hooks/useWeather.ts` | Météo mercredi 12h30 |
+| `src/services/supabaseService.ts` | API Supabase |
+| `src/services/storage.ts` | localStorage + `generateUserId` |
+| `src/services/gpxParser.ts` | GPX (XML + JSON Strava) |
+| `src/services/weatherApi.ts` | OpenWeatherMap |
+| `src/components/Auth.tsx` | LoginForm + UserMenu |
+| `src/components/ParticipationBtn.tsx` | Wrapper mince sur `useParticipation` |
 
 ## Critical Implementation Details
 
-### Auth Flow
-- **Login**: `window.location.href = '/'` (full page reload to rehydrate auth state)
-- **Logout**: Same, forces page reload to clear React state
-- **State**: Stored in `localStorage` as `running_user` (id, firstName, lastName, name)
+### Auth — machine à états + Context
+```
+loading → first_login | pin_verification → authenticated
+```
 
-### GPX Parsing (src/services/gpxParser.ts)
-- Handles Strava export format (flat array of 3000+ points)
-- Detects format: flat points, segments, or track.segments
-- Returns `{ distance_km, elevation_gain_m, points[] }`
+**`useAuth()` est un Context (`AuthProvider` monté dans `main.tsx`).**
+C'est NON NÉGOCIABLE : sans ça, chaque composant a son propre état et on obtient
+« Bonjour undefined undefined » + champs PIN manquants. Ce bug a coûté plusieurs
+itérations. `useAuth()` hors provider → throw explicite plutôt qu'un état silencieux faux.
+- `loading` → `first_login` : pas de user en localStorage
+- `loading` → `pin_verification` : profil en base avec `pin_hash`
+- `createUserProfile()` vérifie la base **avant** de créer — si un PIN existe, bascule en `pin_verification` et **n'écrase jamais** le PIN
+- `verifyUserPin()` appelle `ensureLocalUser()` **avant** `setMode('authenticated')`
+- `logout()` remet `first_login` — **pas** de rechargement nécessaire
 
-### Polling (30s intervals)
-- `useParcours.ts`: `setInterval(loadParcours, 30000)`
-- `useParticipation.ts`: `setInterval(loadCounts + loadMyVote, 30000)`
-- Replaces Supabase Realtime (not reliable on free tier)
+### ⚠️ Ne PAS utiliser de rechargement de page dans les flux d'auth
+Les anciens bugs venaient de `window.location.href = '/'` qui causait des boucles d'état. L'hydratation est maintenant correcte via le state machine. Si tu penses avoir besoin d'un rechargement, vérifie d'abord si un état manque dans `useAuth`.
 
-### Auth Flow Quirks
-- **Login**: `window.location.href = '/'` forces full reload to rehydrate auth
-- **Logout**: Same - `window.location.href = '/'` in `useAuth.ts`
-- **Never use `navigate('/')`** for auth transitions - causes stale state
+### Identifiant unique
+`generateUserId(firstName, lastName)` : minuscules, sans accents, sans ponctuation, `_` entre les deux.
+- `"André" + "Müller"` → `andre_muller`
+- Doit rester **déterministe** cross-browser/OS (tout test dépend de ça)
+
+### GPX Parsing
+- Formats : XML GPX, JSON Strava `{ "points": [...] }`, flat array, segments, track.segments
+- Retourne `{ distance_km, elevation_gain_m, points[] }`
+
+### Polling
+- `useParcours.ts` : `setInterval(loadParcours, 30000)`
+- `useParticipation.ts` : `setInterval(loadMyVote + loadCounts, 30000)`
+- `ParticipationBtn.tsx` ne doit **jamais** implémenter sa propre écoute
 
 ## Environment Variables
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `VITE_SUPABASE_URL` | Optional | Supabase project URL |
-| `VITE_SUPABASE_ANON_KEY` | Optional | Supabase anon key |
-| `VITE_OPENWEATHER_API_KEY` | Optional | OpenWeatherMap API key |
-| `VITE_DEFAULT_LAT` | Default: 48.6833 | Default latitude (Tomblaine) |
-| `VITE_DEFAULT_LON` | Default: 6.2167 | Default longitude (Tomblaine) |
+| `VITE_SUPABASE_URL` | Oui | Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | Oui | Supabase anon key |
+| `VITE_OPENWEATHER_API_KEY` | Oui | OpenWeatherMap API key |
+| `VITE_DEFAULT_LAT` | Default: 48.6833 | Latitude (Tomblaine) |
+| `VITE_DEFAULT_LON` | Default: 6.2167 | Longitude (Tomblaine) |
 
-## Common Issues & Fixes
-| Issue | Fix |
-|-------|-----|
-| Login/logout doesn't redirect | Use `window.location.href = '/'` not `navigate('/')` |
-| GPX import fails | Check Strava export format - parser handles flat points, segments, track.segments |
-| WebSocket errors | Expected on free Supabase tier - polling handles real-time |
-| Vercel 404 on refresh | Add `vercel.json` with rewrite rules for SPA |
+## Database Schema
+
+### `user_profiles`
+```sql
+local_user_id TEXT PRIMARY KEY,  -- = generateUserId(firstName, lastName)
+first_name TEXT NOT NULL,
+last_name TEXT NOT NULL,
+pin_hash TEXT,                   -- NULL = pas de PIN
+created_at TIMESTAMPTZ DEFAULT NOW(),
+updated_at TIMESTAMPTZ DEFAULT NOW()
+```
+
+### `participations`
+```sql
+UNIQUE (parcours_id, local_user_id)  -- ⚠️ pas (parcours_id, user_id)
+user_id UUID NULL                    -- legacy, toujours NULL
+```
 
 ## Testing
-- No formal test suite yet
-- Manual testing via `npm run dev` and `npm run build`
-- Test in navigation privée (avoids cache issues)
+```bash
+npm test
+```
+| Fichier | Couvre |
+|---------|--------|
+| `src/services/storage.test.ts` | `generateUserId`, `createUser` |
+| `src/hooks/useAuth.hash.test.tsx` | `hashPin` (6 tests) |
+| `src/hooks/useAuth.integration.test.tsx` | Flux auth complet + partage d'état (16 tests) |
+| `src/test/setup.ts` | Mock Supabase global + cleanup |
+
+Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
 
 ## Deployment
-- **Vercel**: Connected to GitHub repo `Niduall/happyrunners`
-- Auto-deploys on push to `main`
-- Environment variables in Vercel Dashboard → Settings → Environment Variables
+- GitHub : `Niduall/happyrunners` (branche `main`)
+- Vercel auto-deploy au push sur `main` → **nécessite validation utilisateur avant push**
+- Env vars : Vercel Dashboard → Settings → Environment Variables
 
 ## Common Pitfalls to Avoid
-1. **Never use `navigate('/')` for auth transitions** - use `window.location.href = '/'` to force full page reload and rehydrate auth state
-2. **GPX parser** expects Strava export format (flat points array)
-3. **Supabase Realtime** is unreliable on free tier - rely on 30s polling
-3. **Vercel cache** - use navigation privée for testing
-4. **Supabase RLS** must allow insert for authenticated users on parcours/participations
+1. **⛔ Ne jamais `git push` sans accord explicite de l'utilisateur**
+2. **Ne pas dupliquer la logique de vote** — un seul `useParticipation`
+3. **`pendingUser` requis** pour `verifyUserPin` — sans lui retourne `false`
+4. **Ne pas écraser un `pin_hash` existant** lors d'une "création" de compte
+4b. **Ne jamais recréer `useAuth` sans Context** — l'état doit être partagé, pas dupliqué
+5. **Tester en navigation privée** (Ctrl+Shift+N) — le cache Vercel masque les changements
+6. **`onConflict` des votes** doit être `parcours_id,local_user_id`
+7. **Realtime instable** sur plan gratuit → polling 30s
+8. **`npm test` + `npm run build` obligatoires** avant de présenter un changement
+
+## Known Issues
+- 13 vulnérabilités npm (9 moderate, 1 high, 3 critical) — non traitées
+- Bundle 718 kB (>500 kB) — warning Vite, pas bloquant
+- Sécurité du PIN faible par conception (hash client simple, pas d'auth serveur) — acceptable pour un club de collègues, **pas** pour un usage réel

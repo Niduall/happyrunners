@@ -59,9 +59,8 @@ export interface Participation {
 }
 
 export interface User {
-  id: string
+  id: string // = generateUserId(firstName, lastName), ex: "paul_martin"
   firstName: string
   lastName: string
   name: string // computed: "Prénom Nom"
-  pin?: string // 4-digit PIN hash (optional, for security)
 }

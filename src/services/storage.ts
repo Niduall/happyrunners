@@ -98,13 +98,14 @@ export function createUser(firstName: string, lastName: string): User {
 }
 
 export function generateUserId(firstName: string, lastName: string): string {
-  // Utiliser Prénom + Nom comme identifiant unique (normalisé)
-  return (firstName + ' ' + lastName)
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // retirer accents
-    .replace(/[^a-z0-9\s]/g, '') // garder lettres, chiffres, espaces
-    .replace(/\s+/g, '_') // espaces -> underscores
+  // ID déterministe : même nom → même ID sur tous les navigateurs/OS
+  const normalize = (s: string): string =>
+    s
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // retirer accents
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '') // garder seulement lettres + chiffres
+  return `${normalize(firstName)}_${normalize(lastName)}`
 }
 
 // --- Export/Import ---

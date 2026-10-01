@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { getParcours, getNextParcours, addParcours, deleteParcours, subscribeToParcours } from '../services/supabaseService'
+import { getParcours, addParcours, deleteParcours } from '../services/supabaseService'
 import type { Parcours, ParcoursInsert } from '../types/supabase'
 import { parseGPX } from '../services/gpxParser'
 import { useAuth } from './useAuth'
+
+const POLL_INTERVAL_MS = 30000
 
 export function useParcours() {
   const { user } = useAuth()
@@ -29,24 +31,13 @@ export function useParcours() {
   useEffect(() => {
     loadParcours()
 
-    // Temps réel Supabase (peut échouer sur plan gratuit)
-    let unsubscribeRealtime = () => {}
-    try {
-      unsubscribeRealtime = subscribeToParcours((data) => {
-        setParcoursList(data)
-        setNextParcours(data[0] || null)
-      })
-    } catch (err) {
-      console.warn('Realtime non disponible, passage au polling:', err)
-    }
-
-    // Polling de secours (30s) - simule le temps réel sur plan gratuit
+    // Polling 30s — le Realtime Supabase n'est plus utilisé (SDK v2.109 incompatible
+    // avec l'implémentation WebSocket classique, et instable sur plan gratuit)
     pollingRef.current = setInterval(() => {
       loadParcours()
-    }, 30000)
+    }, POLL_INTERVAL_MS)
 
     return () => {
-      unsubscribeRealtime()
       if (pollingRef.current) clearInterval(pollingRef.current)
     }
   }, [loadParcours])

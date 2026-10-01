@@ -4,7 +4,6 @@ import type {
   ParcoursInsert,
   Participation,
   ParticipationInsert,
-  Profile,
   GPXPoint,
   UserProfile,
   UserProfileInsert,
@@ -24,14 +23,15 @@ export async function getParcours(): Promise<Parcours[]> {
 }
 
 export async function getNextParcours(): Promise<Parcours | null> {
+  // maybeSingle() : null si aucun parcours, pas d'erreur 406
   const { data, error } = await supabase
     .from('parcours')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(1)
-    .single()
+    .maybeSingle()
 
-  if (error && error.code !== 'PGRST116') throw error
+  if (error) throw error
   return data || null
 }
 
@@ -63,30 +63,6 @@ export async function deleteParcours(id: string): Promise<void> {
   if (error) throw error
 }
 
-// Temps réel : écoute les changements sur la table parcours
-export function subscribeToParcours(
-  callback: (parcours: Parcours[]) => void
-): () => void {
-  const channel = supabase
-    .channel('parcours-changes')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'parcours' },
-      async () => {
-        const { data } = await supabase
-          .from('parcours')
-          .select('*')
-          .order('created_at', { ascending: false })
-        callback(data || [])
-      }
-    )
-    .subscribe()
-
-  return () => {
-    supabase.removeChannel(channel)
-  }
-}
-
 // ===== PARTICIPATIONS (VOTES) =====
 
 export async function getParticipations(parcoursId?: string): Promise<Participation[]> {
@@ -100,15 +76,17 @@ export async function getParticipations(parcoursId?: string): Promise<Participat
 }
 
 export async function getMyVote(parcoursId: string, localUserId: string): Promise<'yes' | 'no' | null> {
+  // maybeSingle() retourne null au lieu de lever PGRST116 quand aucun vote existe.
+  // .single() provoquerait un 406 "Not Acceptable" inutile dans la console.
   const { data, error } = await supabase
     .from('participations')
     .select('status')
     .eq('parcours_id', parcoursId)
     .eq('local_user_id', localUserId)
-    .single()
+    .maybeSingle()
 
-  if (error && error.code !== 'PGRST116') throw error
-  return data?.status || null
+  if (error) throw error
+  return (data?.status as 'yes' | 'no' | undefined) ?? null
 }
 
 export async function vote(parcoursId: string, localUserId: string, status: 'yes' | 'no'): Promise<Participation> {
@@ -142,105 +120,18 @@ export async function getParticipationCounts(parcoursId: string): Promise<{ yes:
   return { yes, no }
 }
 
-// Temps réel : écoute les changements sur les participations d'un parcours
-export function subscribeToParticipations(
-  parcoursId: string,
-  callback: (participations: Participation[]) => void
-): () => void {
-  const channel = supabase
-    .channel(`participations-${parcoursId}`)
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'participations', filter: `parcours_id=eq.${parcoursId}` },
-      async () => {
-        const { data } = await supabase
-          .from('participations')
-          .select('*')
-          .eq('parcours_id', parcoursId)
-        callback(data || [])
-      }
-    )
-    .subscribe()
-
-  return () => {
-    supabase.removeChannel(channel)
-  }
-}
-
-// ===== PROFIL UTILISATEUR =====
-
-export async function getProfile(userId: string): Promise<Profile | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .single()
-
-  if (error && error.code !== 'PGRST116') throw error
-  return data || null
-}
-
-export async function updateProfile(userId: string, name: string): Promise<Profile> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .update({ name, updated_at: new Date().toISOString() })
-    .eq('id', userId)
-    .select()
-    .single()
-
-  if (error) throw error
-  return data
-}
-
-export async function ensureProfile(userId: string, name: string): Promise<Profile> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .upsert({ id: userId, name, updated_at: new Date().toISOString() })
-    .select()
-    .single()
-
-  if (error) throw error
-  return data
-}
-
-// ===== AUTH =====
-
-export async function signInWithEmail(email: string): Promise<{ error: Error | null }> {
-  const { error } = await supabase.auth.signInWithOtp({ email })
-  return { error }
-}
-
-export async function signOut(): Promise<void> {
-  await supabase.auth.signOut()
-}
-
-export function onAuthStateChange(callback: (session: any) => void) {
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-    callback(session)
-  })
-  return () => subscription.unsubscribe()
-}
-
-export async function getSession() {
-  const { data } = await supabase.auth.getSession()
-  return data.session
-}
-
-export async function getUser() {
-  const { data } = await supabase.auth.getUser()
-  return data.user
-}
-
 // ===== USER PROFILES (PIN cross-device) =====
 
 export async function getUserProfile(localUserId: string): Promise<UserProfile | null> {
+  // maybeSingle() : null si le profil n'existe pas encore (première connexion),
+  // pas d'erreur 406
   const { data, error } = await supabase
     .from('user_profiles')
     .select('*')
     .eq('local_user_id', localUserId)
-    .single()
+    .maybeSingle()
 
-  if (error && error.code !== 'PGRST116') throw error
+  if (error) throw error
   return data || null
 }
 

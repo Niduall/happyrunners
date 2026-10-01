@@ -2,11 +2,9 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   castWeekVote,
   deleteWeekVote,
-  getRoster,
   getWeekTallies,
   getWeekVotes,
   type ParcoursTally,
-  type RosterMember,
   type WeekVote,
 } from '../services/supabaseService'
 import { getCurrentWeekKey, formatWeekLabel } from '../services/weekKey'
@@ -15,12 +13,10 @@ import { useAuth } from './useAuth'
 const POLL_INTERVAL_MS = 30000
 
 export interface WeekVoteState {
-  /** Parcours -> "yes" | "no" | null */
+  /** Parcours -> compteurs de la semaine */
   tallies: Record<string, ParcoursTally>
   /** Le parcours que J'ai choisi (un seul), null si aucun */
   myChoice: string | null
-  /** Toutes les personnes ayant répondu (historique) */
-  roster: RosterMember[]
   weekKey: string
   weekLabel: string
   loading: boolean
@@ -41,7 +37,6 @@ export function useParcoursVotes(parcoursIds: string[]): WeekVoteState {
   const [tallies, setTallies] = useState<Record<string, ParcoursTally>>({})
   const [myChoice, setMyChoice] = useState<string | null>(null)
   const [choices, setChoices] = useState<Record<string, string>>({}) // userId → parcoursId
-  const [roster, setRoster] = useState<RosterMember[]>([])
   const [loading, setLoading] = useState(true)
   const [savingParcoursId, setSavingParcoursId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -57,17 +52,14 @@ export function useParcoursVotes(parcoursIds: string[]): WeekVoteState {
     async (opts?: { keepError?: boolean }) => {
       if (!user?.id) return
       try {
-        const [tallyList, rosterList, voteList] = await Promise.all([
+        const [tallyList, voteList] = await Promise.all([
           getWeekTallies(weekKey),
-          getRoster(),
           getWeekVotes(weekKey),
         ])
 
         const nextTallies: Record<string, ParcoursTally> = {}
         for (const t of tallyList) nextTallies[t.parcoursId] = t
         setTallies(nextTallies)
-
-        setRoster(rosterList)
 
         // Un seul choix par personne et par semaine
         const nextChoices: Record<string, string> = {}
@@ -94,7 +86,6 @@ export function useParcoursVotes(parcoursIds: string[]): WeekVoteState {
       setTallies({})
       setMyChoice(null)
       setChoices({})
-      setRoster([])
       setLoading(false)
       return
     }
@@ -130,12 +121,13 @@ export function useParcoursVotes(parcoursIds: string[]): WeekVoteState {
       const isRemoving = previousChoice === parcoursId
 
       setSavingParcoursId(parcoursId)
-      // Optimiste
+      // Optimiste : l'upsert remplace le choix précédent, donc on décrémente
+      // l'ancien parcours et on incrémente le nouveau.
       setMyChoice(isRemoving ? null : parcoursId)
       setChoices((prev) => {
         const next = { ...prev }
-        next[user.id] = isRemoving ? '' : parcoursId
-        if (!next[user.id]) delete next[user.id]
+        if (isRemoving) delete next[user.id]
+        else next[user.id] = parcoursId
         return next
       })
       setTallies((prev) => {
@@ -161,7 +153,8 @@ export function useParcoursVotes(parcoursIds: string[]): WeekVoteState {
             identity: { firstName: user.firstName, lastName: user.lastName },
           })
         }
-        setRoster(await getRoster())
+        // Recharge pour refléter l'état réel (l'upsert a pu remplacer un vote)
+        await loadAll({ keepError: true })
       } catch (err) {
         console.error('[VOTES] Erreur vote:', err)
         setError(err instanceof Error ? err.message : 'Erreur lors du vote')
@@ -191,7 +184,6 @@ export function useParcoursVotes(parcoursIds: string[]): WeekVoteState {
   return {
     tallies,
     myChoice,
-    roster,
     weekKey,
     weekLabel,
     loading: loading || authLoading,

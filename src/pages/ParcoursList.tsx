@@ -89,15 +89,27 @@ export function ParcoursList() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
-            <ArrowLeft className="w-4 h-4 mr-1" />
-            Accueil
+        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/')}
+            aria-label="Retour à l'accueil"
+            className="px-2 sm:px-3 shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline ml-1">Accueil</span>
           </Button>
-          <h1 className="text-xl font-bold text-primary">HappyRunners</h1>
-          <Button variant="accent" onClick={() => setShowAddForm(true)}>
-            <Plus className="w-4 h-4 mr-1" />
-            Ajouter
+          <h1 className="text-lg sm:text-xl font-bold text-primary truncate">HappyRunners</h1>
+          <Button
+            variant="accent"
+            size="sm"
+            onClick={() => setShowAddForm(true)}
+            aria-label="Ajouter un parcours"
+            className="px-2 sm:px-3 shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline ml-1">Ajouter</span>
           </Button>
         </div>
       </header>

@@ -260,13 +260,17 @@ export function UserMenu() {
         variant="ghost"
         size="sm"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2"
+        aria-label="Menu utilisateur"
+        className="flex items-center gap-1.5 sm:gap-2 px-1.5 sm:px-3"
       >
-        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
           <UserIcon className="w-5 h-5 text-primary" />
         </div>
-        <span className="font-medium text-gray-700">{user?.name || 'Coureur'}</span>
-        <ChevronDown className="w-4 h-4" />
+        {/* Le nom complet déborde sur mobile — masqué sous sm */}
+        <span className="hidden sm:inline font-medium text-gray-700 max-w-[10rem] truncate">
+          {user?.name || 'Coureur'}
+        </span>
+        <ChevronDown className="w-4 h-4 shrink-0" />
       </Button>
 
       {open && (

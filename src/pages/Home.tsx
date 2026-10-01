@@ -85,16 +85,25 @@ export function Home() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
-          <h1 className="text-xl font-bold text-primary">HappyRunners</h1>
-          <div className="flex items-center gap-2">
-            <UserMenu />
+        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+          <h1 className="text-xl font-bold text-primary shrink-0">HappyRunners</h1>
+          <div className="flex items-center gap-1 sm:gap-2 min-w-0">
             {isAuthenticated && (
-              <Button variant="accent" size="sm" onClick={() => navigate('/parcours')}>
-                <MapPin className="w-4 h-4 mr-1" />
-                Parcours
+              <Button
+                variant="accent"
+                size="sm"
+                onClick={() => navigate('/parcours')}
+                aria-label="Gérer les parcours"
+                title="Gérer les parcours"
+                className="px-2 sm:px-3 shrink-0"
+              >
+                <MapPin className="w-4 h-4" />
+                <span className="hidden sm:inline ml-1">Parcours</span>
               </Button>
             )}
+            <div className="min-w-0 shrink">
+              <UserMenu />
+            </div>
           </div>
         </div>
       </header>

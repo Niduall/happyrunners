@@ -3,18 +3,11 @@ import { renderHook, act, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { AuthProvider } from './useAuth'
 import { useParcoursVotes } from './useParcoursVotes'
-import {
-  getWeekTallies,
-  getWeekVotes,
-  getRoster,
-  castWeekVote,
-  deleteWeekVote,
-} from '../services/supabaseService'
+import { getWeekTallies, getWeekVotes, castWeekVote, deleteWeekVote } from '../services/supabaseService'
 
 vi.mock('../services/supabaseService', () => ({
   getWeekTallies: vi.fn(),
   getWeekVotes: vi.fn(),
-  getRoster: vi.fn(),
   castWeekVote: vi.fn(),
   deleteWeekVote: vi.fn(),
   getUserProfile: vi.fn(),
@@ -25,27 +18,55 @@ vi.mock('../services/supabaseService', () => ({
 
 const mockTallies = vi.mocked(getWeekTallies)
 const mockVotes = vi.mocked(getWeekVotes)
-const mockRoster = vi.mocked(getRoster)
 const mockCast = vi.mocked(castWeekVote)
 const mockDelete = vi.mocked(deleteWeekVote)
 
 const wrapper = ({ children }: { children: ReactNode }) => <AuthProvider>{children}</AuthProvider>
 
 const PARCOURS = ['p1', 'p2', 'p3']
+type StoreVote = { parcoursId: string; localUserId: string; status: 'yes' | 'no' }
 
-describe('useParcoursVotes — choix unique', () => {
+/**
+ * Store simulé qui reflète la contrainte UNIQUE(local_user_id, week_key) :
+ * une personne n'a qu'un choix par semaine.
+ */
+let store: StoreVote[] = []
+
+const tallyOf = (): { parcoursId: string; yes: number; no: number }[] => {
+  const acc: { parcoursId: string; yes: number; no: number }[] = []
+  for (const v of store) {
+    let t = acc.find((x) => x.parcoursId === v.parcoursId)
+    if (!t) {
+      t = { parcoursId: v.parcoursId, yes: 0, no: 0 }
+      acc.push(t)
+    }
+    t[v.status] += 1
+  }
+  return acc
+}
+
+describe('useParcoursVotes — un choix unique par semaine', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.clearAllMocks()
+    store = []
     localStorage.setItem(
       'running_user',
       JSON.stringify({ id: 'alice', firstName: 'Alice', lastName: 'Dupont', name: 'Alice Dupont' })
     )
-    mockRoster.mockResolvedValue([])
-    mockVotes.mockResolvedValue([])
-    mockTallies.mockResolvedValue([])
-    mockCast.mockResolvedValue(undefined)
-    mockDelete.mockResolvedValue(undefined)
+
+    mockVotes.mockImplementation(() => Promise.resolve([...store]))
+    mockTallies.mockImplementation(() => Promise.resolve(tallyOf()))
+    // L'upsert remplace le choix précédent (UNIQUE user+week)
+    mockCast.mockImplementation(({ parcoursId, localUserId, status }) => {
+      store = store.filter((v) => v.localUserId !== localUserId)
+      store.push({ parcoursId, localUserId, status: status as 'yes' | 'no' })
+      return Promise.resolve()
+    })
+    mockDelete.mockImplementation((_p, localUserId) => {
+      store = store.filter((v) => v.localUserId !== localUserId)
+      return Promise.resolve()
+    })
   })
 
   it('expose la semaine courante', async () => {
@@ -62,18 +83,20 @@ describe('useParcoursVotes — choix unique', () => {
   })
 
   it('dérive myChoice du vote existant', async () => {
-    mockVotes.mockResolvedValue([{ parcoursId: 'p2', localUserId: 'alice', status: 'yes' }])
+    store = [{ parcoursId: 'p2', localUserId: 'alice', status: 'yes' }]
     const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.myChoice).toBe('p2')
+    expect(result.current.choiceOf('alice')).toBe('p2')
   })
 
   it('trie les parcours par votes décroissants', async () => {
-    mockTallies.mockResolvedValue([
-      { parcoursId: 'p1', yes: 1, no: 0 },
-      { parcoursId: 'p2', yes: 5, no: 0 },
-      { parcoursId: 'p3', yes: 2, no: 0 },
-    ])
+    store = [
+      { parcoursId: 'p1', localUserId: 'a', status: 'yes' },
+      ...['b', 'c', 'd', 'e', 'f'].map((u) => ({ parcoursId: 'p2', localUserId: u, status: 'yes' as const })),
+      { parcoursId: 'p3', localUserId: 'g', status: 'yes' },
+      { parcoursId: 'p3', localUserId: 'h', status: 'yes' },
+    ]
     const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.rankedParcoursIds).toEqual(['p2', 'p3', 'p1'])
@@ -98,26 +121,28 @@ describe('useParcoursVotes — choix unique', () => {
   })
 
   it('re-cliquer sur le parcours déjà choisi le retire', async () => {
-    mockVotes.mockResolvedValue([{ parcoursId: 'p2', localUserId: 'alice', status: 'yes' }])
+    store = [{ parcoursId: 'p2', localUserId: 'alice', status: 'yes' }]
     const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))
-    expect(result.current.myChoice).toBe('p2')
 
     await act(async () => {
       await result.current.toggleChoice('p2')
     })
 
-    expect(mockDelete).toHaveBeenCalledWith('p2', 'alice', result.current.weekKey)
+    expect(mockDelete).toHaveBeenCalled()
     expect(mockCast).not.toHaveBeenCalled()
     expect(result.current.myChoice).toBeNull()
+    expect(store).toHaveLength(0)
   })
 
-  it('changer de parcours décrémente l’ancien et incrémente le nouveau', async () => {
-    mockVotes.mockResolvedValue([{ parcoursId: 'p1', localUserId: 'alice', status: 'yes' }])
-    mockTallies.mockResolvedValue([
-      { parcoursId: 'p1', yes: 3, no: 0 },
-      { parcoursId: 'p2', yes: 2, no: 0 },
-    ])
+  it('changer de parcours remplace le choix (pas de doublon)', async () => {
+    store = [
+      { parcoursId: 'p1', localUserId: 'alice', status: 'yes' },
+      { parcoursId: 'p1', localUserId: 'bob', status: 'yes' },
+      { parcoursId: 'p1', localUserId: 'carol', status: 'yes' },
+      { parcoursId: 'p2', localUserId: 'dan', status: 'yes' },
+      { parcoursId: 'p2', localUserId: 'eve', status: 'yes' },
+    ]
 
     const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))
@@ -127,27 +152,36 @@ describe('useParcoursVotes — choix unique', () => {
       await result.current.toggleChoice('p2')
     })
 
+    // alice n'a plus de vote sur p1, seulement sur p2
+    expect(store.filter((v) => v.localUserId === 'alice')).toHaveLength(1)
+    expect(result.current.myChoice).toBe('p2')
+    expect(result.current.choiceOf('alice')).toBe('p2')
+    // p1 perd alice, p2 la gagne
     expect(result.current.tallies.p1?.yes).toBe(2)
     expect(result.current.tallies.p2?.yes).toBe(3)
-    expect(result.current.myChoice).toBe('p2')
   })
 
-  it('ne descend jamais sous zéro', async () => {
-    mockVotes.mockResolvedValue([{ parcoursId: 'p1', localUserId: 'alice', status: 'yes' }])
-    mockTallies.mockResolvedValue([{ parcoursId: 'p1', yes: 1, no: 0 }])
-
+  it('retire le vote du store plutôt que de laisser un zéro négatif', async () => {
+    store = [{ parcoursId: 'p1', localUserId: 'alice', status: 'yes' }]
     const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.tallies.p1?.yes).toBe(1)
 
     await act(async () => {
       await result.current.toggleChoice('p1')
     })
 
-    expect(result.current.tallies.p1?.yes).toBe(0)
+    // Le vote est supprimé → plus d'entrée pour p1 (pas de compteur négatif)
+    expect(store).toHaveLength(0)
+    expect(result.current.tallies.p1).toBeUndefined()
+    expect(result.current.myChoice).toBeNull()
   })
 
   it('recharge l’état si le vote échoue', async () => {
-    mockTallies.mockResolvedValue([{ parcoursId: 'p1', yes: 2, no: 0 }])
+    store = [
+      { parcoursId: 'p1', localUserId: 'bob', status: 'yes' },
+      { parcoursId: 'p1', localUserId: 'carol', status: 'yes' },
+    ]
     mockCast.mockRejectedValue(new Error('network down'))
 
     const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
@@ -157,11 +191,9 @@ describe('useParcoursVotes — choix unique', () => {
       await result.current.toggleChoice('p1')
     })
 
-    await waitFor(() => {
-      expect(result.current.tallies.p1?.yes).toBe(2)
-    })
     expect(result.current.myChoice).toBeNull()
     expect(result.current.error).toBeTruthy()
+    expect(store).toHaveLength(2) // rien n'a été écrit
   })
 
   it('refuse de voter sans être connecté', async () => {
@@ -178,7 +210,7 @@ describe('useParcoursVotes — choix unique', () => {
   })
 
   it('vide l’état à la déconnexion', async () => {
-    mockVotes.mockResolvedValue([{ parcoursId: 'p1', localUserId: 'alice', status: 'yes' }])
+    store = [{ parcoursId: 'p1', localUserId: 'alice', status: 'yes' }]
     const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.myChoice).toBe('p1')

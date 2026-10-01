@@ -229,14 +229,16 @@ export async function getMyWeekVote(
 
 /** Retire un choix de parcours (re-clic sur le parcours déjà choisi) */
 export async function deleteWeekVote(
-  parcoursId: string,
+  _parcoursId: string,
   localUserId: string,
   weekKey: string
 ): Promise<void> {
+  // La contrainte UNIQUE(local_user_id, week_key) garantit qu'une personne
+  // n'a qu'un choix par semaine : on supprime donc par personne + semaine,
+  // sans se soucier du parcours.
   const { error } = await supabase
     .from('participations')
     .delete()
-    .eq('parcours_id', parcoursId)
     .eq('local_user_id', localUserId)
     .eq('week_key', weekKey)
 
@@ -244,9 +246,12 @@ export async function deleteWeekVote(
 }
 
 /**
- * Enregistre un vote pour la semaine courante.
- * Idempotent : re-cliquer sur la même réponse ne crée pas de doublon
- * (contrainte UNIQUE sur parcours_id, local_user_id, week_key).
+ * Enregistre le choix de parcours pour la semaine courante.
+ *
+ * ⚠️ La contrainte UNIQUE(local_user_id, week_key) impose UN SEUL choix par
+ * personne et par semaine : passer à un autre parcours **remplace** le
+ * précédent automatiquement. Ne pas tenter de supprimer l'ancien vote côté
+ * client — l'upsert s'en charge.
  *
  * ⚠️ Le roster est reconstruit depuis `participations` (voir getRoster) —
  * pas besoin d'une table `inscriptions` séparée.
@@ -270,7 +275,9 @@ export async function castWeekVote(params: {
       first_name: identity.firstName,
       last_name: identity.lastName,
     } as ParticipationInsert,
-    { onConflict: 'parcours_id,local_user_id,week_key' }
+    // Conflit sur (local_user_id, week_key) → changer de parcours
+    // remplace le choix précédent au lieu d'ajouter une 2e ligne.
+    { onConflict: 'local_user_id,week_key' }
   )
 
   if (error) throw error

@@ -50,14 +50,15 @@ npm run build      # 0 erreur TypeScript
 |------|---------|
 | `src/hooks/useAuth.tsx` | `AuthProvider` (Context) + `useAuth` + `hashPin` |
 | `src/hooks/useParcours.ts` | Parcours CRUD + 30s polling |
-| `src/hooks/useParticipation.ts` | Votes + 30s polling — **source unique** |
+| `src/hooks/useParcoursVotes.ts` | Votes hebdo multi-parcours + roster + 30s polling — **source unique** |
 | `src/hooks/useWeather.ts` | Météo mercredi 12h30 |
 | `src/services/supabaseService.ts` | API Supabase |
 | `src/services/storage.ts` | localStorage + `generateUserId` |
 | `src/services/gpxParser.ts` | GPX (XML + JSON Strava) |
 | `src/services/weatherApi.ts` | OpenWeatherMap |
 | `src/components/Auth.tsx` | LoginForm + UserMenu |
-| `src/components/ParticipationBtn.tsx` | Wrapper mince sur `useParticipation` |
+| `src/components/ParcoursVoteCard.tsx` | Carte parcours + 2 boutons de vote |
+| `src/components/ParticipantsTable.tsx` | Tableau récapitulatif + avatars |
 
 ## Critical Implementation Details
 
@@ -90,14 +91,20 @@ Les anciens bugs venaient de `window.location.href = '/'` qui causait des boucle
 
 ### Polling
 - `useParcours.ts` : `setInterval(loadParcours, 30000)`
-- `useParticipation.ts` : `setInterval(loadMyVote + loadCounts, 30000)`
-- `ParticipationBtn.tsx` ne doit **jamais** implémenter sa propre écoute
+- `useParcoursVotes.ts` : `setInterval(loadAll, 30000)`
+- Aucun composant ne doit implémenter sa propre écoute
+
+### Cycle de vote hebdomadaire
+- `getCurrentWeekKey()` = date du mercredi cible (`"2026-10-07"`)
+- Cycle du **jeudi** au mercredi suivant → le reset est automatique, sans cron
+- Tout nouveau vote DOIT passer par `castWeekVote()` qui pose `week_key`
+- Contrainte UNIQUE : `(parcours_id, local_user_id, week_key)`
 
 ## Environment Variables
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `VITE_SUPABASE_URL` | Oui | Supabase project URL |
-| `VITE_SUPABASE_ANON_KEY` | Oui | Supabase anon key |
+| `VITE_SUPABASE_ANON_KEY` | Oui | Supabase anon key (**régénérable** — copier depuis le dashboard si "Invalid API key") |
 | `VITE_OPENWEATHER_API_KEY` | Oui | OpenWeatherMap API key |
 | `VITE_DEFAULT_LAT` | Default: 48.6833 | Latitude (Tomblaine) |
 | `VITE_DEFAULT_LON` | Default: 6.2167 | Longitude (Tomblaine) |
@@ -129,6 +136,8 @@ npm test
 | `src/services/storage.test.ts` | `generateUserId`, `createUser` |
 | `src/hooks/useAuth.hash.test.tsx` | `hashPin` (6 tests) |
 | `src/hooks/useAuth.integration.test.tsx` | Flux auth complet + partage d'état (16 tests) |
+| `src/services/weekKey.test.ts` | Cycle de vote, passage d'année, bissextile (24 tests) |
+| `src/hooks/useParcoursVotes.test.tsx` | Votes hebdo, tri, pendingCount, optimisme (10 tests) |
 | `src/test/setup.ts` | Mock Supabase global + cleanup |
 
 Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
@@ -140,7 +149,8 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
 
 ## Common Pitfalls to Avoid
 1. **⛔ Ne jamais `git push` sans accord explicite de l'utilisateur**
-2. **Ne pas dupliquer la logique de vote** — un seul `useParticipation`
+2. **Ne pas dupliquer la logique de vote** — un seul `useParcoursVotes`
+2b. **Toujours passer par `castWeekVote()`** — un vote sans `week_key` est invisible dans le tableau
 3. **`pendingUser` requis** pour `verifyUserPin` — sans lui retourne `false`
 4. **Ne pas écraser un `pin_hash` existant** lors d'une "création" de compte
 4b. **Ne jamais recréer `useAuth` sans Context** — l'état doit être partagé, pas dupliqué

@@ -23,8 +23,42 @@ export interface Participation {
   user_id: string | null
   local_user_id: string | null
   status: 'yes' | 'no'
+  week_key: string | null
+  first_name: string | null
+  last_name: string | null
   created_at: string
   updated_at: string
+}
+
+export interface Inscription {
+  id: string
+  parcours_id: string
+  local_user_id: string
+  first_name: string
+  last_name: string
+  created_at: string
+}
+
+/** Réponse globale : est-ce que la personne vient cette semaine ? */
+export type AttendanceStatus = 'going' | 'skip'
+
+export interface Attendance {
+  id: string
+  week_key: string
+  local_user_id: string
+  first_name: string
+  last_name: string
+  status: AttendanceStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface AttendanceInsert {
+  week_key: string
+  local_user_id: string
+  first_name: string
+  last_name: string
+  status: AttendanceStatus
 }
 
 export interface ParcoursInsert {
@@ -41,6 +75,9 @@ export interface ParticipationInsert {
   user_id: string | null
   local_user_id: string | null
   status: 'yes' | 'no'
+  week_key: string | null
+  first_name: string | null
+  last_name: string | null
 }
 
 export interface UserProfile {

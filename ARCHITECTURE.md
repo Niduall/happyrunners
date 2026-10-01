@@ -26,15 +26,17 @@ src/
 │   ├── storage.ts           # localStorage wrapper + generateUserId
 │   ├── supabaseService.ts   # API Supabase (Parcours, Participations, UserProfiles)
 │   ├── weatherApi.ts        # OpenWeatherMap
+│   ├── weekKey.ts           # Clé de semaine (mercredi cible) — reset hebdo
 │   └── gpxParser.ts         # Parser GPX (XML + JSON Strava)
 ├── hooks/
 │   ├── useAuth.tsx          # AuthProvider (Context) + useAuth + hashPin
 │   ├── useParcours.ts       # CRUD parcours + polling 30s
-│   ├── useParticipation.ts  # Votes + polling 30s (source unique)
+│   ├── useParcoursVotes.ts  # Votes hebdo multi-parcours + roster + polling 30s
 │   └── useWeather.ts        # Météo mercredi 12h30
 ├── components/
 │   ├── Auth.tsx             # LoginForm + UserMenu
-│   ├── ParticipationBtn.tsx # Wrapper mince sur useParticipation
+│   ├── ParcoursVoteCard.tsx # Carte parcours + 2 boutons de vote + compteurs
+│   ├── ParticipantsTable.tsx# Tableau récapitulatif + avatars initiales
 │   ├── ParcoursCard.tsx     # Affichage parcours
 │   ├── WeatherCard.tsx      # Météo
 │   ├── MapView.tsx          # Leaflet
@@ -110,8 +112,9 @@ loading
 | Table | PK | Contrainte unique | Colonnes clés |
 |-------|-----|-------------------|---------------|
 | `parcours` | `id` (uuid) | — | `name`, `distance_km`, `elevation_gain_m`, `points` (jsonb), `created_by` (nullable) |
-| `participations` | `id` (uuid) | `(parcours_id, local_user_id)` | `local_user_id` (text), `status` (yes/no), `user_id` (nullable, legacy) |
+| `participations` | `id` (uuid) | `(parcours_id, local_user_id, week_key)` | `local_user_id` (text), `status` (yes/no), `week_key`, `first_name`, `last_name`, `user_id` (nullable, legacy) |
 | `user_profiles` | `local_user_id` (text) | — | `first_name`, `last_name`, `pin_hash` (nullable) |
+| `inscriptions` | `id` (uuid) | `(parcours_id, local_user_id)` | `first_name`, `last_name` |
 
 ---
 
@@ -119,10 +122,37 @@ loading
 
 | Hook | Intervalle | Contenu |
 |------|-----------|----------|
-| `useParcours` | 30s | `loadParcours()` + `subscribeToParcours` (realtime, non critique) |
-| `useParticipation` | 30s | `loadMyVote()` + `loadCounts()` |
+| `useParcours` | 30s | `loadParcours()` |
+| `useParcoursVotes` | 30s | votes de la semaine + roster + mes votes |
 
-`ParticipationBtn.tsx` ne fait **plus** sa propre écoute — il délègue à `useParticipation`.
+Aucun composant ne fait sa propre écoute — tout passe par un hook unique.
+
+---
+
+## Cycle de vote hebdomadaire
+
+Le cycle va du **jeudi** au **mercredi suivant** (reset le jeudi matin, run le mercredi midi).
+
+`getCurrentWeekKey()` retourne la date du mercredi cible, format `"2026-10-07"`.
+
+| Jour | Mercredi cible | Effet |
+|------|----------------|-------|
+| dimanche → mercredi | dans la même semaine | vote en cours |
+| jeudi → samedi | **mercredi suivant** | nouveau cycle (reset auto) |
+
+Le reset est **automatique** : pas de cron, pas de purge. Les anciens votes restent
+en base (historique) mais ne sont plus affichés.
+
+### Clé de vote
+`UNIQUE (parcours_id, local_user_id, week_key)` → 1 vote par personne, par parcours, par semaine.
+
+### Roster
+`getRoster()` = toutes les personnes ayant déjà voté (historique complet). Sert à
+compter les "en attente" cette semaine via `pendingCount`.
+
+### Tri
+`rankedParcoursIds` trie par nombre de votes "yes" décroissant. Le 1er avec ≥1 vote
+est marqué "En tête" (le parcours retenu pour le run).
 
 ---
 
@@ -145,7 +175,8 @@ Supabase est mocké globalement dans `src/test/setup.ts` — aucun appel réseau
 
 ## Points d'attention
 
-1. **Un seul `useParticipation`** — ne jamais dupliquer la logique de vote dans un composant
+1. **Un seul `useParcoursVotes`** — ne jamais dupliquer la logique de vote dans un composant
+1b. **`week_key` obligatoire** sur tout nouveau vote — sans lui le vote est invisible du tableau
 2. **`pendingUser` est requis** pour `verifyUserPin` — sans lui, retourne `false`
 3. **`ensureLocalUser` valide l'ID** — un user local dont l'ID ne correspond pas est recréé
 4. **Pas de `window.location.href` dans les flux d'auth** — l'hydratation est correcte via le state machine

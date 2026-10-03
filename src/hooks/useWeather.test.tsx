@@ -43,6 +43,11 @@ describe('useWeather — pas de clignotement', () => {
     localStorage.clear()
     vi.clearAllMocks()
     mockFetchWeather.mockResolvedValue(fakeWeather as never)
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('ne déclenche pas setLoading(true) quand le cache est valide', async () => {
@@ -94,19 +99,6 @@ describe('useWeather — pas de clignotement', () => {
     expect(result.current.weather).not.toBeNull()
   })
 
-  it('refresh() force un re-fetch et réaffiche le spinner', async () => {
-    const { result } = renderHook(() => useWeather(), { wrapper })
-    await waitFor(() => expect(result.current.loading).toBe(false))
-    expect(mockFetchWeather).toHaveBeenCalledTimes(1)
-
-    await act(async () => {
-      result.current.refresh()
-    })
-
-    expect(mockFetchWeather).toHaveBeenCalledTimes(2)
-    await waitFor(() => expect(result.current.loading).toBe(false))
-  })
-
   it('refetch si le cache a expiré (> 1h)', async () => {
     const { result } = renderHook(() => useWeather(), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))
@@ -147,6 +139,85 @@ describe('useWeather — pas de clignotement', () => {
 
     // Le cache invalide force un re-fetch
     await waitFor(() => expect(mockFetchWeather.mock.calls.length).toBeGreaterThan(1))
+  })
+
+  it('rafraîchit automatiquement en tâche de fond (toutes les 30 min)', async () => {
+    const { result, rerender } = renderHook(() => useWeather(), { wrapper })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(mockFetchWeather).toHaveBeenCalledTimes(1)
+
+    // Le cache est valide (1h) → pas de fetch immédiat
+    rerender()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+    expect(mockFetchWeather).toHaveBeenCalledTimes(1)
+
+    // Après 30 min → refresh de fond
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30 * 60 * 1000)
+    })
+    expect(mockFetchWeather).toHaveBeenCalledTimes(2)
+
+    // Après 60 min → encore un refresh
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30 * 60 * 1000)
+    })
+    expect(mockFetchWeather).toHaveBeenCalledTimes(3)
+
+    // Le refresh de fond ne montre jamais le spinner
+    expect(result.current.loading).toBe(false)
+  })
+
+  it('le refresh de fond ne déclenche pas de spinner', async () => {
+    // Fetch lent → loading=true pendant le réseau si non silencieux
+    let resolvers: (() => void)[] = []
+    mockFetchWeather.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvers.push(() => resolve(fakeWeather as never))
+        }) as never
+    )
+
+    const { result } = renderHook(() => useWeather(), { wrapper })
+
+    // Premier chargement : spinner normal
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(result.current.loading).toBe(true)
+    await act(async () => {
+      resolvers.shift()?.()
+    })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    // Refresh de fond : le fetch est en cours mais loading reste false
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30 * 60 * 1000)
+    })
+    expect(result.current.loading).toBe(false)
+
+    await act(async () => {
+      resolvers.shift()?.()
+    })
+  })
+
+  it('refresh() manuel force un re-fetch immédiat', async () => {
+    const { result } = renderHook(() => useWeather(), { wrapper })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(mockFetchWeather).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      result.current.refresh()
+    })
+
+    expect(mockFetchWeather).toHaveBeenCalledTimes(2)
   })
 })
 

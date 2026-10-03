@@ -32,8 +32,18 @@ export interface WeatherData {
   humidity: number
   windSpeed: number
   windDeg: number
-  description: string
-  icon: string
+  /** Code météo WMO (Open-Meteo) — convertir via weatherCode.ts */
+  weatherCode?: number
+  /** true si c'est le jour (pour l'icône 🌙 / ☀️) */
+  isDay?: boolean
+  /** Rafales (km/h) */
+  windGust?: number
+  /** Probabilité de pluie, normalisée 0..1 */
+  pop?: number
+  /** @deprecated plus utilisé depuis la migration Open-Meteo */
+  description?: string
+  /** @deprecated plus utilisé depuis la migration Open-Meteo */
+  icon?: string
   dt: number
   sunrise?: number
   sunset?: number

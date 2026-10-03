@@ -1,185 +1,231 @@
 import { type WeatherForecast, type WeatherData } from '../types'
+import { getCurrentWeekKey } from './weekKey'
 
-const OPENWEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY
-const CURRENT_WEATHER_URL = 'https://api.openweathermap.org/data/2.5/weather'
-const FORECAST_URL = 'https://api.openweathermap.org/data/2.5/forecast'
+/**
+ * Open-Meteo — API gratuite, sans clé, 16 jours de prévision.
+ *
+ * Avantages sur OpenWeather (plan gratuit) :
+ *   - 16 jours au lieu de 5
+ *   - aucune clé API à gérer
+ *   - vent déjà en km/h (pas de conversion)
+ *   - probabilité de pluie et rafales incluses
+ *
+ * Doc : https://open-meteo.com/en/docs
+ */
+const OPEN_METEO_URL = 'https://api.open-meteo.com/v1/forecast'
 
 export const DEFAULT_LAT = 48.6833
 export const DEFAULT_LON = 6.2167
 
+/** Couverture réelle de l'API : 16 jours */
+export const FORECAST_HORIZON_DAYS = 16
+
+/** Heure du run : 12h30 */
+export const RUN_HOUR = 12
+export const RUN_MINUTES = 30
+
+/** Tolérance pour considérer qu'une prévision correspond au run */
+const RUN_WINDOW_MINUTES = 90
+
+const HOURLY_FIELDS = [
+  'temperature_2m',
+  'apparent_temperature',
+  'relative_humidity_2m',
+  'wind_speed_10m',
+  'wind_direction_10m',
+  'wind_gusts_10m',
+  'precipitation_probability',
+  'weather_code',
+] as const
+
+const DAILY_FIELDS = [
+  'weather_code',
+  'temperature_2m_max',
+  'temperature_2m_min',
+  'precipitation_probability_max',
+  'sunrise',
+  'sunset',
+] as const
+
+const CURRENT_FIELDS = [
+  'temperature_2m',
+  'apparent_temperature',
+  'relative_humidity_2m',
+  'wind_speed_10m',
+  'wind_direction_10m',
+  'wind_gusts_10m',
+  'weather_code',
+  'is_day',
+] as const
+
 export type { WeatherForecast, WeatherData }
 
-export async function fetchWeather(lat: number = DEFAULT_LAT, lon: number = DEFAULT_LON): Promise<WeatherForecast> {
-  if (!OPENWEATHER_API_KEY) {
-    return getMockWeather()
-  }
+export async function fetchWeather(
+  lat: number = DEFAULT_LAT,
+  lon: number = DEFAULT_LON
+): Promise<WeatherForecast> {
+  const params = new URLSearchParams({
+    latitude: String(lat),
+    longitude: String(lon),
+    hourly: HOURLY_FIELDS.join(','),
+    daily: DAILY_FIELDS.join(','),
+    current: CURRENT_FIELDS.join(','),
+    timezone: 'Europe/Paris',
+    forecast_days: String(FORECAST_HORIZON_DAYS),
+  })
 
   try {
-    const [currentRes, forecastRes] = await Promise.all([
-      fetch(`${CURRENT_WEATHER_URL}?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_API_KEY}&units=metric&lang=fr`),
-      fetch(`${FORECAST_URL}?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_API_KEY}&units=metric&lang=fr`),
-    ])
+    const res = await fetch(`${OPEN_METEO_URL}?${params}`)
 
-    if (!currentRes.ok || !forecastRes.ok) {
-      throw new Error(`Erreur météo: ${currentRes.status} / ${forecastRes.status}`)
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`)
     }
 
-    const current = await currentRes.json()
-    const forecast = await forecastRes.json()
-
-    return transformStandardApiResponse(current, forecast)
+    const json = await res.json()
+    return transformOpenMeteoResponse(json)
   } catch (error) {
     console.error('Weather API error:', error)
-    throw new Error(`Erreur météo: ${error instanceof Error ? error.message : 'Clé API invalide'}`)
+    throw new Error(
+      `Erreur météo: ${error instanceof Error ? error.message : 'service indisponible'}`
+    )
   }
 }
 
-function transformStandardApiResponse(current: any, forecast: any): WeatherForecast {
-  const now = Math.floor(Date.now() / 1000)
-  
-  const currentWeather: WeatherData = {
-    temperature: current.main.temp,
-    feelsLike: current.main.feels_like,
-    humidity: current.main.humidity,
-    windSpeed: Math.round(current.wind.speed * 3.6),
-    windDeg: current.wind.deg || 0,
-    description: current.weather[0]?.description || '',
-    icon: current.weather[0]?.icon || '01d',
-    dt: current.dt,
-    sunrise: current.sys.sunrise,
-    sunset: current.sys.sunset,
+/** Timestamp Unix de 12h30 le jour du run cible */
+export function getRunTimestamp(from: Date = new Date()): number {
+  const [y, m, d] = getCurrentWeekKey(from).split('-').map(Number)
+  return Math.floor(new Date(y, m - 1, d, RUN_HOUR, RUN_MINUTES, 0, 0).getTime() / 1000)
+}
+
+/** Convertit une date ISO locale ("2026-10-07T12:00") en timestamp Unix */
+function isoToEpoch(iso: string): number {
+  // "2026-10-07T12:00" sans fuseau → interpreted as local time par le navigateur.
+  // C'est ce qu'on veut : les horaires sont déjà en Europe/Paris.
+  return Math.floor(new Date(iso).getTime() / 1000)
+}
+
+export function transformOpenMeteoResponse(json: any): WeatherForecast {
+  const current: WeatherData = {
+    temperature: json.current.temperature_2m,
+    feelsLike: json.current.apparent_temperature,
+    humidity: json.current.relative_humidity_2m,
+    windSpeed: Math.round(json.current.wind_speed_10m),
+    windDeg: json.current.wind_direction_10m ?? 0,
+    windGust: json.current.wind_gusts_10m
+      ? Math.round(json.current.wind_gusts_10m)
+      : undefined,
+    pop: undefined,
+    weatherCode: json.current.weather_code,
+    isDay: json.current.is_day === 1,
+    description: '',
+    icon: '',
+    dt: isoToEpoch(json.current.time),
+    sunrise: json.daily?.sunrise?.[0] ? isoToEpoch(json.daily.sunrise[0]) : undefined,
+    sunset: json.daily?.sunset?.[0] ? isoToEpoch(json.daily.sunset[0]) : undefined,
   }
 
-  const hourly = forecast.list.slice(0, 8).map((item: any) => ({
-    temperature: item.main.temp,
-    feelsLike: item.main.feels_like,
-    humidity: item.main.humidity,
-    windSpeed: Math.round(item.wind.speed * 3.6),
-    windDeg: item.wind.deg || 0,
-    description: item.weather[0]?.description || '',
-    icon: item.weather[0]?.icon || '01d',
-    dt: item.dt,
+  const hourly: WeatherData[] = (json.hourly?.time ?? []).map((time: string, i: number) => ({
+    temperature: json.hourly.temperature_2m[i],
+    feelsLike: json.hourly.apparent_temperature[i],
+    humidity: json.hourly.relative_humidity_2m[i],
+    windSpeed: Math.round(json.hourly.wind_speed_10m[i]),
+    windDeg: json.hourly.wind_direction_10m[i] ?? 0,
+    windGust: json.hourly.wind_gusts_10m?.[i]
+      ? Math.round(json.hourly.wind_gusts_10m[i])
+      : undefined,
+    // Open-Meteo renvoie un pourcentage (0-100), on normalise en 0-1
+    pop: (json.hourly.precipitation_probability?.[i] ?? 0) / 100,
+    weatherCode: json.hourly.weather_code[i],
+    isDay: true, // inconnu à ce niveau, l'affichage décide via la date
+    description: '',
+    icon: '',
+    dt: isoToEpoch(time),
   }))
 
-  const dailyMap = new Map<string, any[]>()
-  forecast.list.forEach((item: any) => {
-    const date = new Date(item.dt * 1000).toDateString()
-    if (!dailyMap.has(date)) dailyMap.set(date, [])
-    dailyMap.get(date)!.push(item)
-  })
+  const daily: (WeatherData & { temp: { min: number; max: number } })[] = (
+    (json.daily?.time ?? []) as string[]
+  ).map((time, i) => ({
+    temperature: json.daily.temperature_2m_max[i],
+    feelsLike: json.daily.temperature_2m_max[i],
+    humidity: 0,
+    windSpeed: 0,
+    windDeg: 0,
+    pop: (json.daily.precipitation_probability_max?.[i] ?? 0) / 100,
+    weatherCode: json.daily.weather_code[i],
+    isDay: true,
+    description: '',
+    icon: '',
+    dt: isoToEpoch(time),
+    temp: {
+      min: json.daily.temperature_2m_min[i],
+      max: json.daily.temperature_2m_max[i],
+    },
+    sunrise: json.daily.sunrise?.[i] ? isoToEpoch(json.daily.sunrise[i]) : undefined,
+    sunset: json.daily.sunset?.[i] ? isoToEpoch(json.daily.sunset[i]) : undefined,
+  }))
 
-  const daily = Array.from(dailyMap.entries()).slice(0, 7).map(([date, items]) => {
-    const temps = items.map(i => i.main.temp)
-    const midday = items.find(i => new Date(i.dt * 1000).getHours() === 12) || items[Math.floor(items.length / 2)]
-    
-    return {
-      temperature: midday.main.temp,
-      feelsLike: midday.main.feels_like,
-      humidity: midday.main.humidity,
-      windSpeed: Math.round(midday.wind.speed * 3.6),
-      windDeg: midday.wind.deg || 0,
-      description: midday.weather[0]?.description || '',
-      icon: midday.weather[0]?.icon || '01d',
-      dt: midday.dt,
-      temp: { min: Math.min(...temps), max: Math.max(...temps) },
-      sunrise: current.sys.sunrise,
-      sunset: current.sys.sunset,
-    }
-  })
-
-  return { current: currentWeather, hourly, daily }
+  return { current, hourly, daily }
 }
 
-export function getNextWednesdayNoon(): number {
-  const today = new Date()
-  const day = today.getDay()
-  const diff = day <= 3 ? 3 - day : 10 - day
-  
-  const wednesday = new Date(today)
-  wednesday.setDate(today.getDate() + diff)
-  wednesday.setHours(12, 30, 0, 0)
-  
-  return Math.floor(wednesday.getTime() / 1000)
-}
+/**
+ * Prévision du jour du run (12h30).
+ * Retourne null si le run est hors couverture de l'API.
+ */
+export function getRunForecast(
+  weather: WeatherForecast,
+  from: Date = new Date(),
+  /** "maintenant" injectable pour les tests */
+  nowSeconds: number = Math.floor(Date.now() / 1000)
+): WeatherData | null {
+  const target = getRunTimestamp(from)
 
-export function getWednesdayForecast(weather: WeatherForecast): WeatherData | null {
-  const targetTime = getNextWednesdayNoon()
-  const now = Math.floor(Date.now() / 1000)
-  
-  // Si le mercredi est dans plus de 5 jours (432000 sec), pas de prévision dispo
-  if (targetTime - now > 5 * 24 * 3600) {
+  if (target - nowSeconds > FORECAST_HORIZON_DAYS * 24 * 3600) {
     return null
   }
-  
-  if (!weather.hourly || weather.hourly.length === 0) {
-    return null
-  }
-  
-  let closest = weather.hourly[0]
-  let minDiff = Math.abs(closest.dt - targetTime)
-  
-  for (const hour of weather.hourly) {
-    const diff = Math.abs(hour.dt - targetTime)
-    if (diff < minDiff) {
-      minDiff = diff
-      closest = hour
+
+  let candidate: WeatherData | null = null
+  let bestDiff = Infinity
+
+  for (const h of weather.hourly ?? []) {
+    const diff = Math.abs(h.dt - target)
+    if (diff < bestDiff) {
+      bestDiff = diff
+      candidate = h
     }
   }
-  
-  // Si la prévision la plus proche est à plus de 6h, fallback
-  if (minDiff > 6 * 3600) {
-    return null
-  }
-  
+
+  if (!candidate) return null
+  if (bestDiff > RUN_WINDOW_MINUTES * 60) return null
+
+  // Reprend lever/coucher du jour du run s'ils sont connus
+  const runDay = (weather.daily ?? []).find((d) => d.dt === startOfDay(target))
   return {
-    ...closest,
-    sunrise: weather.current.sunrise,
-    sunset: weather.current.sunset,
+    ...candidate,
+    isDay: true, // 12h30, toujours le jour
+    sunrise: runDay?.sunrise ?? weather.current.sunrise,
+    sunset: runDay?.sunset ?? weather.current.sunset,
   }
 }
 
-function getMockWeather(): WeatherForecast {
-  const now = Math.floor(Date.now() / 1000)
-  const baseWeather: WeatherData = {
-    temperature: 18,
-    feelsLike: 17,
-    humidity: 65,
-    windSpeed: 12,
-    windDeg: 220,
-    description: 'ciel dégagé',
-    icon: '01d',
-    dt: now,
-    sunrise: now - 18000,
-    sunset: now + 36000,
-  }
-  
-  return {
-    current: baseWeather,
-    hourly: Array.from({ length: 24 }, (_, i) => ({
-      ...baseWeather,
-      temperature: 18 + Math.sin(i / 4) * 3,
-      feelsLike: 17 + Math.sin(i / 4) * 3,
-      windSpeed: 10 + i % 5,
-      dt: now + i * 3600,
-    })),
-    daily: Array.from({ length: 7 }, (_, i) => ({
-      ...baseWeather,
-      temperature: 18 + Math.sin(i / 2) * 4,
-      feelsLike: 17 + Math.sin(i / 2) * 4,
-      dt: now + i * 86400,
-      temp: { min: 12 + i, max: 22 + i },
-      sunrise: now - 18000 + i * 86400,
-      sunset: now + 36000 + i * 86400,
-    })),
-  }
+function startOfDay(epochSeconds: number): number {
+  const d = new Date(epochSeconds * 1000)
+  d.setHours(0, 0, 0, 0)
+  return Math.floor(d.getTime() / 1000)
 }
 
-export function getWeatherIconUrl(icon: string): string {
-  return `https://openweathermap.org/img/wn/${icon}@2x.png`
+/** Nombre de jours entre aujourd'hui et le jour du run */
+export function daysUntilRun(from: Date = new Date()): number {
+  const [y, m, d] = getCurrentWeekKey(from).split('-').map(Number)
+  const run = new Date(y, m - 1, d)
+  const today = new Date(from.getFullYear(), from.getMonth(), from.getDate())
+  return Math.round((run.getTime() - today.getTime()) / 86_400_000)
 }
 
 export function formatWindDirection(deg: number): string {
-  const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSO', 'SO', 'OSO', 'O', 'ONO', 'NO', 'NNO']
+  const directions = [
+    'N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
+    'S', 'SSO', 'SO', 'OSO', 'O', 'ONO', 'NO', 'NNO',
+  ]
   const index = Math.round(deg / 22.5) % 16
   return directions[index]
 }

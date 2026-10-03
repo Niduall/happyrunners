@@ -5,7 +5,7 @@ import {
   type AttendanceStatus,
   type Attendee,
 } from '../services/supabaseService'
-import { getCurrentWeekKey, formatWeekLabel } from '../services/weekKey'
+import { useTargetWednesday } from './useTargetWednesday'
 import { useAuth } from './useAuth'
 
 const POLL_INTERVAL_MS = 30000
@@ -37,8 +37,7 @@ export function useAttendance(): AttendanceState {
   const [error, setError] = useState<string | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const weekKey = useMemo(() => getCurrentWeekKey(), [])
-  const weekLabel = useMemo(() => formatWeekLabel(weekKey), [weekKey])
+  const { weekKey, weekLabel } = useTargetWednesday()
 
   const loadAll = useCallback(async (opts?: { keepError?: boolean }) => {
     if (!user?.id) return

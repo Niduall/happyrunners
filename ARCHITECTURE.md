@@ -25,8 +25,9 @@ src/
 ├── services/
 │   ├── storage.ts           # localStorage wrapper + generateUserId
 │   ├── supabaseService.ts   # API Supabase (Parcours, Participations, UserProfiles)
-│   ├── weatherApi.ts        # OpenWeatherMap
-│   ├── weekKey.ts           # Clé de semaine (mercredi cible) — reset hebdo
+│   ├── weatherApi.ts        # Open-Meteo (16 jours, sans clé)
+│   ├── weatherCode.ts       # Codes WMO → emoji + couleurs
+│   ├── weekKey.ts           # Clé de semaine (mercredi cible) — bascule 14h
 │   └── gpxParser.ts         # Parser GPX (XML + JSON Strava)
 ├── hooks/
 │   ├── useAuth.tsx          # AuthProvider (Context) + useAuth + hashPin
@@ -129,19 +130,30 @@ Aucun composant ne fait sa propre écoute — tout passe par un hook unique.
 
 ---
 
-## Cycle de vote hebdomadaire
+## Cycle : mercredi 14h → mercredi 14h
 
-Le cycle va du **jeudi** au **mercredi suivant** (reset le jeudi matin, run le mercredi midi).
+Le run a lieu le mercredi à 12h30. À **14h** il est terminé, donc l'app bascule
+sur le run suivant — météo, votes, tableau, tout d'un coup.
 
 `getCurrentWeekKey()` retourne la date du mercredi cible, format `"2026-10-07"`.
 
-| Jour | Mercredi cible | Effet |
-|------|----------------|-------|
-| dimanche → mercredi | dans la même semaine | vote en cours |
-| jeudi → samedi | **mercredi suivant** | nouveau cycle (reset auto) |
+| Moment | Cible | Effet |
+|--------|-------|-------|
+| dimanche → mercredi 13h | mercredi en cours | vote en cours |
+| **mercredi 14h** | **mercredi suivant** | **bascule** |
+| mercredi 15h → samedi | mercredi suivant | nouveau cycle |
 
 Le reset est **automatique** : pas de cron, pas de purge. Les anciens votes restent
 en base (historique) mais ne sont plus affichés.
+
+### Bascule à 14h tapantes
+`useTargetWednesday()` fournit une horloge partagée (tick 1 min) consommée par
+`useAttendance`, `useParcoursVotes`, `useWeather` et `Home`. Sans ça, chaque hook
+figerait sa clé au montage et l'app afficherait le run d'hier toute la soirée.
+
+### Cache météo lié à la semaine
+Clé `weather_cache_<weekKey>` : quand la cible change à 14h, le cache est
+automatiquement invalidé et les anciennes entrées purgées.
 
 ### Clé de vote
 `UNIQUE (parcours_id, local_user_id, week_key)` → 1 vote par personne, par parcours, par semaine.
@@ -155,6 +167,57 @@ compter les "en attente" cette semaine via `pendingCount`.
 est marqué "En tête" (le parcours retenu pour le run).
 
 ---
+
+## Météo — Open-Meteo
+
+**Aucune clé API requise.** Migration faite depuis OpenWeatherMap (5 jours max en gratuit).
+
+```
+https://api.open-meteo.com/v1/forecast
+  ?latitude=48.68&longitude=6.22
+  &hourly=temperature_2m,apparent_temperature,relative_humidity_2m,
+          wind_speed_10m,wind_direction_10m,wind_gusts_10m,
+          precipitation_probability,weather_code
+  &daily=weather_code,temperature_2m_max,temperature_2m_min,
+         precipitation_probability_max,sunrise,sunset
+  &current=...
+  &timezone=Europe/Paris&forecast_days=16
+```
+
+| Avantage sur OpenWeather | Avant | Après |
+|--------------------------|-------|-------|
+| Couverture | 5 jours | **16 jours** |
+| Clé API | requise (et cassée une fois) | **aucune** |
+| Vent | m/s à convertir | **déjà en km/h** |
+| Rafales / pluie | absents | inclus |
+| Quota | 60/min | 10 000/jour |
+
+### Codes WMO → emoji
+
+`src/services/weatherCode.ts` mappe les 28 codes WMO vers un emoji + couleurs.
+Le run est à 12h30 → toujours `isDay: true`. La variante nuit (🌙) ne concerne
+que la météo de secours.
+
+| Code | WMO | Emoji |
+|------|-----|-------|
+| 0 | Ensoleillé | ☀️ (🌙 la nuit) |
+| 1-2 | Peu/partiellement nuageux | 🌤️ ⛅ |
+| 3 | Nuageux | ☁️ |
+| 45,48 | Brouillard | 🌫️ |
+| 51-57 | Bruine | 🌦️ 🌧️ |
+| 61-67 | Pluie | 🌧️ |
+| 71-77,85-86 | Neige | ❄️ 🌨️ |
+| 80-82 | Averses | 🌦️ ⛈️ |
+| 95-99 | Orage | ⛈️ |
+
+### Sélection de la prévision du run
+
+`getRunForecast()` cherche la période horaire la plus proche de 12h30, avec une
+tolérance de ±90 min. Les 384 heures sont conservées (et non 8 comme avant).
+
+⚠️ Bug historique : `forecast.list.slice(0, 8)` sur l'API OpenWeather ne gardait
+que ~24 h sur 40, donc la prévision disparaissait dès le lendemain. Test de
+non-régression dans `weatherApi.test.ts` (vérifié en échec sans le fix).
 
 ## Tests
 

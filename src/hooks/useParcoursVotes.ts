@@ -7,7 +7,7 @@ import {
   type ParcoursTally,
   type WeekVote,
 } from '../services/supabaseService'
-import { getCurrentWeekKey, formatWeekLabel } from '../services/weekKey'
+import { useTargetWednesday } from './useTargetWednesday'
 import { useAuth } from './useAuth'
 
 const POLL_INTERVAL_MS = 30000
@@ -42,8 +42,7 @@ export function useParcoursVotes(parcoursIds: string[]): WeekVoteState {
   const [error, setError] = useState<string | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const weekKey = useMemo(() => getCurrentWeekKey(), [])
-  const weekLabel = useMemo(() => formatWeekLabel(weekKey), [weekKey])
+  const { weekKey, weekLabel } = useTargetWednesday()
 
   const parcoursKey = parcoursIds.join(',')
   const ids = useMemo(() => (parcoursKey ? parcoursKey.split(',') : []), [parcoursKey])

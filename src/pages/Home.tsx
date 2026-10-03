@@ -13,8 +13,8 @@ import { useWeather } from '../hooks/useWeather'
 import { useParcours } from '../hooks/useParcours'
 import { useParcoursVotes } from '../hooks/useParcoursVotes'
 import { useAttendance } from '../hooks/useAttendance'
-import { getWednesdayForecast } from '../services/weatherApi'
-import { getTargetWednesday } from '../services/weekKey'
+import { getRunForecast, daysUntilRun } from '../services/weatherApi'
+import { useTargetWednesday } from '../hooks/useTargetWednesday'
 
 export function Home() {
   const navigate = useNavigate()
@@ -22,7 +22,8 @@ export function Home() {
   const { parcoursList, loading: parcoursLoading } = useParcours()
   const { weather, loading: weatherLoading, error: weatherError, refresh: refreshWeather } = useWeather()
 
-  const targetWednesday = useMemo(() => getTargetWednesday(), [])
+  // Horloge partagée : bascule sur le run suivant à 14h le mercredi
+  const { weekKey, date: targetWednesday } = useTargetWednesday()
   const parcoursIds = useMemo(() => parcoursList.map((p) => p.id), [parcoursList])
 
   const {
@@ -72,15 +73,22 @@ export function Home() {
     })
   }, [attendees, choiceOf, parcoursById])
 
-  const wednesdayWeather = useMemo(() => {
+  /** Prévision du jour du run à 12h30 ; null si hors couverture API */
+  const runForecast = useMemo(() => {
     if (!weather) return null
-    return getWednesdayForecast(weather) || weather.current
+    return getRunForecast(weather)
   }, [weather])
 
-  const isForecast = useMemo(() => {
-    if (!weather) return false
-    return getWednesdayForecast(weather) !== null
-  }, [weather])
+  const hasForecast = runForecast !== null
+
+  /** Combien de jours avant le run (pour l'affichage "dans N jours") */
+  const daysToRun = useMemo(() => daysUntilRun(), [weekKey])
+
+  const weatherTitle = useMemo(() => {
+    if (!hasForecast) return 'Météo actuelle (prévision pas encore dispo)'
+    if (daysToRun === 0) return 'Météo du jour · 12h30'
+    return `Météo dans ${daysToRun} ${daysToRun > 1 ? 'jours' : 'jour'} · 12h30`
+  }, [hasForecast, daysToRun])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -152,16 +160,30 @@ export function Home() {
 
             {/* Météo */}
             <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                <RefreshCw className="w-5 h-5 text-gray-400" />
-                Météo pour la course (mercredi 12h30)
-                {!isForecast && (
-                  <span className="ml-2 px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded-full flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" />
-                    Prévision non dispo
-                  </span>
-                )}
-              </h2>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Météo pour la course</h2>
+                  <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                    {weatherTitle}
+                    {!hasForecast && (
+                      <span className="px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded-full flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        pas encore disponible
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={refreshWeather}
+                  aria-label="Rafraîchir la météo"
+                  title="Rafraîchir la météo"
+                  className="shrink-0 px-2 -mt-1"
+                >
+                  <RefreshCw className={`w-4 h-4 ${weatherLoading ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
 
               {weatherError && (
                 <Card className="border-error/20 bg-error/5">
@@ -181,12 +203,12 @@ export function Home() {
                     <span className="text-gray-500">Chargement météo...</span>
                   </CardContent>
                 </Card>
-              ) : (
+              ) : weather ? (
                 <WeatherCard
-                  weather={wednesdayWeather}
-                  title={isForecast ? 'Météo prévisionnelle' : 'Météo actuelle'}
+                  weather={runForecast ?? weather.current}
+                  title={weatherTitle}
                 />
-              )}
+              ) : null}
             </div>
 
             {/* 2. Choix du parcours — masqué si "pas aujourd'hui" */}

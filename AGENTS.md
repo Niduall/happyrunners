@@ -55,7 +55,8 @@ npm run build      # 0 erreur TypeScript
 | `src/services/supabaseService.ts` | API Supabase |
 | `src/services/storage.ts` | localStorage + `generateUserId` |
 | `src/services/gpxParser.ts` | GPX (XML + JSON Strava) |
-| `src/services/weatherApi.ts` | OpenWeatherMap |
+| `src/services/weatherApi.ts` | Open-Meteo (16 jours, sans clé) |
+| `src/services/weatherCode.ts` | Codes WMO → emoji |
 | `src/components/Auth.tsx` | LoginForm + UserMenu |
 | `src/components/ParcoursVoteCard.tsx` | Carte parcours + 2 boutons de vote |
 | `src/components/ParticipantsTable.tsx` | Tableau récapitulatif + avatars |
@@ -94,18 +95,32 @@ Les anciens bugs venaient de `window.location.href = '/'` qui causait des boucle
 - `useParcoursVotes.ts` : `setInterval(loadAll, 30000)`
 - Aucun composant ne doit implémenter sa propre écoute
 
-### Cycle de vote hebdomadaire
+### Cycle : mercredi 14h → mercredi 14h
 - `getCurrentWeekKey()` = date du mercredi cible (`"2026-10-07"`)
-- Cycle du **jeudi** au mercredi suivant → le reset est automatique, sans cron
-- Tout nouveau vote DOIT passer par `castWeekVote()` qui pose `week_key`
-- Contrainte UNIQUE : `(parcours_id, local_user_id, week_key)`
+- Le run est le mercredi 12h30 ; **à 14h** l'app bascule sur le suivant
+- Bascule automatique (pas de cron), y compris si l'app reste ouverte
+- `useTargetWednesday()` fournit l'horloge partagée (tick 1 min) : à **consommer**
+  dans tout hook qui a besoin de la clé de semaine, sinon le hook fige sa clé au
+  montage et affiche le run d'hier
+- Cache météo lié à la semaine (`weather_cache_<weekKey>`) → invalidé à la bascule
+
+### Météo — Open-Meteo
+- **Aucune clé API** (contrairement à OpenWeather). Ne pas en réintroduire une.
+- 16 jours de prévision, 384 heures horaires, `timezone=Europe/Paris`
+- Vent **déjà en km/h** : ne pas multiplier par 3.6 (bug OpenWeather)
+- `precipitation_probability` est en **pourcent** → normaliser en 0..1
+- Tolérance de sélection : ±90 min autour de 12h30
+- `isDay` forcé à `true` pour la prévision du run (toujours à 12h30)
+- Icônes via `weatherCode.ts` (mapping WMO → emoji), pas d'images externes
+- Hors couverture → `getRunForecast` renvoie `null`, l'app affiche la météo du
+  jour avec un badge explicite
 
 ## Environment Variables
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `VITE_SUPABASE_URL` | Oui | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | Oui | Supabase anon key (**régénérable** — copier depuis le dashboard si "Invalid API key") |
-| `VITE_OPENWEATHER_API_KEY` | Oui | OpenWeatherMap API key |
+| ~~`VITE_OPENWEATHER_API_KEY`~~ | **Supprimé** | Open-Meteo n'a pas besoin de clé |
 | `VITE_DEFAULT_LAT` | Default: 48.6833 | Latitude (Tomblaine) |
 | `VITE_DEFAULT_LON` | Default: 6.2167 | Longitude (Tomblaine) |
 
@@ -136,7 +151,9 @@ npm test
 | `src/services/storage.test.ts` | `generateUserId`, `createUser` |
 | `src/hooks/useAuth.hash.test.tsx` | `hashPin` (6 tests) |
 | `src/hooks/useAuth.integration.test.tsx` | Flux auth complet + partage d'état (16 tests) |
-| `src/services/weekKey.test.ts` | Cycle de vote, passage d'année, bissextile (24 tests) |
+| `src/services/weekKey.test.ts` | Bascule 14h, passage d'année, bissextile (37 tests) |
+| `src/services/weatherApi.test.ts` | Parsing Open-Meteo, couverture 16 j (23 tests) |
+| `src/services/weatherCode.test.ts` | Mapping des 28 codes WMO, jour/nuit (15 tests) |
 | `src/hooks/useParcoursVotes.test.tsx` | Votes hebdo, tri, pendingCount, optimisme (10 tests) |
 | `src/test/setup.ts` | Mock Supabase global + cleanup |
 
@@ -157,6 +174,9 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
 5. **Tester en navigation privée** (Ctrl+Shift+N) — le cache Vercel masque les changements
 6. **`onConflict` des votes** doit être `parcours_id,local_user_id`
 7. **Realtime instable** sur plan gratuit → polling 30s
+7b. **Consommer `useTargetWednesday()`** plutôt que `getCurrentWeekKey()` figé au montage
+7c. **Météo : vent déjà en km/h** — ne pas reconvertir (Open-Meteo ≠ OpenWeather)
+7d. **`useTargetWednesday()` obligatoire** dans tout hook qui lit la semaine
 8. **`npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

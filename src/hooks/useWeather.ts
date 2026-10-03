@@ -19,6 +19,8 @@ export function useWeather(lat?: number, lon?: number) {
   const [weather, setWeather] = useState<WeatherForecast | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  /** Timestamp du dernier fetch réussi — pour afficher la fraîcheur */
+  const [fetchedAt, setFetchedAt] = useState<number | null>(null)
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Le cache est lié à la semaine cible : quand celle-ci change (bascule de
@@ -41,6 +43,7 @@ export function useWeather(lat?: number, lon?: number) {
       const entry: CacheEntry = JSON.parse(cached)
       if (entry.weekKey === weekKey && Date.now() - entry.timestamp < CACHE_DURATION) {
         setWeather(entry.data)
+        setFetchedAt(entry.timestamp)
         return true
       }
     } catch {
@@ -62,10 +65,18 @@ export function useWeather(lat?: number, lon?: number) {
       try {
         const data = await fetchWeather(lat, lon)
         setWeather(data)
-        const entry: CacheEntry = { data, timestamp: Date.now(), weekKey }
+        const now = Date.now()
+        setFetchedAt(now)
+        const entry: CacheEntry = { data, timestamp: now, weekKey }
         localStorage.setItem(cacheKey, JSON.stringify(entry))
         purgeOtherCaches(cacheKey)
+        console.log('[METEO] fetch ok', {
+          silencieux: !!opts?.silent,
+          hourly: data.hourly.length,
+          daily: data.daily.length,
+        })
       } catch (err) {
+        console.error('[METEO] fetch echoue', err)
         setError(err instanceof Error ? err.message : 'Erreur inconnue')
       } finally {
         if (!opts?.silent) setLoading(false)
@@ -76,7 +87,15 @@ export function useWeather(lat?: number, lon?: number) {
 
   // Premier chargement : cache d'abord, réseau seulement si nécessaire
   useEffect(() => {
-    if (restoreFromCache()) {
+    const restored = restoreFromCache()
+    console.log('[METEO] montage', {
+      weekKey,
+      cacheKey,
+      cacheRestauré: restored,
+      maintenant: Math.floor(Date.now() / 1000),
+    })
+
+    if (restored) {
       setLoading(false)
     } else {
       void doFetch()
@@ -91,6 +110,7 @@ export function useWeather(lat?: number, lon?: number) {
    */
   useEffect(() => {
     refreshRef.current = setInterval(() => {
+      console.log('[METEO] refresh de fond (30 min)')
       void doFetch({ silent: true })
     }, REFRESH_INTERVAL_MS)
 
@@ -109,7 +129,7 @@ export function useWeather(lat?: number, lon?: number) {
     void doFetch()
   }, [doFetch, cacheKey])
 
-  return { weather, loading, error, refresh }
+  return { weather, loading, error, refresh, fetchedAt }
 }
 
 /** Supprime les entrées de cache qui ne correspondent pas à la clé courante */

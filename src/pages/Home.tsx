@@ -20,7 +20,13 @@ export function Home() {
   const navigate = useNavigate()
   const { isAuthenticated, user } = useAuth()
   const { parcoursList, loading: parcoursLoading } = useParcours()
-  const { weather, loading: weatherLoading, error: weatherError, refresh: refreshWeather } = useWeather()
+  const {
+    weather,
+    loading: weatherLoading,
+    error: weatherError,
+    refresh: refreshWeather,
+    fetchedAt,
+  } = useWeather()
 
   // Horloge partagée : bascule sur le run suivant à 14h le mercredi
   const { weekKey, date: targetWednesday } = useTargetWednesday()
@@ -89,6 +95,16 @@ export function Home() {
     if (daysToRun === 0) return 'Météo du jour · 12h30'
     return `Météo dans ${daysToRun} ${daysToRun > 1 ? 'jours' : 'jour'} · 12h30`
   }, [hasForecast, daysToRun])
+
+  /** Ancienneté des données : "à l'instant", "il y a 12 min", "il y a 2 h" */
+  const weatherFreshness = useMemo(() => {
+    if (!fetchedAt) return null
+    const minutes = Math.floor((Date.now() - fetchedAt) / 60_000)
+    if (minutes < 2) return 'à l’instant'
+    if (minutes < 60) return `il y a ${minutes} min`
+    const hours = Math.floor(minutes / 60)
+    return `il y a ${hours} h`
+  }, [fetchedAt])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -165,6 +181,9 @@ export function Home() {
                   <h2 className="text-lg font-semibold text-gray-900">Météo pour la course</h2>
                   <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
                     {weatherTitle}
+                    {weatherFreshness && (
+                      <span className="text-xs text-gray-400">· {weatherFreshness}</span>
+                    )}
                     {!hasForecast && (
                       <span className="px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded-full flex items-center gap-1">
                         <AlertCircle className="w-3 h-3" />

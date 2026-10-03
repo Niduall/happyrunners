@@ -14,9 +14,11 @@ export function useParcours() {
   const [error, setError] = useState<string | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const loadParcours = useCallback(async () => {
+  const loadParcours = useCallback(async (opts?: { silent?: boolean }) => {
+    // ⚠️ Les rafraîchissements de fond (polling) doivent être SILENCIEUX :
+    // setLoading(true) afficherait le spinner toutes les 30 s.
+    if (!opts?.silent) setLoading(true)
     try {
-      setLoading(true)
       const data = await getParcours()
       setParcoursList(data)
       setNextParcours(data[0] || null)
@@ -29,12 +31,12 @@ export function useParcours() {
   }, [])
 
   useEffect(() => {
+    // Premier chargement : spinner normal
     loadParcours()
 
-    // Polling 30s — le Realtime Supabase n'est plus utilisé (SDK v2.109 incompatible
-    // avec l'implémentation WebSocket classique, et instable sur plan gratuit)
+    // Polling 30s — silencieux, pas de clignotement
     pollingRef.current = setInterval(() => {
-      loadParcours()
+      loadParcours({ silent: true })
     }, POLL_INTERVAL_MS)
 
     return () => {

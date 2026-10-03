@@ -161,7 +161,105 @@ describe('useParcoursVotes — un choix unique par semaine', () => {
     expect(result.current.tallies.p2?.yes).toBe(3)
   })
 
-  it('retire le vote du store plutôt que de laisser un zéro négatif', async () => {
+  it('signale l’égalité entre 2 parcours à égalité', async () => {
+    store = [
+      { parcoursId: 'p1', localUserId: 'a', status: 'yes' },
+      { parcoursId: 'p1', localUserId: 'b', status: 'yes' },
+      { parcoursId: 'p2', localUserId: 'a', status: 'yes' },
+      { parcoursId: 'p2', localUserId: 'b', status: 'yes' },
+      { parcoursId: 'p3', localUserId: 'a', status: 'yes' },
+    ]
+
+    const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    // p1 et p2 sont à 2 voix, p3 à 1
+    expect(result.current.isTie).toBe(true)
+    expect(result.current.winners).toHaveLength(2)
+    expect(result.current.winners).toContain('p1')
+    expect(result.current.winners).toContain('p2')
+  })
+
+  it('signale l’égalité entre 3 parcours', async () => {
+    store = [
+      { parcoursId: 'p1', localUserId: 'a', status: 'yes' },
+      { parcoursId: 'p2', localUserId: 'a', status: 'yes' },
+      { parcoursId: 'p3', localUserId: 'a', status: 'yes' },
+    ]
+
+    const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(result.current.isTie).toBe(true)
+    expect(result.current.winners).toHaveLength(3)
+  })
+
+  it('pas d’égalité quand un parcours domine', async () => {
+    store = [
+      { parcoursId: 'p1', localUserId: 'a', status: 'yes' },
+      { parcoursId: 'p1', localUserId: 'b', status: 'yes' },
+      { parcoursId: 'p2', localUserId: 'a', status: 'yes' },
+    ]
+
+    const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(result.current.isTie).toBe(false)
+    expect(result.current.winners).toEqual(['p1'])
+  })
+
+  it('pas d’égalité si personne n’a voté', async () => {
+    const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    // Tous à 0 → pas de gagnant, pas d'égalité
+    expect(result.current.isTie).toBe(false)
+    expect(result.current.winners).toEqual([])
+  })
+
+  it('le tri reste déterministe en cas d’égalité', async () => {
+    store = [
+      { parcoursId: 'p3', localUserId: 'a', status: 'yes' },
+      { parcoursId: 'p1', localUserId: 'b', status: 'yes' },
+      { parcoursId: 'p2', localUserId: 'c', status: 'yes' },
+    ]
+
+    const names = { p1: 'Bois', p2: 'Canal', p3: 'Standard' }
+
+    // Deux rendus successifs doivent donner le même ordre
+    const first = renderHook(() => useParcoursVotes(PARCOURS, names), { wrapper })
+    await waitFor(() => expect(first.result.current.loading).toBe(false))
+    const order1 = first.result.current.rankedParcoursIds
+
+    const second = renderHook(() => useParcoursVotes(PARCOURS, names), { wrapper })
+    await waitFor(() => expect(second.result.current.loading).toBe(false))
+    const order2 = second.result.current.rankedParcoursIds
+
+    expect(order1).toEqual(order2)
+    // Ordre alphabétique : Bois, Canal, Standard
+    expect(order1).toEqual(['p1', 'p2', 'p3'])
+  })
+
+  it('un vote supplémentaire rompt l’égalité', async () => {
+    store = [
+      { parcoursId: 'p1', localUserId: 'a', status: 'yes' },
+      { parcoursId: 'p2', localUserId: 'b', status: 'yes' },
+    ]
+
+    const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.isTie).toBe(true)
+
+    // Alice vote pour p1 → 2 vs 1, plus d'égalité
+    await act(async () => {
+      await result.current.toggleChoice('p1')
+    })
+
+    expect(result.current.isTie).toBe(false)
+    expect(result.current.winners).toEqual(['p1'])
+  })
+
+  it('retire un choix de parcours du store plutôt que de laisser un zéro négatif', async () => {
     store = [{ parcoursId: 'p1', localUserId: 'alice', status: 'yes' }]
     const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))

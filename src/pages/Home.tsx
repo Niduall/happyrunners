@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { MapPin, Calendar, RefreshCw, ChevronRight, AlertCircle, Plus } from 'lucide-react'
+import { MapPin, Calendar, RefreshCw, ChevronRight, AlertCircle, Plus, Trophy } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { WeatherCard } from '../components/WeatherCard'
 import { AttendanceBanner } from '../components/AttendanceBanner'
@@ -31,6 +31,11 @@ export function Home() {
   // Horloge partagée : bascule sur le run suivant à 14h le mercredi
   const { weekKey, date: targetWednesday } = useTargetWednesday()
   const parcoursIds = useMemo(() => parcoursList.map((p) => p.id), [parcoursList])
+  const parcoursNames = useMemo(() => {
+    const names: Record<string, string> = {}
+    for (const p of parcoursList) names[p.id] = p.name
+    return names
+  }, [parcoursList])
 
   const {
     myStatus,
@@ -50,7 +55,9 @@ export function Home() {
     error: votesError,
     toggleChoice,
     rankedParcoursIds,
-  } = useParcoursVotes(parcoursIds)
+    winners,
+    isTie,
+  } = useParcoursVotes(parcoursIds, parcoursNames)
 
   const parcoursById = useMemo(() => new Map(parcoursList.map((p) => [p.id, p])), [parcoursList])
 
@@ -59,11 +66,13 @@ export function Home() {
     [rankedParcoursIds, parcoursById]
   )
 
-  const winnerId = useMemo(() => {
-    const first = rankedParcoursIds[0]
-    if (!first) return null
-    return (tallies[first]?.yes ?? 0) > 0 ? first : null
-  }, [rankedParcoursIds, tallies])
+  /** Noms des parcours à égalité, pour le bandeau d'explication */
+  const tieNames = useMemo(
+    () => winners.map((id) => parcoursNames[id]).filter(Boolean),
+    [winners, parcoursNames]
+  )
+
+  const tieVotes = isTie ? (tallies[winners[0]]?.yes ?? 0) : 0
 
   /** Une ligne par personne ayant répondu, avec le parcours qu'elle a choisi */
   const presenceRows = useMemo<PresenceRow[]>(() => {
@@ -252,6 +261,16 @@ export function Home() {
                   </div>
                 )}
 
+                {isTie && (
+                  <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-sm flex items-start gap-2">
+                    <Trophy className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Égalité</strong> entre {tieNames.join(' et ')} ({tieVotes}{' '}
+                      {tieVotes > 1 ? 'voix' : 'voix'} chacun). Vous décidez au moment de partir.
+                    </span>
+                  </div>
+                )}
+
                 {parcoursLoading ? (
                   <Card>
                     <CardContent className="p-6 flex items-center justify-center gap-3">
@@ -279,7 +298,8 @@ export function Home() {
                         parcours={parcours!}
                         isMyChoice={myChoice === parcours!.id}
                         yesCount={tallies[parcours!.id]?.yes ?? 0}
-                        isWinner={winnerId === parcours!.id}
+                        isWinner={winners.includes(parcours!.id)}
+                        isTied={isTie}
                         saving={savingParcoursId === parcours!.id}
                         onToggle={() => void toggleChoice(parcours!.id)}
                       />

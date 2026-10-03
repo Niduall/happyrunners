@@ -28,11 +28,19 @@ export interface WeekVoteState {
   choiceOf: (localUserId: string) => string | null
   /** Parcours trié : plus de votes décroissant */
   rankedParcoursIds: string[]
+  /** Les parcours les plus plébiscités (plusieurs si égalité) */
+  winners: string[]
+  /** true si 2+ parcours sont à égalité au premier rang */
+  isTie: boolean
 }
 
 const cellKey = (parcoursId: string, localUserId: string) => `${parcoursId}|${localUserId}`
 
-export function useParcoursVotes(parcoursIds: string[]): WeekVoteState {
+export function useParcoursVotes(
+  parcoursIds: string[],
+  /** Noms des parcours — sert au tri alphabétique stable en cas d'égalité */
+  parcoursNames: Record<string, string> = {}
+): WeekVoteState {
   const { user, loading: authLoading } = useAuth()
   const [tallies, setTallies] = useState<Record<string, ParcoursTally>>({})
   const [myChoice, setMyChoice] = useState<string | null>(null)
@@ -175,10 +183,28 @@ export function useParcoursVotes(parcoursIds: string[]): WeekVoteState {
       [...ids].sort((a, b) => {
         const ta = tallies[a]?.yes ?? 0
         const tb = tallies[b]?.yes ?? 0
-        return tb - ta
+        if (tb !== ta) return tb - ta
+        // Égalité → tri alphabétique déterministe, sinon l'ordre dépend de
+        // l'implémentation de sort() et peut changer d'un rechargement à l'autre.
+        return (parcoursNames[a] ?? '').localeCompare(parcoursNames[b] ?? '', 'fr')
       }),
-    [ids, tallies]
+    [ids, tallies, parcoursNames]
   )
+
+  /**
+   * Parcours en tête : le(s) plus plébiscité(s).
+   * - 1 seul gagnant  → [id]
+   * - égalité de voix  → tous les ids concernés (départage hors app)
+   * - aucun vote      → []
+   */
+  const winners = useMemo(() => {
+    const max = Math.max(0, ...ids.map((id) => tallies[id]?.yes ?? 0))
+    if (max === 0) return []
+    return ids.filter((id) => (tallies[id]?.yes ?? 0) === max)
+  }, [ids, tallies])
+
+  /** true s'il y a une égalité entre 2+ parcours (au moins un vote) */
+  const isTie = winners.length > 1
 
   return {
     tallies,
@@ -191,5 +217,7 @@ export function useParcoursVotes(parcoursIds: string[]): WeekVoteState {
     toggleChoice,
     choiceOf,
     rankedParcoursIds,
+    winners,
+    isTie,
   }
 }

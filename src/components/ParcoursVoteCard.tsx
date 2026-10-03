@@ -1,4 +1,4 @@
-import { Check, Trophy, MapPin } from 'lucide-react'
+import { Check, Trophy, MapPin, Scale } from 'lucide-react'
 import type { Parcours } from '../types/supabase'
 import { Button } from './ui/Button'
 import { Card, CardContent } from './ui/Card'
@@ -8,6 +8,8 @@ interface ParcoursVoteCardProps {
   isMyChoice: boolean
   yesCount: number
   isWinner: boolean
+  /** true si le winner est un match nul (badge différent) */
+  isTied?: boolean
   saving: boolean
   onToggle: () => void
 }
@@ -17,19 +19,41 @@ export function ParcoursVoteCard({
   isMyChoice,
   yesCount,
   isWinner,
+  isTied = false,
   saving,
   onToggle,
 }: ParcoursVoteCardProps) {
   return (
-    <Card className={isWinner ? 'border-primary/40 ring-1 ring-primary/20' : ''}>
+    <Card
+      className={
+        isTied && isWinner
+          ? 'border-amber-300 ring-1 ring-amber-200'
+          : isWinner
+            ? 'border-primary/40 ring-1 ring-primary/20'
+            : ''
+      }
+    >
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap mb-0.5">
               {isWinner && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary text-xs font-medium rounded-full">
-                  <Trophy className="w-3 h-3" />
-                  En tête
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${
+                    isTied ? 'bg-amber-100 text-amber-800' : 'bg-primary/10 text-primary'
+                  }`}
+                >
+                  {isTied ? (
+                    <>
+                      <Scale className="w-3 h-3" />
+                      Égalité
+                    </>
+                  ) : (
+                    <>
+                      <Trophy className="w-3 h-3" />
+                      En tête
+                    </>
+                  )}
                 </span>
               )}
               <span className="text-xs text-gray-500">

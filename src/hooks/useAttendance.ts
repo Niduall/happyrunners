@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   getWeekAttendances,
   setAttendance,
+  deleteWeekVote,
   type AttendanceStatus,
   type Attendee,
 } from '../services/supabaseService'
@@ -112,6 +113,13 @@ export function useAttendance(): AttendanceState {
           status,
           identity: { firstName: user.firstName, lastName: user.lastName },
         })
+
+        // "Pas aujourd'hui" retire aussi le choix de parcours : quelqu'un
+        // qui ne vient pas ne doit pas peser sur le vote d'un parcours.
+        // (Contrainte UNIQUE(local_user_id, week_key) : un seul choix/semaine)
+        if (status === 'skip') {
+          await deleteWeekVote('', user.id, weekKey)
+        }
       } catch (err) {
         console.error('[ATTENDANCE] Erreur:', err)
         setError(err instanceof Error ? err.message : 'Erreur lors de la réponse')

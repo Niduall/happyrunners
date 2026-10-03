@@ -227,15 +227,21 @@ export async function getMyWeekVote(
   return (data?.status as 'yes' | 'no' | undefined) ?? null
 }
 
-/** Retire un choix de parcours (re-clic sur le parcours déjà choisi) */
+/**
+ * Retire le choix de parcours d'une personne pour la semaine.
+ *
+ * ⚠️ Le parcours est ignoré : la contrainte UNIQUE(local_user_id, week_key)
+ * garantit qu'une personne n'a qu'un choix par semaine, donc supprimer par
+ * (personne, semaine) suffit et évite de connaître le parcours choisi.
+ *
+ * Utilisé aussi quand la personne répond « pas aujourd'hui » : son choix
+ * de parcours ne doit plus peser sur le vote d'un parcours.
+ */
 export async function deleteWeekVote(
-  _parcoursId: string,
+  _parcoursId: string | null,
   localUserId: string,
   weekKey: string
 ): Promise<void> {
-  // La contrainte UNIQUE(local_user_id, week_key) garantit qu'une personne
-  // n'a qu'un choix par semaine : on supprime donc par personne + semaine,
-  // sans se soucier du parcours.
   const { error } = await supabase
     .from('participations')
     .delete()

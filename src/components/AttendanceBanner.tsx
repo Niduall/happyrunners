@@ -49,6 +49,12 @@ export function AttendanceBanner({ myStatus, saving, weekLabel, onChange }: Atte
         {myStatus === null && (
           <p className="text-xs text-gray-500 mt-2">Tu n'as pas encore répondu pour cette semaine.</p>
         )}
+
+        {myStatus === 'skip' && (
+          <p className="text-xs text-gray-500 mt-2">
+            Ton choix de parcours a été retiré — tu ne viens pas, donc ça ne compte pas.
+          </p>
+        )}
       </CardContent>
     </Card>
   )

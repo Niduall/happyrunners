@@ -48,7 +48,8 @@ npm run build      # 0 erreur TypeScript
 ## Key Files
 | File | Purpose |
 |------|---------|
-| `src/hooks/useAuth.tsx` | `AuthProvider` (Context) + `useAuth` + `hashPin` |
+| `src/hooks/useAuth.tsx` | `AuthProvider` (Context) + `useAuth` |
+| `src/services/pin.ts` | `hashPin` (hash simple côté client) |
 | `src/hooks/useParcours.ts` | Parcours CRUD + 30s polling |
 | `src/hooks/useParcoursVotes.ts` | Votes hebdo multi-parcours + roster + 30s polling — **source unique** |
 | `src/hooks/useWeather.ts` | Météo mercredi 12h30 |
@@ -81,10 +82,13 @@ itérations. `useAuth()` hors provider → throw explicite plutôt qu'un état s
 ### ⚠️ Ne PAS utiliser de rechargement de page dans les flux d'auth
 Les anciens bugs venaient de `window.location.href = '/'` qui causait des boucles d'état. L'hydratation est maintenant correcte via le state machine. Si tu penses avoir besoin d'un rechargement, vérifie d'abord si un état manque dans `useAuth`.
 
-### Identifiant unique
-`generateUserId(firstName, lastName)` : minuscules, sans accents, sans ponctuation, `_` entre les deux.
-- `"André" + "Müller"` → `andre_muller`
-- Doit rester **déterministe** cross-browser/OS (tout test dépend de ça)
+### Identifiant unique : `user_number`
+Entier attribué par la base (1, 2, 3…), **jamais modifié**.
+- Changer son nom ne touche PAS l'identifiant → votes, PIN et historique suivent
+- `findProfileByName(firstName, lastName)` retrouve le numéro sur un autre appareil
+- Les noms sont lus via JOIN sur `user_profiles`, jamais dupliqués
+- ⚠️ Ne jamais réintroduire un identifiant dérivé du nom : c'est la source du bug
+  « changer de nom casse les votes »
 
 ### GPX Parsing
 - Formats : XML GPX, JSON Strava `{ "points": [...] }`, flat array, segments, track.segments
@@ -128,12 +132,12 @@ Les anciens bugs venaient de `window.location.href = '/'` qui causait des boucle
 
 ### `user_profiles`
 ```sql
-local_user_id TEXT PRIMARY KEY,  -- = generateUserId(firstName, lastName)
+id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+user_number INTEGER NOT NULL UNIQUE,   -- SEQUENCE, stable
 first_name TEXT NOT NULL,
 last_name TEXT NOT NULL,
-pin_hash TEXT,                   -- NULL = pas de PIN
-created_at TIMESTAMPTZ DEFAULT NOW(),
-updated_at TIMESTAMPTZ DEFAULT NOW()
+pin_hash TEXT,                        -- NULL = pas de PIN
+created_at, updated_at TIMESTAMPTZ
 ```
 
 ### `participations`

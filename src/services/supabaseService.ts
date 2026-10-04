@@ -5,13 +5,12 @@ import type {
   ParticipationInsert,
   AttendanceInsert,
   AttendanceStatus,
-  GPXPoint,
   UserProfile,
   UserProfileInsert,
   UserProfileUpdate,
+  GPXPoint,
 } from '../types/supabase'
 
-// Ré-exporté pour que les composants n'importent pas directement les types
 export type { AttendanceStatus }
 
 // ===== PARCOURS =====
@@ -67,243 +66,24 @@ export async function deleteParcours(id: string): Promise<void> {
   if (error) throw error
 }
 
-// ===== PARTICIPATIONS (VOTES HEBDO) =====
-// Un vote = (parcours_id, local_user_id, week_key). Le cycle de vote va du
-// jeudi au mercredi suivant ; getCurrentWeekKey() fournit la clé.
-
-export interface RosterMember {
-  localUserId: string
-  firstName: string
-  lastName: string
-}
-
-export interface WeekVote {
-  parcoursId: string
-  localUserId: string
-  status: 'yes' | 'no'
-}
-
-export interface ParcoursTally {
-  parcoursId: string
-  yes: number
-  no: number
-}
-
-export interface UserIdentity {
-  firstName: string
-  lastName: string
-}
-
-/** Une réponse globale "je viens / je ne viens pas" */
-export interface Attendee {
-  localUserId: string
-  firstName: string
-  lastName: string
-  status: AttendanceStatus
-}
-
-// ===== ATTENDANCES (réponse globale : je viens ou pas) =====
-
-/** Qui vient / qui ne vient pas cette semaine */
-export async function getWeekAttendances(weekKey: string): Promise<Attendee[]> {
-  const { data, error } = await supabase
-    .from('attendances')
-    .select('local_user_id,first_name,last_name,status')
-    .eq('week_key', weekKey)
-
-  if (error) throw error
-
-  return (data || []).map((row) => ({
-    localUserId: row.local_user_id as string,
-    firstName: (row.first_name as string) || '',
-    lastName: (row.last_name as string) || '',
-    status: row.status as AttendanceStatus,
-  }))
-}
+// ===== USER PROFILES =====
 
 /**
- * Enregistre la réponse globale de la personne pour la semaine.
- * Idempotent via UNIQUE(week_key, local_user_id) : changer d'avis
- * écrase la ligne précédente au lieu d'en créer une seconde.
+ * Récupère le profil par identifiant technique (user_number).
+ * Retourne null si le profil n'existe pas encore (première connexion).
  */
-export async function setAttendance(params: {
-  weekKey: string
-  localUserId: string
-  status: AttendanceStatus
-  identity: UserIdentity
-}): Promise<void> {
-  const { weekKey, localUserId, status, identity } = params
-
-  const { error } = await supabase.from('attendances').upsert(
-    {
-      week_key: weekKey,
-      local_user_id: localUserId,
-      first_name: identity.firstName,
-      last_name: identity.lastName,
-      status,
-    } as AttendanceInsert,
-    { onConflict: 'week_key,local_user_id' }
-  )
-
-  if (error) throw error
-}
-
-/** Toutes les personnes ayant répondu une fois (historique) → roster */
-export async function getRoster(): Promise<RosterMember[]> {
-  // Le roster vient de `attendances` quand elle est renseignée, sinon on
-  // retombe sur `participations` (historique antérieur).
-  const [att, parts] = await Promise.all([
-    supabase.from('attendances').select('local_user_id,first_name,last_name').not('local_user_id', 'is', null),
-    supabase.from('participations').select('local_user_id,first_name,last_name').not('local_user_id', 'is', null),
-  ])
-
-  if (att.error && parts.error) throw att.error
-
-  const members = new Map<string, RosterMember>()
-  for (const row of [...(att.data || []), ...(parts.data || [])]) {
-    const id = row.local_user_id as string
-    if (!id || members.has(id)) continue
-    members.set(id, {
-      localUserId: id,
-      firstName: (row.first_name as string) || id.split('_')[0] || '?',
-      lastName: (row.last_name as string) || id.split('_').slice(1).join(' ') || '',
-    })
-  }
-
-  return [...members.values()].sort((a, b) =>
-    `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`, 'fr')
-  )
-}
-
-/** Tous les votes d'une semaine, tous parcours confondus */
-export async function getWeekVotes(weekKey: string): Promise<WeekVote[]> {
-  const { data, error } = await supabase
-    .from('participations')
-    .select('parcours_id,local_user_id,status')
-    .eq('week_key', weekKey)
-
-  if (error) throw error
-
-  // ⚠️ Supabase renvoie du snake_case ; on mappe explicitement en camelCase.
-  // Un simple cast TypeScript ne transforme rien à l'exécution.
-  return (data || []).map((row) => ({
-    parcoursId: row.parcours_id as string,
-    localUserId: row.local_user_id as string,
-    status: row.status as 'yes' | 'no',
-  }))
-}
-
-/** Compteurs yes/no par parcours pour une semaine */
-export async function getWeekTallies(weekKey: string): Promise<ParcoursTally[]> {
-  const votes = await getWeekVotes(weekKey)
-  const byParcours = new Map<string, ParcoursTally>()
-
-  for (const v of votes) {
-    if (!v.parcoursId || !v.localUserId) continue
-    const tally = byParcours.get(v.parcoursId) ?? { parcoursId: v.parcoursId, yes: 0, no: 0 }
-    if (v.status === 'yes') tally.yes += 1
-    else tally.no += 1
-    byParcours.set(v.parcoursId, tally)
-  }
-
-  return [...byParcours.values()]
-}
-
-/** Le vote d'une personne pour un parcours donné cette semaine */
-export async function getMyWeekVote(
-  parcoursId: string,
-  localUserId: string,
-  weekKey: string
-): Promise<'yes' | 'no' | null> {
-  const { data, error } = await supabase
-    .from('participations')
-    .select('status')
-    .eq('parcours_id', parcoursId)
-    .eq('local_user_id', localUserId)
-    .eq('week_key', weekKey)
-    .maybeSingle()
-
-  if (error) throw error
-  return (data?.status as 'yes' | 'no' | undefined) ?? null
-}
-
-/**
- * Retire le choix de parcours d'une personne pour la semaine.
- *
- * ⚠️ Le parcours est ignoré : la contrainte UNIQUE(local_user_id, week_key)
- * garantit qu'une personne n'a qu'un choix par semaine, donc supprimer par
- * (personne, semaine) suffit et évite de connaître le parcours choisi.
- *
- * Utilisé aussi quand la personne répond « pas aujourd'hui » : son choix
- * de parcours ne doit plus peser sur le vote d'un parcours.
- */
-export async function deleteWeekVote(
-  _parcoursId: string | null,
-  localUserId: string,
-  weekKey: string
-): Promise<void> {
-  const { error } = await supabase
-    .from('participations')
-    .delete()
-    .eq('local_user_id', localUserId)
-    .eq('week_key', weekKey)
-
-  if (error) throw error
-}
-
-/**
- * Enregistre le choix de parcours pour la semaine courante.
- *
- * ⚠️ La contrainte UNIQUE(local_user_id, week_key) impose UN SEUL choix par
- * personne et par semaine : passer à un autre parcours **remplace** le
- * précédent automatiquement. Ne pas tenter de supprimer l'ancien vote côté
- * client — l'upsert s'en charge.
- *
- * ⚠️ Le roster est reconstruit depuis `participations` (voir getRoster) —
- * pas besoin d'une table `inscriptions` séparée.
- */
-export async function castWeekVote(params: {
-  parcoursId: string
-  localUserId: string
-  status: 'yes' | 'no'
-  weekKey: string
-  identity: UserIdentity
-}): Promise<void> {
-  const { parcoursId, localUserId, status, weekKey, identity } = params
-
-  const { error } = await supabase.from('participations').upsert(
-    {
-      parcours_id: parcoursId,
-      user_id: null,
-      local_user_id: localUserId,
-      status,
-      week_key: weekKey,
-      first_name: identity.firstName,
-      last_name: identity.lastName,
-    } as ParticipationInsert,
-    // Conflit sur (local_user_id, week_key) → changer de parcours
-    // remplace le choix précédent au lieu d'ajouter une 2e ligne.
-    { onConflict: 'local_user_id,week_key' }
-  )
-
-  if (error) throw error
-}
-
-// ===== USER PROFILES (PIN cross-device) =====
-
-export async function getUserProfile(localUserId: string): Promise<UserProfile | null> {
-  // maybeSingle() : null si le profil n'existe pas encore (première connexion),
-  // pas d'erreur 406
+export async function getUserProfile(userNumber: number): Promise<UserProfile | null> {
   const { data, error } = await supabase
     .from('user_profiles')
     .select('*')
-    .eq('local_user_id', localUserId)
+    .eq('user_number', userNumber)
     .maybeSingle()
 
   if (error) throw error
   return data || null
 }
 
+/** Crée un profil et retourne son user_number attribué par la base */
 export async function createUserProfile(profile: UserProfileInsert): Promise<UserProfile> {
   const { data, error } = await supabase
     .from('user_profiles')
@@ -315,11 +95,19 @@ export async function createUserProfile(profile: UserProfileInsert): Promise<Use
   return data
 }
 
-export async function updateUserProfile(localUserId: string, updates: UserProfileUpdate): Promise<UserProfile> {
+/**
+ * Met à jour un profil par user_number.
+ * Comme l'identifiant ne dépend pas du nom, changer de nom ne casse rien :
+ * votes, PIN et historique restent attachés à la bonne personne.
+ */
+export async function updateUserProfile(
+  userNumber: number,
+  updates: UserProfileUpdate
+): Promise<UserProfile> {
   const { data, error } = await supabase
     .from('user_profiles')
     .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('local_user_id', localUserId)
+    .eq('user_number', userNumber)
     .select()
     .single()
 
@@ -327,13 +115,203 @@ export async function updateUserProfile(localUserId: string, updates: UserProfil
   return data
 }
 
-export async function upsertUserProfile(profile: UserProfileInsert): Promise<UserProfile> {
+/**
+ * Récupère le profil d'une personne par son nom.
+ * Sert à retrouver son user_number sur un nouvel appareil, puisque
+ * l'identifiant technique n'est plus dérivé du nom.
+ */
+export async function findProfileByName(
+  firstName: string,
+  lastName: string
+): Promise<UserProfile | null> {
   const { data, error } = await supabase
     .from('user_profiles')
-    .upsert(profile)
-    .select()
-    .single()
+    .select('*')
+    .ilike('first_name', firstName.trim())
+    .ilike('last_name', lastName.trim())
+    .maybeSingle()
 
   if (error) throw error
-  return data
+  return data || null
+}
+
+// ===== ATTENDANCES (réponse globale) =====
+
+/** Une réponse "je viens / je ne viens pas", avec le nom affiché */
+export interface Attendee {
+  userNumber: number
+  firstName: string
+  lastName: string
+  status: AttendanceStatus
+}
+
+/** Atttendances + noms, pour le tableau de présence */
+interface AttendanceWithNames extends AttendanceInsert {
+  id: string
+  created_at: string
+  updated_at: string
+}
+
+export async function getWeekAttendances(weekKey: string): Promise<Attendee[]> {
+  const { data, error } = await supabase
+    .from('attendances')
+    .select('id,user_number,status,created_at,updated_at')
+    .eq('week_key', weekKey)
+
+  if (error) throw error
+
+  const rows = (data || []) as AttendanceWithNames[]
+  if (rows.length === 0) return []
+
+  // Les noms vivent dans user_profiles : un JOIN évite de les dupliquer
+  const { data: profiles } = await supabase
+    .from('user_profiles')
+    .select('user_number,first_name,last_name')
+    .in('user_number', rows.map((r) => r.user_number))
+
+  const names = new Map(
+    ((profiles || []) as { user_number: number; first_name: string; last_name: string }[]).map((p) => [
+      p.user_number,
+      { firstName: p.first_name, lastName: p.last_name },
+    ])
+  )
+
+  return rows.map((row) => ({
+    userNumber: row.user_number,
+    firstName: names.get(row.user_number)?.firstName ?? '',
+    lastName: names.get(row.user_number)?.lastName ?? '',
+    status: row.status as AttendanceStatus,
+  }))
+}
+
+/**
+ * Enregistre la réponse globale pour la semaine.
+ * Idempotent via UNIQUE(week_key, user_number).
+ */
+export async function setAttendance(params: {
+  weekKey: string
+  userNumber: number
+  status: AttendanceStatus
+}): Promise<void> {
+  const { weekKey, userNumber, status } = params
+
+  const { error } = await supabase.from('attendances').upsert(
+    {
+      week_key: weekKey,
+      user_number: userNumber,
+      status,
+    } as AttendanceInsert,
+    { onConflict: 'week_key,user_number' }
+  )
+
+  if (error) throw error
+}
+
+// ===== PARTICIPATIONS (choix du parcours) =====
+
+export interface WeekVote {
+  parcoursId: string
+  userNumber: number
+  status: 'yes' | 'no'
+}
+
+export interface ParcoursTally {
+  parcoursId: string
+  yes: number
+  no: number
+}
+
+/** Tous les votes d'une semaine, tous parcours confondus */
+export async function getWeekVotes(weekKey: string): Promise<WeekVote[]> {
+  const { data, error } = await supabase
+    .from('participations')
+    .select('parcours_id,user_number,status')
+    .eq('week_key', weekKey)
+
+  if (error) throw error
+
+  // ⚠️ PostgREST renvoie du snake_case ; on mappe explicitement en camelCase.
+  return (data || []).map((row) => ({
+    parcoursId: row.parcours_id as string,
+    userNumber: row.user_number as number,
+    status: row.status as 'yes' | 'no',
+  }))
+}
+
+/** Compteurs yes/no par parcours pour une semaine */
+export async function getWeekTallies(weekKey: string): Promise<ParcoursTally[]> {
+  const votes = await getWeekVotes(weekKey)
+  const byParcours = new Map<string, ParcoursTally>()
+
+  for (const v of votes) {
+    if (!v.parcoursId || v.userNumber == null) continue
+    const tally = byParcours.get(v.parcoursId) ?? { parcoursId: v.parcoursId, yes: 0, no: 0 }
+    if (v.status === 'yes') tally.yes += 1
+    else tally.no += 1
+    byParcours.set(v.parcoursId, tally)
+  }
+
+  return [...byParcours.values()]
+}
+
+/** Le choix d'une personne pour un parcours donné cette semaine */
+export async function getMyWeekVote(
+  parcoursId: string,
+  userNumber: number,
+  weekKey: string
+): Promise<'yes' | 'no' | null> {
+  const { data, error } = await supabase
+    .from('participations')
+    .select('status')
+    .eq('parcours_id', parcoursId)
+    .eq('user_number', userNumber)
+    .eq('week_key', weekKey)
+    .maybeSingle()
+
+  if (error) throw error
+  return (data?.status as 'yes' | 'no' | undefined) ?? null
+}
+
+/**
+ * Enregistre le choix de parcours pour la semaine.
+ * UNIQUE(user_number, week_key) : un seul choix par personne et par semaine.
+ * Changer de parcours REMPLACE le précédent automatiquement.
+ */
+export async function castWeekVote(params: {
+  parcoursId: string
+  userNumber: number
+  weekKey: string
+}): Promise<void> {
+  const { parcoursId, userNumber, weekKey } = params
+
+  const { error } = await supabase.from('participations').upsert(
+    {
+      parcours_id: parcoursId,
+      user_number: userNumber,
+      week_key: weekKey,
+      status: 'yes',
+    } as ParticipationInsert,
+    { onConflict: 'user_number,week_key' }
+  )
+
+  if (error) throw error
+}
+
+/**
+ * Retire le choix de parcours d'une personne pour la semaine.
+ *
+ * ⚠️ Utilisé aussi quand la personne répond « pas aujourd'hui » : son choix
+ * ne doit plus peser sur le vote d'un parcours.
+ */
+export async function deleteWeekVote(
+  userNumber: number,
+  weekKey: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('participations')
+    .delete()
+    .eq('user_number', userNumber)
+    .eq('week_key', weekKey)
+
+  if (error) throw error
 }

@@ -95,11 +95,26 @@ loading
 
 ---
 
+## Identité : `user_number`
+
+L'identifiant technique est un **entier attribué par la base** (1, 2, 3…),
+pas une chaîne dérivée du nom. Conséquence : **changer son nom ne casse rien** —
+les votes, le PIN et l'historique restent attachés à la bonne personne.
+
+Avant : `local_user_id = "paul_martin"` (dérivé du nom → change avec le nom)
+Après : `user_number = 1` (stable, jamais modifié)
+
+Les noms sont lus via un JOIN sur `user_profiles` — ils ne sont plus dupliqués
+dans `attendances` ni `participations`.
+
+Reconnexion sur un autre appareil : on retrouve son `user_number` via
+`findProfileByName(firstName, lastName)`.
+
 ## Stockage
 
 | Donnée | localStorage | Supabase (source de vérité) |
 |--------|--------------|------------------------------|
-| User (Prénom/Nom/ID) | ✅ `running_user` | ❌ |
+| User (Prénom/Nom/user_number) | ✅ `running_user` (cache) | ✅ `user_profiles` |
 | PIN hash | ❌ | ✅ `user_profiles.pin_hash` |
 | Parcours | (helper legacy) | ✅ `parcours` |
 | Votes | (helper legacy) | ✅ `participations` |
@@ -114,9 +129,7 @@ loading
 |-------|-----|-------------------|---------------|
 | `parcours` | `id` (uuid) | — | `name`, `distance_km`, `elevation_gain_m`, `points` (jsonb), `created_by` (nullable) |
 | `participations` | `id` (uuid) | `(parcours_id, local_user_id, week_key)` | `local_user_id` (text), `status` (yes/no), `week_key`, `first_name`, `last_name`, `user_id` (nullable, legacy) |
-| `user_profiles` | `local_user_id` (text) | — | `first_name`, `last_name`, `pin_hash` (nullable) |
-| `inscriptions` | `id` (uuid) | `(parcours_id, local_user_id)` | `first_name`, `last_name` |
-
+| `user_profiles` | `user_number` (SERIAL) | — | `first_name`, `last_name`, `pin_hash` (nullable) |
 ---
 
 ## Polling 30s
@@ -156,11 +169,12 @@ Clé `weather_cache_<weekKey>` : quand la cible change à 14h, le cache est
 automatiquement invalidé et les anciennes entrées purgées.
 
 ### Clé de vote
-`UNIQUE (parcours_id, local_user_id, week_key)` → 1 vote par personne, par parcours, par semaine.
+`UNIQUE (user_number, week_key)` → **un seul choix de parcours par personne et par semaine**.
+Changer de parcours remplace le précédent (upsert sur cette contrainte).
 
-### Roster
-`getRoster()` = toutes les personnes ayant déjà voté (historique complet). Sert à
-compter les "en attente" cette semaine via `pendingCount`.
+### Présence
+`getWeekAttendances(weekKey)` joint `user_profiles` pour récupérer les noms.
+Un JOIN plutôt que des noms dupliqués dans chaque table.
 
 ### Tri
 `rankedParcoursIds` trie par nombre de votes "yes" décroissant. Le 1er avec ≥1 vote

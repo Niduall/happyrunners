@@ -32,16 +32,16 @@ export function ParcoursCard({ parcours, isNext, onEdit, onDelete, onView, showA
     if (parsed) {
       parsed.id = parcours.id
       parsed.name = parcours.name
-      parsed.updatedAt = new Date().toISOString()
+      parsed.updated_at = new Date().toISOString()
       if (onEdit) onEdit(parsed)
     }
     setUploading(false)
     e.target.value = ''
   }, [parcours.id, onEdit])
 
-  const distance = (parcours.distance || parcours.distance_km || 0).toFixed(1)
-  const elevation = (parcours.elevationGain || parcours.elevation_gain_m) ? `${parcours.elevationGain || parcours.elevation_gain_m}m D+` : ''
-  const createdAt = parcours.createdAt || parcours.created_at
+  const distance = (parcours.distance_km || 0).toFixed(1)
+  const elevation = parcours.elevation_gain_m ? `${Math.round(parcours.elevation_gain_m)}m D+` : ''
+  const createdAt = parcours.created_at
 
   return (
     <Card className={isNext ? 'ring-2 ring-primary' : ''}>

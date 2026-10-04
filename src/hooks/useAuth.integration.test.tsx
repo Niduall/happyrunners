@@ -1,43 +1,56 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { AuthProvider, useAuth, hashPin } from './useAuth'
-import { getUserProfile, upsertUserProfile } from '../services/supabaseService'
+import { AuthProvider, useAuth } from './useAuth'
+import {
+  getUserProfile,
+  createUserProfile as createProfileInDb,
+  updateUserProfile,
+  findProfileByName,
+} from '../services/supabaseService'
+import { hashPin } from '../services/pin'
 import { getUser } from '../services/storage'
 
 vi.mock('../services/supabaseService', () => ({
   getUserProfile: vi.fn(),
-  upsertUserProfile: vi.fn(),
+  createUserProfile: vi.fn(),
+  updateUserProfile: vi.fn(),
+  findProfileByName: vi.fn(),
 }))
 
-const mockGetUserProfile = vi.mocked(getUserProfile)
-const mockUpsertUserProfile = vi.mocked(upsertUserProfile)
+const mockGetProfile = vi.mocked(getUserProfile)
+const mockCreate = vi.mocked(createProfileInDb)
+const mockUpdate = vi.mocked(updateUserProfile)
+const mockFind = vi.mocked(findProfileByName)
 
 const wrapper = ({ children }: { children: ReactNode }) => <AuthProvider>{children}</AuthProvider>
 
-const profile = (overrides: Partial<Record<string, unknown>> = {}) => ({
-  local_user_id: 'paul_martin',
+const profile = (over: Partial<Record<string, unknown>> = {}) => ({
+  id: 'uuid-1',
+  user_number: 1,
   first_name: 'Paul',
   last_name: 'Martin',
-  pin_hash: hashPin('1234'),
+  pin_hash: null,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
-  ...overrides,
+  ...over,
 })
 
-const seedLocalUser = (id: string, firstName: string, lastName: string) => {
+const seedLocalUser = (userNumber: number, firstName = 'Paul', lastName = 'Martin') => {
   localStorage.setItem(
     'running_user',
-    JSON.stringify({ id, firstName, lastName, name: `${firstName} ${lastName}` })
+    JSON.stringify({ id: userNumber, firstName, lastName, name: `${firstName} ${lastName}` })
   )
 }
 
-describe('useAuth — state partagé via Context', () => {
+describe('useAuth — user_number stable', () => {
   beforeEach(() => {
     localStorage.clear()
-    mockGetUserProfile.mockReset()
-    mockUpsertUserProfile.mockReset()
-    mockUpsertUserProfile.mockResolvedValue(profile({ pin_hash: null }) as never)
+    vi.clearAllMocks()
+    mockGetProfile.mockResolvedValue(null)
+    mockCreate.mockResolvedValue(profile() as never)
+    mockUpdate.mockResolvedValue(profile() as never)
+    mockFind.mockResolvedValue(null)
   })
 
   describe('first_login', () => {
@@ -49,9 +62,11 @@ describe('useAuth — state partagé via Context', () => {
     })
   })
 
-  describe('création de compte', () => {
-    it('connecte immédiatement quand aucun profil n’existe', async () => {
-      mockGetUserProfile.mockResolvedValue(null)
+  describe('création de profil', () => {
+    it('la base attribue le user_number', async () => {
+      mockFind.mockResolvedValue(null)
+      mockCreate.mockResolvedValue(profile({ user_number: 7 }) as never)
+
       const { result } = renderHook(() => useAuth(), { wrapper })
       await waitFor(() => expect(result.current.loading).toBe(false))
 
@@ -60,11 +75,13 @@ describe('useAuth — state partagé via Context', () => {
       })
 
       expect(result.current.isAuthenticated).toBe(true)
+      expect(result.current.user?.id).toBe(7)
       expect(result.current.user?.name).toBe('Paul Martin')
     })
 
-    it('sauvegarde le PIN hashé en base', async () => {
-      mockGetUserProfile.mockResolvedValue(null)
+    it('le PIN est hashé avant stockage', async () => {
+      mockFind.mockResolvedValue(null)
+
       const { result } = renderHook(() => useAuth(), { wrapper })
       await waitFor(() => expect(result.current.loading).toBe(false))
 
@@ -72,30 +89,32 @@ describe('useAuth — state partagé via Context', () => {
         await result.current.createUserProfile('Paul', 'Martin', '1234')
       })
 
-      expect(mockUpsertUserProfile).toHaveBeenCalledWith({
-        local_user_id: 'paul_martin',
+      expect(mockCreate).toHaveBeenCalledWith({
         first_name: 'Paul',
         last_name: 'Martin',
         pin_hash: hashPin('1234'),
       })
     })
 
-    it('sauvegarde pin_hash null si PIN omis', async () => {
-      mockGetUserProfile.mockResolvedValue(null)
+    it('reconnexion d’un profil existant SANS PIN → direct', async () => {
+      mockFind.mockResolvedValue(profile({ user_number: 3 }) as never)
+
       const { result } = renderHook(() => useAuth(), { wrapper })
       await waitFor(() => expect(result.current.loading).toBe(false))
 
       await act(async () => {
-        await result.current.createUserProfile('Alice', 'Dupont')
+        await result.current.createUserProfile('Paul', 'Martin')
       })
 
-      expect(mockUpsertUserProfile).toHaveBeenCalledWith(expect.objectContaining({ pin_hash: null }))
+      expect(result.current.isAuthenticated).toBe(true)
+      expect(result.current.user?.id).toBe(3)
+      // Pas de création
+      expect(mockCreate).not.toHaveBeenCalled()
     })
-  })
 
-  describe('compte existant avec PIN — nouvel appareil', () => {
-    it('bascule en pin_verification au lieu d’écraser le PIN', async () => {
-      mockGetUserProfile.mockResolvedValue(profile() as never)
+    it('reconnexion d’un profil AVEC PIN → bascule en pin_verification', async () => {
+      mockFind.mockResolvedValue(profile({ user_number: 3, pin_hash: hashPin('1234') }) as never)
+
       const { result } = renderHook(() => useAuth(), { wrapper })
       await waitFor(() => expect(result.current.loading).toBe(false))
 
@@ -105,14 +124,39 @@ describe('useAuth — state partagé via Context', () => {
 
       expect(result.current.needsPin).toBe(true)
       expect(result.current.isAuthenticated).toBe(false)
-      expect(result.current.pendingUser?.firstName).toBe('Paul')
-      expect(result.current.pendingUser?.lastName).toBe('Martin')
-      expect(result.current.pendingUser?.localUserId).toBe('paul_martin')
-      expect(mockUpsertUserProfile).not.toHaveBeenCalled()
+      expect(result.current.pendingUser?.userNumber).toBe(3)
+      // Ne doit surtout pas écraser le PIN existant
+      expect(mockCreate).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('vérification du PIN', () => {
+    it('accepte le bon PIN et connecte', async () => {
+      mockFind.mockResolvedValue(profile({ user_number: 3, pin_hash: hashPin('1234') }) as never)
+      mockGetProfile.mockResolvedValue(profile({ user_number: 3, pin_hash: hashPin('1234') }) as never)
+
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => {
+        await result.current.createUserProfile('Paul', 'Martin')
+      })
+      expect(result.current.needsPin).toBe(true)
+
+      let verified: boolean | undefined
+      await act(async () => {
+        verified = await result.current.verifyUserPin('1234')
+      })
+
+      expect(verified).toBe(true)
+      expect(result.current.isAuthenticated).toBe(true)
+      expect(result.current.user?.id).toBe(3)
     })
 
-    it('refuse un PIN incorrect et reste en pin_verification', async () => {
-      mockGetUserProfile.mockResolvedValue(profile() as never)
+    it('refuse un PIN incorrect', async () => {
+      mockFind.mockResolvedValue(profile({ user_number: 3, pin_hash: hashPin('1234') }) as never)
+      mockGetProfile.mockResolvedValue(profile({ user_number: 3, pin_hash: hashPin('1234') }) as never)
+
       const { result } = renderHook(() => useAuth(), { wrapper })
       await waitFor(() => expect(result.current.loading).toBe(false))
 
@@ -130,91 +174,132 @@ describe('useAuth — state partagé via Context', () => {
       expect(result.current.isAuthenticated).toBe(false)
     })
 
-    it('accepte le bon PIN et hydrate le user local (nouvel appareil)', async () => {
-      mockGetUserProfile.mockResolvedValue(profile() as never)
-      expect(getUser()).toBeNull()
-
+    it('retourne false si pas de pendingUser', async () => {
       const { result } = renderHook(() => useAuth(), { wrapper })
       await waitFor(() => expect(result.current.loading).toBe(false))
-
-      await act(async () => {
-        await result.current.createUserProfile('Paul', 'Martin')
-      })
 
       let verified: boolean | undefined
       await act(async () => {
         verified = await result.current.verifyUserPin('1234')
       })
-
-      expect(verified).toBe(true)
-      expect(result.current.isAuthenticated).toBe(true)
-      expect(result.current.user?.name).toBe('Paul Martin')
-      expect(result.current.pendingUser).toBeNull()
-      expect(getUser()?.id).toBe('paul_martin')
+      expect(verified).toBe(false)
     })
   })
 
   describe('reconnexion sur le même appareil', () => {
-    it('demande le PIN au mount quand le profil en base en a un', async () => {
-      seedLocalUser('paul_martin', 'Paul', 'Martin')
-      mockGetUserProfile.mockResolvedValue(profile() as never)
+    it('demande le PIN au mount si le profil en a un', async () => {
+      seedLocalUser(1)
+      mockGetProfile.mockResolvedValue(profile({ user_number: 1, pin_hash: hashPin('1234') }) as never)
 
       const { result } = renderHook(() => useAuth(), { wrapper })
       await waitFor(() => expect(result.current.loading).toBe(false))
 
       expect(result.current.needsPin).toBe(true)
-      expect(result.current.isAuthenticated).toBe(false)
-      expect(result.current.pendingUser?.firstName).toBe('Paul')
+      expect(result.current.pendingUser?.userNumber).toBe(1)
     })
 
-    it('connecte directement quand aucun PIN en base', async () => {
-      seedLocalUser('alice_dupont', 'Alice', 'Dupont')
-      mockGetUserProfile.mockResolvedValue(
-        profile({ local_user_id: 'alice_dupont', first_name: 'Alice', last_name: 'Dupont', pin_hash: null }) as never
+    it('connecte directement si pas de PIN', async () => {
+      seedLocalUser(1)
+      mockGetProfile.mockResolvedValue(profile({ user_number: 1 }) as never)
+
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      expect(result.current.isAuthenticated).toBe(true)
+      expect(result.current.user?.id).toBe(1)
+    })
+
+    it('retombe en first_login si le profil a disparu', async () => {
+      seedLocalUser(99)
+      mockGetProfile.mockResolvedValue(null)
+
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      expect(result.current.isFirstLogin).toBe(true)
+    })
+  })
+
+  describe('changement de nom — le bug principal', () => {
+    it('change le nom SANS toucher au user_number', async () => {
+      seedLocalUser(1)
+      mockGetProfile.mockResolvedValue(profile({ user_number: 1 }) as never)
+      mockUpdate.mockResolvedValue(
+        profile({ user_number: 1, first_name: 'Paulin', last_name: 'Claudin' }) as never
+      )
+
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+      expect(result.current.user?.id).toBe(1)
+
+      let ok: boolean | undefined
+      await act(async () => {
+        ok = await result.current.updateName('Paulin', 'Claudin')
+      })
+
+      expect(ok).toBe(true)
+      // Le user_number est INCHANGÉ → votes et PIN restent attachés
+      expect(result.current.user?.id).toBe(1)
+      expect(result.current.user?.name).toBe('Paulin Claudin')
+      expect(getUser()?.id).toBe(1)
+    })
+
+    it('met à jour par user_number, pas par nom', async () => {
+      seedLocalUser(5, 'Jean', 'Martin')
+      mockGetProfile.mockResolvedValue(
+        profile({ user_number: 5, first_name: 'Jean', last_name: 'Martin' }) as never
+      )
+      mockUpdate.mockResolvedValue(
+        profile({ user_number: 5, first_name: 'Jeanne', last_name: 'Martin' }) as never
       )
 
       const { result } = renderHook(() => useAuth(), { wrapper })
       await waitFor(() => expect(result.current.loading).toBe(false))
 
-      expect(result.current.isAuthenticated).toBe(true)
-      expect(result.current.needsPin).toBe(false)
-      expect(result.current.user?.name).toBe('Alice Dupont')
+      await act(async () => {
+        await result.current.updateName('Jeanne', 'Martin')
+      })
+
+      // La clé de la requête est le numéro, pas le nom
+      expect(mockUpdate).toHaveBeenCalledWith(5, {
+        first_name: 'Jeanne',
+        last_name: 'Martin',
+      })
     })
 
-    it('reconstitue le user local si l’ID ne correspond plus (nom modifié)', async () => {
-      // localStorage contient un user avec un ID obsolète
-      seedLocalUser('ancien_id', 'Paul', 'Martin')
-      mockGetUserProfile.mockResolvedValue(profile({ pin_hash: null }) as never)
+    it('refuse un nom vide', async () => {
+      seedLocalUser(1)
+      mockGetProfile.mockResolvedValue(profile({ user_number: 1 }) as never)
 
       const { result } = renderHook(() => useAuth(), { wrapper })
       await waitFor(() => expect(result.current.loading).toBe(false))
 
-      // Le profil en base a paul_martin, le local a ancien_id
-      // → le user local doit être recréé avec le bon ID
-      expect(result.current.isAuthenticated).toBe(true)
+      let ok: boolean | undefined
+      await act(async () => {
+        ok = await result.current.updateName('  ', '  ')
+      })
+
+      expect(ok).toBe(false)
+      expect(mockUpdate).not.toHaveBeenCalled()
+    })
+
+    it('ne fait rien si non connecté', async () => {
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      let ok: boolean | undefined
+      await act(async () => {
+        ok = await result.current.updateName('X', 'Y')
+      })
+
+      expect(ok).toBe(false)
+      expect(mockUpdate).not.toHaveBeenCalled()
     })
   })
 
-  describe('partage d’état entre composants', () => {
+  describe('partage d’état', () => {
     it('deux appels useAuth partagent le même état', async () => {
-      mockGetUserProfile.mockResolvedValue(null)
-      const { result } = renderHook(
-        () => {
-          const a = useAuth()
-          const b = useAuth()
-          return { a, b }
-        },
-        { wrapper }
-      )
-      await waitFor(() => expect(result.current.a.loading).toBe(false))
-
-      // Même référence de user → truly partagé
-      expect(result.current.a.mode).toBe(result.current.b.mode)
-      expect(result.current.b.isFirstLogin).toBe(true)
-    })
-
-    it('un changement dans un "composant" est visible dans l’autre', async () => {
-      mockGetUserProfile.mockResolvedValue(null)
+      mockFind.mockResolvedValue(null)
       const { result } = renderHook(
         () => {
           const a = useAuth()
@@ -226,60 +311,19 @@ describe('useAuth — state partagé via Context', () => {
       await waitFor(() => expect(result.current.a.loading).toBe(false))
 
       await act(async () => {
-        await result.current.a.createUserProfile('Paul', 'Martin', '1234')
+        await result.current.a.createUserProfile('Paul', 'Martin')
       })
 
-      // b voit le changement immédiatement
       expect(result.current.b.isAuthenticated).toBe(true)
-      expect(result.current.b.isFirstLogin).toBe(false)
-      expect(result.current.b.needsPin).toBe(false)
-    })
-  })
-
-  describe('robustesse', () => {
-    it('connecte si le profil existe sans PIN', async () => {
-      mockGetUserProfile.mockResolvedValue(null)
-      const { result } = renderHook(() => useAuth(), { wrapper })
-      await waitFor(() => expect(result.current.loading).toBe(false))
-
-      await act(async () => {
-        await result.current.createUserProfile('Bob', 'Smith', '9999')
-      })
-
-      expect(result.current.isAuthenticated).toBe(true)
-    })
-
-    it('verifyUserPin retourne false sans pendingUser', async () => {
-      const { result } = renderHook(() => useAuth(), { wrapper })
-      await waitFor(() => expect(result.current.loading).toBe(false))
-
-      let verified: boolean | undefined
-      await act(async () => {
-        verified = await result.current.verifyUserPin('1234')
-      })
-
-      expect(verified).toBe(false)
-    })
-
-    it('fallback sur localStorage si la lecture du profil échoue', async () => {
-      seedLocalUser('alice_dupont', 'Alice', 'Dupont')
-      mockGetUserProfile.mockRejectedValue(new Error('network down'))
-
-      const { result } = renderHook(() => useAuth(), { wrapper })
-      await waitFor(() => expect(result.current.loading).toBe(false))
-
-      expect(result.current.isAuthenticated).toBe(true)
-      expect(result.current.user?.name).toBe('Alice Dupont')
+      expect(result.current.b.user?.id).toBe(result.current.a.user?.id)
     })
 
     it('logout remet en first_login', async () => {
-      mockGetUserProfile.mockResolvedValue(null)
+      seedLocalUser(1)
+      mockGetProfile.mockResolvedValue(profile({ user_number: 1 }) as never)
+
       const { result } = renderHook(() => useAuth(), { wrapper })
       await waitFor(() => expect(result.current.loading).toBe(false))
-
-      await act(async () => {
-        await result.current.createUserProfile('Paul', 'Martin', '1234')
-      })
       expect(result.current.isAuthenticated).toBe(true)
 
       act(() => result.current.logout())
@@ -287,6 +331,10 @@ describe('useAuth — state partagé via Context', () => {
       expect(result.current.isFirstLogin).toBe(true)
       expect(result.current.user).toBeNull()
       expect(localStorage.getItem('running_user')).toBeNull()
+    })
+
+    it('throw si utilisé hors AuthProvider', () => {
+      expect(() => renderHook(() => useAuth())).toThrow(/AuthProvider/)
     })
   })
 })

@@ -12,53 +12,10 @@ export interface Parcours {
   distance_km: number
   elevation_gain_m?: number
   points: GPXPoint[]
-  created_by: string | null
+  /** user_number du créateur (null si inconnu) */
+  created_by: number | null
   created_at: string
   updated_at: string
-}
-
-export interface Participation {
-  id: string
-  parcours_id: string
-  user_id: string | null
-  local_user_id: string | null
-  status: 'yes' | 'no'
-  week_key: string | null
-  first_name: string | null
-  last_name: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface Inscription {
-  id: string
-  parcours_id: string
-  local_user_id: string
-  first_name: string
-  last_name: string
-  created_at: string
-}
-
-/** Réponse globale : est-ce que la personne vient cette semaine ? */
-export type AttendanceStatus = 'going' | 'skip'
-
-export interface Attendance {
-  id: string
-  week_key: string
-  local_user_id: string
-  first_name: string
-  last_name: string
-  status: AttendanceStatus
-  created_at: string
-  updated_at: string
-}
-
-export interface AttendanceInsert {
-  week_key: string
-  local_user_id: string
-  first_name: string
-  last_name: string
-  status: AttendanceStatus
 }
 
 export interface ParcoursInsert {
@@ -67,21 +24,58 @@ export interface ParcoursInsert {
   distance_km: number
   elevation_gain_m?: number
   points: GPXPoint[]
-  created_by: string | null
+  created_by: number | null
+}
+
+/**
+ * Choix du parcours pour la semaine.
+ * UNIQUE (user_number, week_key) : une seule ligne par personne et par semaine.
+ */
+export interface Participation {
+  id: string
+  parcours_id: string
+  user_number: number
+  status: 'yes' | 'no'
+  week_key: string
+  created_at: string
+  updated_at: string
 }
 
 export interface ParticipationInsert {
   parcours_id: string
-  user_id: string | null
-  local_user_id: string | null
+  user_number: number
+  week_key: string
   status: 'yes' | 'no'
-  week_key: string | null
-  first_name: string | null
-  last_name: string | null
 }
 
+/** Réponse globale : est-ce que la personne vient cette semaine ? */
+export type AttendanceStatus = 'going' | 'skip'
+
+/** UNIQUE (week_key, user_number) : une réponse par personne et par semaine */
+export interface Attendance {
+  id: string
+  week_key: string
+  user_number: number
+  status: AttendanceStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface AttendanceInsert {
+  week_key: string
+  user_number: number
+  status: AttendanceStatus
+}
+
+/**
+ * Profil utilisateur.
+ * `user_number` est l'identifiant technique stable (1, 2, 3…), attribué par
+ * la base. Il ne change JAMAIS : modifier son nom ne le touche pas, donc
+ * les votes et le PIN restent attachés à la bonne personne.
+ */
 export interface UserProfile {
-  local_user_id: string
+  id: string
+  user_number: number
   first_name: string
   last_name: string
   pin_hash: string | null
@@ -90,7 +84,6 @@ export interface UserProfile {
 }
 
 export interface UserProfileInsert {
-  local_user_id: string
   first_name: string
   last_name: string
   pin_hash: string | null

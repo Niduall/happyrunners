@@ -1,83 +1,100 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { AuthProvider } from './useAuth'
 import { useAttendance } from './useAttendance'
-import { getWeekAttendances, setAttendance, deleteWeekVote } from '../services/supabaseService'
+import { getWeekAttendances, setAttendance, deleteWeekVote, getUserProfile } from '../services/supabaseService'
 
 vi.mock('../services/supabaseService', () => ({
   getWeekAttendances: vi.fn(),
   setAttendance: vi.fn(),
   deleteWeekVote: vi.fn(),
   getUserProfile: vi.fn(),
-  upsertUserProfile: vi.fn(),
+  createUserProfile: vi.fn(),
+  updateUserProfile: vi.fn(),
+  findProfileByName: vi.fn(),
   getWeekTallies: vi.fn(),
   getWeekVotes: vi.fn(),
   castWeekVote: vi.fn(),
-  getRoster: vi.fn(),
 }))
 
 const mockAttendances = vi.mocked(getWeekAttendances)
 const mockSet = vi.mocked(setAttendance)
 const mockDeleteVote = vi.mocked(deleteWeekVote)
+const mockGetProfile = vi.mocked(getUserProfile)
 
 const wrapper = ({ children }: { children: ReactNode }) => <AuthProvider>{children}</AuthProvider>
 
-const profile = (over: Partial<Record<string, unknown>> = {}) => ({
-  localUserId: 'alice',
-  firstName: 'Alice',
-  lastName: 'Dupont',
-  status: 'going' as const,
+/** user_number 1 = Alice Dupont (la personne connectée dans ces tests) */
+const ALICE = 1
+
+const dbProfile = (over: Partial<Record<string, unknown>> = {}) => ({
+  id: 'uuid-1',
+  user_number: ALICE,
+  first_name: 'Alice',
+  last_name: 'Dupont',
+  pin_hash: null,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
   ...over,
 })
+
+const attendee = (
+  userNumber: number,
+  status: 'going' | 'skip',
+  firstName = 'Alice',
+  lastName = 'Dupont'
+) => ({ userNumber, firstName, lastName, status })
+
+const renderAttendance = () => renderHook(() => useAttendance(), { wrapper })
 
 describe('useAttendance — « pas aujourd’hui » retire le choix de parcours', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.clearAllMocks()
+
     localStorage.setItem(
       'running_user',
-      JSON.stringify({ id: 'alice', firstName: 'Alice', lastName: 'Dupont', name: 'Alice Dupont' })
+      JSON.stringify({ id: ALICE, firstName: 'Alice', lastName: 'Dupont', name: 'Alice Dupont' })
     )
+    // Le profil existe en base, sans PIN → connexion directe
+    mockGetProfile.mockResolvedValue(dbProfile() as never)
     mockAttendances.mockResolvedValue([])
     mockSet.mockResolvedValue(undefined)
     mockDeleteVote.mockResolvedValue(undefined)
   })
 
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
   it('« je viens » NE supprime PAS le vote de parcours', async () => {
-    const { result } = renderHook(() => useAttendance(), { wrapper })
+    const { result } = renderAttendance()
     await waitFor(() => expect(result.current.loading).toBe(false))
 
     await act(async () => {
       await result.current.setMyStatus('going')
     })
 
-    expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({ status: 'going' }))
+    expect(mockSet).toHaveBeenCalledWith({ weekKey: result.current.weekKey, userNumber: ALICE, status: 'going' })
     expect(mockDeleteVote).not.toHaveBeenCalled()
   })
 
   it('« pas aujourd’hui » SUPPRIME le vote de parcours', async () => {
-    const { result } = renderHook(() => useAttendance(), { wrapper })
+    const { result } = renderAttendance()
     await waitFor(() => expect(result.current.loading).toBe(false))
 
     await act(async () => {
       await result.current.setMyStatus('skip')
     })
 
-    expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({ status: 'skip' }))
-    // Le vote de parcours doit être retiré
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'skip', userNumber: ALICE })
+    )
     expect(mockDeleteVote).toHaveBeenCalledTimes(1)
-    const [, userId, weekKey] = mockDeleteVote.mock.calls[0]
-    expect(userId).toBe('alice')
+    const [userNumber, weekKey] = mockDeleteVote.mock.calls[0]
+    expect(userNumber).toBe(ALICE)
     expect(weekKey).toBe(result.current.weekKey)
   })
 
-  it('« pas aujourd’hui » puis « je viens » : la suppression est faite qu’une fois', async () => {
-    const { result } = renderHook(() => useAttendance(), { wrapper })
+  it('skip puis going : la suppression n’a lieu qu’une fois', async () => {
+    const { result } = renderAttendance()
     await waitFor(() => expect(result.current.loading).toBe(false))
 
     await act(async () => {
@@ -88,15 +105,14 @@ describe('useAttendance — « pas aujourd’hui » retire le choix de parcours'
     await act(async () => {
       await result.current.setMyStatus('going')
     })
-    // Revenir sur "je viens" ne doit PAS supraire le choix (il n'y en a plus)
     expect(mockDeleteVote).toHaveBeenCalledTimes(1)
   })
 
   it('annule l’optimisme si la suppression échoue', async () => {
     mockDeleteVote.mockRejectedValue(new Error('network down'))
-    mockAttendances.mockResolvedValue([profile({ status: 'going' })])
+    mockAttendances.mockResolvedValue([attendee(ALICE, 'going')])
 
-    const { result } = renderHook(() => useAttendance(), { wrapper })
+    const { result } = renderAttendance()
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.myStatus).toBe('going')
 
@@ -104,24 +120,22 @@ describe('useAttendance — « pas aujourd’hui » retire le choix de parcours'
       await result.current.setMyStatus('skip')
     })
 
-    // L'erreur est remontée et l'état est rechargé depuis la base
     expect(result.current.error).toBeTruthy()
   })
 
   it('masque les préférences de parcours quand skip', async () => {
-    const { result } = renderHook(() => useAttendance(), { wrapper })
+    const { result } = renderAttendance()
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.showParcours).toBe(true)
 
     await act(async () => {
       await result.current.setMyStatus('skip')
     })
-
     expect(result.current.showParcours).toBe(false)
   })
 
   it('ré-affiche les préférences si on revient sur « je viens »', async () => {
-    const { result } = renderHook(() => useAttendance(), { wrapper })
+    const { result } = renderAttendance()
     await waitFor(() => expect(result.current.loading).toBe(false))
 
     await act(async () => {
@@ -135,22 +149,40 @@ describe('useAttendance — « pas aujourd’hui » retire le choix de parcours'
     expect(result.current.showParcours).toBe(true)
   })
 
-  it('le tableau reflète le statut skip', async () => {
+  it('expose le statut de chacun via statusOf', async () => {
     mockAttendances.mockResolvedValue([
-      profile({ status: 'skip' }),
-      profile({ localUserId: 'bob', firstName: 'Bob', lastName: 'Martin', status: 'going' }),
+      attendee(ALICE, 'skip'),
+      attendee(2, 'going', 'Bob', 'Martin'),
     ])
 
-    const { result } = renderHook(() => useAttendance(), { wrapper })
+    const { result } = renderAttendance()
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    expect(result.current.statusOf('alice')).toBe('skip')
-    expect(result.current.statusOf('bob')).toBe('going')
+    expect(result.current.statusOf(ALICE)).toBe('skip')
+    expect(result.current.statusOf(2)).toBe('going')
+    expect(result.current.statusOf(99)).toBeNull()
+  })
+
+  it('remplace la ligne existante au lieu de la dupliquer', async () => {
+    mockAttendances.mockResolvedValue([attendee(ALICE, 'going')])
+
+    const { result } = renderAttendance()
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.attendees).toHaveLength(1)
+
+    await act(async () => {
+      await result.current.setMyStatus('skip')
+    })
+
+    // Toujours 1 seule ligne pour cette personne
+    expect(result.current.attendees.filter((a) => a.userNumber === ALICE)).toHaveLength(1)
+    expect(result.current.myStatus).toBe('skip')
   })
 
   it('refuse une réponse sans être connecté', async () => {
     localStorage.clear()
-    const { result } = renderHook(() => useAttendance(), { wrapper })
+
+    const { result } = renderAttendance()
     await waitFor(() => expect(result.current.loading).toBe(false))
 
     await act(async () => {

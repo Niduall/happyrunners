@@ -16,7 +16,7 @@ export type { Attendee }
 export interface AttendanceState {
   /** Ma réponse pour cette semaine : null = pas encore répondu */
   myStatus: AttendanceStatus | null
-  /** Toutes les réponses de la semaine */
+  /** Toutes les réponses de la semaine (avec les noms) */
   attendees: Attendee[]
   weekKey: string
   weekLabel: string
@@ -24,7 +24,7 @@ export interface AttendanceState {
   saving: boolean
   error: string | null
   setMyStatus: (status: AttendanceStatus) => Promise<void>
-  statusOf: (localUserId: string) => AttendanceStatus | null
+  statusOf: (userNumber: number) => AttendanceStatus | null
   /** true si je viens (ou n'ai pas encore répondu) → on propose les parcours */
   showParcours: boolean
 }
@@ -40,20 +40,23 @@ export function useAttendance(): AttendanceState {
 
   const { weekKey, weekLabel } = useTargetWednesday()
 
-  const loadAll = useCallback(async (opts?: { keepError?: boolean }) => {
-    if (!user?.id) return
-    try {
-      const list = await getWeekAttendances(weekKey)
-      setAttendees(list)
-      setMyStatusState(list.find((a) => a.localUserId === user.id)?.status ?? null)
-      if (!opts?.keepError) setError(null)
-    } catch (err) {
-      console.error('[ATTENDANCE] Erreur chargement:', err)
-      setError(err instanceof Error ? err.message : 'Erreur chargement des réponses')
-    } finally {
-      setLoading(false)
-    }
-  }, [user?.id, weekKey])
+  const loadAll = useCallback(
+    async (opts?: { keepError?: boolean }) => {
+      if (!user?.id) return
+      try {
+        const list = await getWeekAttendances(weekKey)
+        setAttendees(list)
+        setMyStatusState(list.find((a) => a.userNumber === user.id)?.status ?? null)
+        if (!opts?.keepError) setError(null)
+      } catch (err) {
+        console.error('[ATTENDANCE] Erreur chargement:', err)
+        setError(err instanceof Error ? err.message : 'Erreur chargement des réponses')
+      } finally {
+        setLoading(false)
+      }
+    },
+    [user?.id, weekKey]
+  )
 
   useEffect(() => {
     if (authLoading) return
@@ -91,34 +94,26 @@ export function useAttendance(): AttendanceState {
       }
 
       const previous = myStatus
-      setMyStatusState(status) // optimiste
-      setAttendees((prev) => {
-        const rest = prev.filter((a) => a.localUserId !== user.id)
-        return [
-          ...rest,
-          {
-            localUserId: user.id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            status,
-          },
-        ]
-      })
+      // Optimiste : la ligne est remplacée, pas dupliquée
+      setMyStatusState(status)
+      setAttendees((prev) => [
+        ...prev.filter((a) => a.userNumber !== user.id),
+        {
+          userNumber: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          status,
+        },
+      ])
       setSaving(true)
 
       try {
-        await setAttendance({
-          weekKey,
-          localUserId: user.id,
-          status,
-          identity: { firstName: user.firstName, lastName: user.lastName },
-        })
+        await setAttendance({ weekKey, userNumber: user.id, status })
 
         // "Pas aujourd'hui" retire aussi le choix de parcours : quelqu'un
         // qui ne vient pas ne doit pas peser sur le vote d'un parcours.
-        // (Contrainte UNIQUE(local_user_id, week_key) : un seul choix/semaine)
         if (status === 'skip') {
-          await deleteWeekVote('', user.id, weekKey)
+          await deleteWeekVote(user.id, weekKey)
         }
       } catch (err) {
         console.error('[ATTENDANCE] Erreur:', err)
@@ -133,22 +128,25 @@ export function useAttendance(): AttendanceState {
   )
 
   const statusOf = useCallback(
-    (localUserId: string): AttendanceStatus | null =>
-      attendees.find((a) => a.localUserId === localUserId)?.status ?? null,
+    (userNumber: number): AttendanceStatus | null =>
+      attendees.find((a) => a.userNumber === userNumber)?.status ?? null,
     [attendees]
   )
 
-  return {
-    myStatus,
-    attendees,
-    weekKey,
-    weekLabel,
-    loading: loading || authLoading,
-    saving,
-    error,
-    setMyStatus,
-    statusOf,
-    // "skip" masque les préférences de parcours
-    showParcours: myStatus !== 'skip',
-  }
+  return useMemo(
+    () => ({
+      myStatus,
+      attendees,
+      weekKey,
+      weekLabel,
+      loading: loading || authLoading,
+      saving,
+      error,
+      setMyStatus,
+      statusOf,
+      // "skip" masque les préférences de parcours
+      showParcours: myStatus !== 'skip',
+    }),
+    [myStatus, attendees, weekKey, weekLabel, loading, authLoading, saving, error, setMyStatus, statusOf]
+  )
 }

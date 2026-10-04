@@ -7,7 +7,7 @@ import { ParcoursCard } from '../components/ParcoursCard'
 import { parseGPX } from '../services/gpxParser'
 import { addParcours, deleteParcours } from '../services/supabaseService'
 import { useParcours } from '../hooks/useParcours'
-import type { Parcours } from '../types'
+import type { Parcours } from '../types/supabase'
 
 export function ParcoursList() {
   const navigate = useNavigate()

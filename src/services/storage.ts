@@ -51,7 +51,7 @@ export function getParticipations(): Participation[] {
 
 export function saveParticipation(participation: Participation): void {
   const all = getParticipations()
-  const idx = all.findIndex(p => p.parcoursId === participation.parcoursId && p.userId === participation.userId)
+  const idx = all.findIndex(p => p.parcoursId === participation.parcoursId && p.userNumber === participation.userNumber)
   if (idx >= 0) {
     all[idx] = participation
   } else {
@@ -60,9 +60,9 @@ export function saveParticipation(participation: Participation): void {
   localStorage.setItem(STORAGE_KEYS.PARTICIPATIONS, JSON.stringify(all))
 }
 
-export function getParticipation(parcoursId: string, userId: string): Participation | null {
+export function getParticipation(parcoursId: string, userNumber: number): Participation | null {
   const all = getParticipations()
-  return all.find(p => p.parcoursId === parcoursId && p.userId === userId) || null
+  return all.find(p => p.parcoursId === parcoursId && p.userNumber === userNumber) || null
 }
 
 export function getParticipationsForParcours(parcoursId: string): Participation[] {
@@ -70,6 +70,11 @@ export function getParticipationsForParcours(parcoursId: string): Participation[
 }
 
 // --- User ---
+/**
+ * Cache local de l'utilisateur. La source de vérité est Supabase
+ * (user_profiles) ; ce cache évite un aller-retour réseau au démarrage
+ * et permet un affichage hors ligne.
+ */
 export function getUser(): User | null {
   try {
     const data = localStorage.getItem(STORAGE_KEYS.USER)
@@ -83,29 +88,8 @@ export function setUser(user: User): void {
   localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user))
 }
 
-export function createUser(firstName: string, lastName: string): User {
-  const trimmedFirst = firstName.trim()
-  const trimmedLast = lastName.trim()
-  const name = `${trimmedFirst} ${trimmedLast}`
-  const user: User = {
-    id: generateUserId(trimmedFirst, trimmedLast),
-    firstName: trimmedFirst,
-    lastName: trimmedLast,
-    name,
-  }
-  setUser(user)
-  return user
-}
-
-export function generateUserId(firstName: string, lastName: string): string {
-  // ID déterministe : même nom → même ID sur tous les navigateurs/OS
-  const normalize = (s: string): string =>
-    s
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // retirer accents
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '') // garder seulement lettres + chiffres
-  return `${normalize(firstName)}_${normalize(lastName)}`
+export function clearUser(): void {
+  localStorage.removeItem(STORAGE_KEYS.USER)
 }
 
 // --- Export/Import ---
@@ -156,7 +140,7 @@ export function importParcours(json: string): { success: boolean; message: strin
       const existingParts = getParticipations()
       for (const part of data.participations) {
         const exists = existingParts.some(p => 
-          p.parcoursId === part.parcoursId && p.userId === part.userId
+          p.parcoursId === part.parcoursId && p.userNumber === part.userNumber
         )
         if (!exists) {
           saveParticipation(part)

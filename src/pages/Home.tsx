@@ -77,9 +77,9 @@ export function Home() {
   /** Une ligne par personne ayant répondu, avec le parcours qu'elle a choisi */
   const presenceRows = useMemo<PresenceRow[]>(() => {
     return attendees.map((a) => {
-      const chosenId = choiceOf(a.localUserId)
+      const chosenId = choiceOf(a.userNumber)
       return {
-        localUserId: a.localUserId,
+        userNumber: a.userNumber,
         firstName: a.firstName,
         lastName: a.lastName,
         attendance: a.status,
@@ -315,7 +315,7 @@ export function Home() {
                 <h2 className="text-lg font-semibold text-gray-900 mb-3">Qui vient ?</h2>
                 <ParticipantsTable
                   rows={presenceRows}
-                  currentUserId={user?.id}
+                  currentUserNumber={user?.id}
                   weekLabel={weekLabel}
                 />
               </div>

@@ -1,10 +1,9 @@
 import { CheckCircle2, Clock, XCircle } from 'lucide-react'
-import type { AttendanceStatus } from '../services/supabaseService'
-import type { RosterMember } from '../services/supabaseService'
+import type { AttendanceStatus, Attendee } from '../services/supabaseService'
 import { Card, CardContent } from './ui/Card'
 
 export interface PresenceRow {
-  localUserId: string
+  userNumber: number
   firstName: string
   lastName: string
   attendance: AttendanceStatus | null
@@ -13,7 +12,7 @@ export interface PresenceRow {
 
 interface ParticipantsTableProps {
   rows: PresenceRow[]
-  currentUserId?: string
+  currentUserNumber?: number
   weekLabel: string
 }
 
@@ -34,13 +33,9 @@ const initials = (firstName: string, lastName: string): string => {
   return `${a}${b}` || '?'
 }
 
-const colorFor = (id: string): string => {
-  let h = 0
-  for (let i = 0; i < id.length; i++) {
-    h = (h * 31 + id.charCodeAt(i)) >>> 0
-  }
-  return AVATAR_COLORS[h % AVATAR_COLORS.length]
-}
+/** Couleur stable dérivée du user_number → chaque personne garde sa couleur */
+const colorFor = (userNumber: number): string =>
+  AVATAR_COLORS[userNumber % AVATAR_COLORS.length]
 
 /** Tri : présents → en attente → absents, alphabétique à l'intérieur de chaque groupe */
 export function sortPresenceRows(rows: PresenceRow[]): PresenceRow[] {
@@ -83,7 +78,7 @@ function StatusBadge({ status }: { status: AttendanceStatus | null }) {
   )
 }
 
-export function ParticipantsTable({ rows, currentUserId, weekLabel }: ParticipantsTableProps) {
+export function ParticipantsTable({ rows, currentUserNumber, weekLabel }: ParticipantsTableProps) {
   const sorted = sortPresenceRows(rows)
 
   const going = sorted.filter((r) => r.attendance === 'going').length
@@ -119,11 +114,11 @@ export function ParticipantsTable({ rows, currentUserId, weekLabel }: Participan
             </thead>
             <tbody>
               {sorted.map((row) => {
-                const isMe = row.localUserId === currentUserId
+                const isMe = row.userNumber === currentUserNumber
                 const isAbsent = row.attendance === 'skip'
                 return (
                   <tr
-                    key={row.localUserId}
+                    key={row.userNumber}
                     className={`border-b border-gray-100 last:border-0 ${
                       isAbsent ? 'opacity-50' : ''
                     } ${isMe ? 'bg-primary/5' : ''}`}
@@ -132,7 +127,7 @@ export function ParticipantsTable({ rows, currentUserId, weekLabel }: Participan
                       <div className="flex items-center gap-2">
                         <div
                           className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ${
-                            isAbsent ? 'bg-gray-200 text-gray-500' : colorFor(row.localUserId)
+                            isAbsent ? 'bg-gray-200 text-gray-500' : colorFor(row.userNumber)
                           }`}
                         >
                           {initials(row.firstName, row.lastName)}

@@ -251,6 +251,8 @@ function buildParcours(name: string | undefined, desc: string | undefined, point
     }
   }
 
+  const now = new Date().toISOString()
+
   return {
     id: crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
       const r = Math.random() * 16 | 0
@@ -259,15 +261,12 @@ function buildParcours(name: string | undefined, desc: string | undefined, point
     }),
     name: name || 'Parcours sans nom',
     description: desc,
-    distance: Math.round(distance * 100) / 100,
     distance_km: Math.round(distance * 100) / 100,
-    elevationGain: Math.round(elevationGain),
     elevation_gain_m: Math.round(elevationGain),
     points,
-    createdAt: new Date().toISOString(),
-    created_at: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    created_by: null,
+    created_at: now,
+    updated_at: now,
   }
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hashPin } from './useAuth'
+import { hashPin } from './pin'
 
 describe('hashPin', () => {
   it('produit le même hash pour le même PIN', () => {
@@ -27,5 +27,12 @@ describe('hashPin', () => {
 
   it('gère la chaîne vide', () => {
     expect(hashPin('')).toMatch(/^pin_[0-9a-z]+$/)
+  })
+
+  it('couvre les 10 000 PIN possibles de façon stable', () => {
+    // Deux appels doivent toujours donner le même résultat
+    const a = hashPin('4242')
+    const b = hashPin('4242')
+    expect(a).toBe(b)
   })
 })

@@ -1,14 +1,21 @@
 import { createContext, useContext, useMemo, useState, useEffect, useCallback, type ReactNode } from 'react'
-import { getUser, createUser, generateUserId, setUser as setUserStorage } from '../services/storage'
-import { getUserProfile, upsertUserProfile } from '../services/supabaseService'
-import type { User } from '../types'
+import { getUser, setUser as setUserStorage, type User } from '../services/storage'
+import {
+  getUserProfile,
+  createUserProfile as createProfileInDb,
+  updateUserProfile,
+  findProfileByName,
+} from '../services/supabaseService'
+import { hashPin } from '../services/pin'
+
+export type { User }
 
 export type AuthMode = 'loading' | 'first_login' | 'pin_verification' | 'authenticated'
 
 export interface PendingUser {
+  userNumber: number
   firstName: string
   lastName: string
-  localUserId: string
 }
 
 export interface AuthState {
@@ -21,22 +28,8 @@ export interface AuthState {
   needsPin: boolean
   createUserProfile: (firstName: string, lastName: string, pin?: string) => Promise<boolean>
   verifyUserPin: (pin: string) => Promise<boolean>
-  updateName: (firstName: string, lastName: string) => void
+  updateName: (firstName: string, lastName: string) => Promise<boolean>
   logout: () => void
-}
-
-/**
- * Hash simple du PIN (côté client, avant envoi à Supabase).
- * ⚠️ Ce n'est PAS du hachage sécurisé — c'est de l'obfuscation.
- * Suffisant pour un club de collègues, pas pour un usage réel.
- */
-export function hashPin(pin: string): string {
-  let hash = 0
-  for (let i = 0; i < pin.length; i++) {
-    hash = ((hash << 5) - hash) + pin.charCodeAt(i)
-    hash |= 0
-  }
-  return 'pin_' + Math.abs(hash).toString(36)
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -46,29 +39,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<AuthMode>('loading')
   const [pendingUser, setPendingUser] = useState<PendingUser | null>(null)
 
-  // Hydrater un user local ; le réutiliser seulement si son ID correspond
-  const ensureLocalUser = useCallback((localUserId: string, firstName: string, lastName: string): User => {
-    const existing = getUser()
-    if (existing && existing.id === localUserId) {
-      return existing
-    }
-    return createUser(firstName, lastName)
-  }, [])
-
   const connect = useCallback(
-    (localUserId: string, firstName: string, lastName: string) => {
-      const localUser = ensureLocalUser(localUserId, firstName, lastName)
+    (profile: { user_number: number; first_name: string; last_name: string }) => {
+      const localUser: User = {
+        id: profile.user_number,
+        firstName: profile.first_name,
+        lastName: profile.last_name,
+        name: `${profile.first_name} ${profile.last_name}`.trim(),
+      }
+      setUserStorage(localUser)
       setUser(localUser)
       setPendingUser(null)
       setMode('authenticated')
     },
-    [ensureLocalUser]
+    []
   )
 
-  const requestPin = useCallback((localUserId: string, firstName: string, lastName: string) => {
-    setPendingUser({ firstName, lastName, localUserId })
-    setMode('pin_verification')
-  }, [])
+  const requestPin = useCallback(
+    (profile: { user_number: number; first_name: string; last_name: string }) => {
+      setPendingUser({
+        userNumber: profile.user_number,
+        firstName: profile.first_name,
+        lastName: profile.last_name,
+      })
+      setMode('pin_verification')
+    },
+    []
+  )
 
   // Résolution au mount
   useEffect(() => {
@@ -84,14 +81,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const profile = await getUserProfile(stored.id)
         if (cancelled) return
-        if (profile && profile.pin_hash) {
-          requestPin(stored.id, stored.firstName, stored.lastName)
+        if (!profile) {
+          // Le profil a été supprimé entre-temps
+          setMode('first_login')
+          return
+        }
+        if (profile.pin_hash) {
+          requestPin(profile)
         } else {
-          connect(stored.id, stored.firstName, stored.lastName)
+          connect(profile)
         }
       } catch (err) {
         console.error('[AUTH] Erreur lecture profil, fallback local:', err)
-        if (!cancelled) connect(stored.id, stored.firstName, stored.lastName)
+        if (!cancelled) {
+          // Hors ligne : on laisse l'utilisateur passer avec le cache local
+          setUser(stored)
+          setMode('authenticated')
+        }
       }
     }
 
@@ -101,64 +107,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [connect, requestPin])
 
+  /**
+   * Création ou reconnexion par nom.
+   *
+   * - Profil existant sans PIN → connexion directe
+   * - Profil existant AVEC PIN → bascule en vérification
+   * - Aucun profil → création, la base attribue le user_number
+   */
   const createUserProfile = useCallback(
     async (firstName: string, lastName: string, pin?: string): Promise<boolean> => {
-      const localUserId = generateUserId(firstName, lastName)
       const trimmedFirst = firstName.trim()
       const trimmedLast = lastName.trim()
 
-      // Si un compte existe déjà en base, ne jamais écraser son PIN
       try {
-        const existing = await getUserProfile(localUserId)
-        if (existing && existing.pin_hash) {
-          requestPin(localUserId, trimmedFirst, trimmedLast)
-          return false
+        const existing = await findProfileByName(trimmedFirst, trimmedLast)
+
+        if (existing) {
+          if (existing.pin_hash) {
+            requestPin(existing)
+            return false
+          }
+          connect(existing)
+          return true
         }
-      } catch (err) {
-        console.error('[AUTH] Erreur lecture profil existant:', err)
-      }
 
-      // Nouveau compte (ou compte sans PIN)
-      const newUser = createUser(firstName, lastName)
-      setUser(newUser)
-      setPendingUser(null)
-      setMode('authenticated')
-
-      try {
-        await upsertUserProfile({
-          local_user_id: localUserId,
+        // Nouveau profil → la base attribue user_number
+        const created = await createProfileInDb({
           first_name: trimmedFirst,
           last_name: trimmedLast,
           pin_hash: pin ? hashPin(pin) : null,
         })
+        connect(created)
+        return true
       } catch (err) {
-        console.error('[AUTH] Erreur sauvegarde profil:', err)
+        console.error('[AUTH] Erreur création/lecture profil:', err)
+        throw err
       }
-
-      return true
     },
-    [requestPin]
+    [connect, requestPin]
   )
 
   const verifyUserPin = useCallback(
     async (pin: string): Promise<boolean> => {
       if (!pendingUser) return false
-      const { localUserId, firstName, lastName } = pendingUser
 
       try {
-        const profile = await getUserProfile(localUserId)
-
-        // Plus de PIN en base → connexion directe
-        if (!profile || !profile.pin_hash) {
-          connect(localUserId, firstName, lastName)
-          return true
+        const profile = await getUserProfile(pendingUser.userNumber)
+        if (!profile) {
+          setMode('first_login')
+          return false
         }
 
-        if (profile.pin_hash === hashPin(pin)) {
-          connect(localUserId, firstName, lastName)
+        if (!profile.pin_hash || profile.pin_hash === hashPin(pin)) {
+          connect(profile)
           return true
         }
-
         return false
       } catch (err) {
         console.error('[AUTH] Erreur vérification PIN:', err)
@@ -168,19 +171,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [pendingUser, connect]
   )
 
+  /**
+   * Change le nom sans toucher à l'identifiant.
+   * Comme user_number est indépendant du nom, les votes, le PIN et
+   * l'historique restent attachés à la bonne personne.
+   */
   const updateName = useCallback(
-    (firstName: string, lastName: string) => {
-      if (!user) return
-      const updated: User = {
-        ...user,
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        name: `${firstName.trim()} ${lastName.trim()}`,
+    async (firstName: string, lastName: string): Promise<boolean> => {
+      if (!user) return false
+      const trimmedFirst = firstName.trim()
+      const trimmedLast = lastName.trim()
+      if (!trimmedFirst || !trimmedLast) return false
+
+      try {
+        const updated = await updateUserProfile(user.id, {
+          first_name: trimmedFirst,
+          last_name: trimmedLast,
+        })
+        connect(updated)
+        return true
+      } catch (err) {
+        console.error('[AUTH] Erreur changement de nom:', err)
+        throw err
       }
-      setUserStorage(updated)
-      setUser(updated)
     },
-    [user]
+    [user, connect]
   )
 
   const logout = useCallback(() => {

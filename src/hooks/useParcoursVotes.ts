@@ -25,7 +25,7 @@ export interface WeekVoteState {
   /** Ajoute ou retire ce parcours de mon choix */
   toggleChoice: (parcoursId: string) => Promise<void>
   /** Le parcours choisi par une personne donnée, null si aucun */
-  choiceOf: (localUserId: string) => string | null
+  choiceOf: (userNumber: number) => string | null
   /** Parcours trié : plus de votes décroissant */
   rankedParcoursIds: string[]
   /** Les parcours les plus plébiscités (plusieurs si égalité) */
@@ -34,7 +34,7 @@ export interface WeekVoteState {
   isTie: boolean
 }
 
-const cellKey = (parcoursId: string, localUserId: string) => `${parcoursId}|${localUserId}`
+const cellKey = (parcoursId: string, userNumber: number) => `${parcoursId}|${userNumber}`
 
 export function useParcoursVotes(
   parcoursIds: string[],
@@ -44,7 +44,7 @@ export function useParcoursVotes(
   const { user, loading: authLoading } = useAuth()
   const [tallies, setTallies] = useState<Record<string, ParcoursTally>>({})
   const [myChoice, setMyChoice] = useState<string | null>(null)
-  const [choices, setChoices] = useState<Record<string, string>>({}) // userId → parcoursId
+  const [choices, setChoices] = useState<Record<number, string>>({}) // userNumber → parcoursId
   const [loading, setLoading] = useState(true)
   const [savingParcoursId, setSavingParcoursId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -69,9 +69,9 @@ export function useParcoursVotes(
         setTallies(nextTallies)
 
         // Un seul choix par personne et par semaine
-        const nextChoices: Record<string, string> = {}
+        const nextChoices: Record<number, string> = {}
         for (const v of voteList as WeekVote[]) {
-          if (v.localUserId) nextChoices[v.localUserId] = v.parcoursId
+          if (v.userNumber) nextChoices[v.userNumber] = v.parcoursId
         }
         setChoices(nextChoices)
         setMyChoice(nextChoices[user.id] ?? null)
@@ -150,14 +150,12 @@ export function useParcoursVotes(
 
       try {
         if (isRemoving) {
-          await deleteWeekVote(parcoursId, user.id, weekKey)
+          await deleteWeekVote(user.id, weekKey)
         } else {
           await castWeekVote({
             parcoursId,
-            localUserId: user.id,
-            status: 'yes',
+            userNumber: user.id,
             weekKey,
-            identity: { firstName: user.firstName, lastName: user.lastName },
           })
         }
         // Recharge pour refléter l'état réel (l'upsert a pu remplacer un vote)
@@ -174,7 +172,7 @@ export function useParcoursVotes(
   )
 
   const choiceOf = useCallback(
-    (localUserId: string): string | null => choices[localUserId] ?? null,
+    (userNumber: number): string | null => choices[userNumber] ?? null,
     [choices]
   )
 

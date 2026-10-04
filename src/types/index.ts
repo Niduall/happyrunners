@@ -10,21 +10,12 @@ export interface GPXPoint {
   time?: string
 }
 
-export interface Parcours {
-  id: string
-  name: string
-  description?: string
-  distance?: number
-  distance_km?: number
-  elevationGain?: number
-  elevation_gain_m?: number
-  points: GPXPoint[]
-  created_by?: string | null
-  createdAt?: string
-  created_at?: string
-  updatedAt?: string
-  updated_at?: string
-}
+/**
+ * Parcours — ré-exporté depuis les types DB pour éviter deux définitions
+ * divergentes (l'app entière lit ce qui vient de Supabase).
+ */
+export type { Parcours, ParcoursInsert, Attendance, AttendanceStatus } from './supabase'
+import type { Parcours } from './supabase'
 
 export interface WeatherData {
   temperature: number
@@ -61,15 +52,18 @@ export interface Participation {
   id: string
   parcoursId: string
   parcours_id: string
-  userId: string
-  user_id: string
+  userNumber: number
   status: ParticipationStatus
   updatedAt: string
   updated_at: string
 }
 
 export interface User {
-  id: string // = generateUserId(firstName, lastName), ex: "paul_martin"
+  /**
+   * Identifiant technique stable, attribué par la base (1, 2, 3…).
+   * Ne change JAMAIS, même si la personne modifie son nom.
+   */
+  id: number
   firstName: string
   lastName: string
   name: string // computed: "Prénom Nom"

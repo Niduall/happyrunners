@@ -46,6 +46,45 @@ describe('storage — user local', () => {
     expect(getUser()).toBeNull()
   })
 
+  describe('migration depuis l’ancien format', () => {
+    it('invalide un cache dont l’id est une chaîne', () => {
+      // Ancien format : id dérivé du nom
+      localStorage.setItem(
+        'running_user',
+        JSON.stringify({
+          id: 'paulin_claudin',
+          firstName: 'Paulin',
+          lastName: 'Claudin',
+          name: 'Paulin Claudin',
+        })
+      )
+
+      expect(getUser()).toBeNull()
+      // Le cache doit avoir été purgé, sinon le 400 revient
+      expect(localStorage.getItem('running_user')).toBeNull()
+    })
+
+    it('accepte un id numérique (nouveau format)', () => {
+      localStorage.setItem(
+        'running_user',
+        JSON.stringify({ id: 1, firstName: 'Paulin', lastName: 'Claudin', name: 'Paulin Claudin' })
+      )
+
+      expect(getUser()?.id).toBe(1)
+      expect(localStorage.getItem('running_user')).not.toBeNull()
+    })
+
+    it('invalide un objet sans id', () => {
+      localStorage.setItem('running_user', JSON.stringify({ firstName: 'X' }))
+      expect(getUser()).toBeNull()
+    })
+
+    it('invalide un id null', () => {
+      localStorage.setItem('running_user', JSON.stringify({ id: null }))
+      expect(getUser()).toBeNull()
+    })
+  })
+
   it('ne stocke aucun secret dans le user local', () => {
     setUser(user())
     const stored = JSON.parse(localStorage.getItem('running_user')!)

@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useState, useEffect, useCallback, type ReactNode } from 'react'
-import { getUser, setUser as setUserStorage, type User } from '../services/storage'
+import { getUser, setUser as setUserStorage, clearUser, type User } from '../services/storage'
 import {
   getUserProfile,
   createUserProfile as createProfileInDb,
@@ -94,9 +94,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.error('[AUTH] Erreur lecture profil, fallback local:', err)
         if (!cancelled) {
-          // Hors ligne : on laisse l'utilisateur passer avec le cache local
-          setUser(stored)
-          setMode('authenticated')
+          // Hors ligne : on laisse l'utilisateur passer avec le cache local.
+          // ⚠️ Sauf si l'erreur vient d'un user_number invalide (cache d'avant
+          // la migration) : dans ce cas on invalide le cache pour ne pas
+          // connecter quelqu'un avec un identifiantfantôme.
+          const isInvalidNumber =
+            err &&
+            typeof err === 'object' &&
+            'code' in err &&
+            (err as { code?: string }).code === '22P02'
+
+          if (isInvalidNumber) {
+            clearUser()
+            setUser(null)
+            setMode('first_login')
+          } else {
+            setUser(stored)
+            setMode('authenticated')
+          }
         }
       }
     }

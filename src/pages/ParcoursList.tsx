@@ -186,7 +186,7 @@ export function ParcoursList() {
                 {parsedParcours && (
                   <p className="text-sm text-primary flex items-center gap-1">
                     <span className="w-4 h-4">✓</span>
-                    GPX chargé : {parsedParcours.distance.toFixed(1)} km, {parsedParcours.elevationGain || 0}m D+
+                    GPX chargé : {parsedParcours.distance_km.toFixed(1)} km, {parsedParcours.elevation_gain_m || 0}m D+
                   </p>
                 )}
               </div>

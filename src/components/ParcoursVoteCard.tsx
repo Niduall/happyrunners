@@ -63,7 +63,7 @@ export function ParcoursVoteCard({
             <h3 className="font-semibold text-gray-900 truncate">{parcours.name}</h3>
             <p className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
               <MapPin className="w-3.5 h-3.5" />
-              {parcours.distance_km?.toFixed(1)} km
+              {parcours.distance_km.toFixed(1)} km
               {parcours.elevation_gain_m ? ` · +${Math.round(parcours.elevation_gain_m)} m` : ''}
             </p>
           </div>

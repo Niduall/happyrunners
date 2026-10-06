@@ -337,4 +337,266 @@ describe('useAuth — user_number stable', () => {
       expect(() => renderHook(() => useAuth())).toThrow(/AuthProvider/)
     })
   })
+
+  describe('gestion du PIN depuis le menu profil', () => {
+    /** Helper : ouvre une session authentifiée sans PIN */
+    const connectedWithoutPin = async () => {
+      seedLocalUser(1)
+      mockGetProfile.mockResolvedValue(profile({ user_number: 1, pin_hash: null }) as never)
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+      expect(result.current.isAuthenticated).toBe(true)
+      return result
+    }
+
+    it('ajoute un PIN à un profil qui n’en a pas', async () => {
+      const result = await connectedWithoutPin()
+
+      let ok: boolean | undefined
+      await act(async () => {
+        ok = await result.current.setPin('1234')
+      })
+
+      expect(ok).toBe(true)
+      expect(mockUpdate).toHaveBeenCalledWith(1, { pin_hash: hashPin('1234') })
+    })
+
+    it('refuse d’ajouter un PIN si un PIN existe déjà sans ancien PIN', async () => {
+      seedLocalUser(1)
+      mockGetProfile.mockResolvedValue(
+        profile({ user_number: 1, pin_hash: hashPin('1111') }) as never
+      )
+      // Le mount demande le PIN → il faut le passer pour être connecté
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+      expect(result.current.needsPin).toBe(true)
+
+      await act(async () => {
+        await result.current.verifyUserPin('1111')
+      })
+      expect(result.current.isAuthenticated).toBe(true)
+
+      let ok: boolean | undefined
+      await act(async () => {
+        ok = await result.current.setPin('2222')
+      })
+
+      // Sans ancien PIN → refusé, et surtout rien n'est écrit
+      expect(ok).toBe(false)
+      expect(mockUpdate).not.toHaveBeenCalled()
+    })
+
+    it('change le PIN si l’ancien est correct', async () => {
+      seedLocalUser(1)
+      mockGetProfile.mockResolvedValue(
+        profile({ user_number: 1, pin_hash: hashPin('1111') }) as never
+      )
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => {
+        await result.current.verifyUserPin('1111')
+      })
+
+      let ok: boolean | undefined
+      await act(async () => {
+        ok = await result.current.setPin('2222', '1111')
+      })
+
+      expect(ok).toBe(true)
+      expect(mockUpdate).toHaveBeenCalledWith(1, { pin_hash: hashPin('2222') })
+    })
+
+    it('refuse de changer le PIN si l’ancien est faux', async () => {
+      seedLocalUser(1)
+      mockGetProfile.mockResolvedValue(
+        profile({ user_number: 1, pin_hash: hashPin('1111') }) as never
+      )
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => {
+        await result.current.verifyUserPin('1111')
+      })
+      mockUpdate.mockClear()
+
+      let ok: boolean | undefined
+      await act(async () => {
+        ok = await result.current.setPin('2222', '9999')
+      })
+
+      expect(ok).toBe(false)
+      expect(mockUpdate).not.toHaveBeenCalled()
+      // Le PIN en base est inchangé
+      expect(mockGetProfile).toHaveBeenCalled()
+    })
+
+    it('retire le PIN (pin_hash → null) après vérification de l’ancien', async () => {
+      seedLocalUser(1)
+      mockGetProfile.mockResolvedValue(
+        profile({ user_number: 1, pin_hash: hashPin('1111') }) as never
+      )
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => {
+        await result.current.verifyUserPin('1111')
+      })
+
+      let ok: boolean | undefined
+      await act(async () => {
+        ok = await result.current.clearPin('1111')
+      })
+
+      expect(ok).toBe(true)
+      expect(mockUpdate).toHaveBeenCalledWith(1, { pin_hash: null })
+    })
+
+    it('refuse de retirer le PIN si l’ancien est faux', async () => {
+      seedLocalUser(1)
+      mockGetProfile.mockResolvedValue(
+        profile({ user_number: 1, pin_hash: hashPin('1111') }) as never
+      )
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => {
+        await result.current.verifyUserPin('1111')
+      })
+      mockUpdate.mockClear()
+
+      let ok: boolean | undefined
+      await act(async () => {
+        ok = await result.current.clearPin('0000')
+      })
+
+      expect(ok).toBe(false)
+      expect(mockUpdate).not.toHaveBeenCalled()
+    })
+
+    it('refuse toute opération PIN si le profil n’existe plus', async () => {
+      seedLocalUser(1)
+      mockGetProfile.mockResolvedValue(profile({ user_number: 1 }) as never)
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      mockGetProfile.mockResolvedValue(null)
+      mockUpdate.mockClear()
+
+      let add: boolean | undefined
+      let remove: boolean | undefined
+      await act(async () => {
+        add = await result.current.setPin('1234')
+        remove = await result.current.clearPin('1111')
+      })
+
+      expect(add).toBe(false)
+      expect(remove).toBe(false)
+      expect(mockUpdate).not.toHaveBeenCalled()
+    })
+
+    it('après ajout d’un PIN, la reconnexion par nom le réclame', async () => {
+      // 1ère session : création du profil
+      mockFind.mockResolvedValue(null)
+      const first = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(first.result.current.loading).toBe(false))
+      await act(async () => {
+        await first.result.current.createUserProfile('Paul', 'Martin')
+      })
+      expect(first.result.current.isAuthenticated).toBe(true)
+
+      // 2. Ajout d’un PIN depuis le menu
+      const number = first.result.current.user!.id
+      mockGetProfile.mockResolvedValue(
+        profile({ user_number: number, pin_hash: hashPin('1234') }) as never
+      )
+      await act(async () => {
+        await first.result.current.setPin('1234')
+      })
+
+      // Nouvelle session, profil désormais protégé
+      first.unmount()
+      localStorage.removeItem('running_user')
+      mockFind.mockResolvedValue(
+        profile({ user_number: number, pin_hash: hashPin('1234') }) as never
+      )
+
+      const second = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(second.result.current.loading).toBe(false))
+
+      await act(async () => {
+        await second.result.current.createUserProfile('Paul', 'Martin')
+      })
+
+      expect(second.result.current.needsPin).toBe(true)
+      expect(second.result.current.isAuthenticated).toBe(false)
+    })
+
+    it('après retrait du PIN, la reconnexion par nom est directe', async () => {
+      mockFind.mockResolvedValue(null)
+      const first = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(first.result.current.loading).toBe(false))
+      await act(async () => {
+        await first.result.current.createUserProfile('Paul', 'Martin')
+      })
+      const number = first.result.current.user!.id
+
+      mockGetProfile.mockResolvedValue(
+        profile({ user_number: number, pin_hash: hashPin('1234') }) as never
+      )
+      await act(async () => {
+        await first.result.current.clearPin('1234')
+      })
+
+      first.unmount()
+      localStorage.removeItem('running_user')
+      mockFind.mockResolvedValue(
+        profile({ user_number: number, pin_hash: null }) as never
+      )
+
+      const second = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(second.result.current.loading).toBe(false))
+
+      await act(async () => {
+        await second.result.current.createUserProfile('Paul', 'Martin')
+      })
+
+      expect(second.result.current.isAuthenticated).toBe(true)
+      expect(second.result.current.needsPin).toBe(false)
+    })
+  })
+
+  describe('retour à l’écran d’identité', () => {
+    it('resetToIdentity revient à first_login et efface le pendingUser', async () => {
+      mockFind.mockResolvedValue(profile({ user_number: 3, pin_hash: hashPin('1234') }) as never)
+
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => {
+        await result.current.createUserProfile('Paul', 'Martin')
+      })
+      expect(result.current.needsPin).toBe(true)
+      expect(result.current.pendingUser).not.toBeNull()
+
+      act(() => result.current.resetToIdentity())
+
+      expect(result.current.isFirstLogin).toBe(true)
+      expect(result.current.needsPin).toBe(false)
+      expect(result.current.pendingUser).toBeNull()
+    })
+
+    it('resetToIdentity ne déconnecte pas un utilisateur déjà connecté', async () => {
+      seedLocalUser(1)
+      mockGetProfile.mockResolvedValue(profile({ user_number: 1 }) as never)
+
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      act(() => result.current.resetToIdentity())
+
+      // Le user reste en mémoire : aucun appel réseau nécessaire
+      expect(result.current.user?.id).toBe(1)
+    })
+  })
 })

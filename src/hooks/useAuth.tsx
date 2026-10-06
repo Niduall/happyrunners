@@ -29,6 +29,12 @@ export interface AuthState {
   createUserProfile: (firstName: string, lastName: string, pin?: string) => Promise<boolean>
   verifyUserPin: (pin: string) => Promise<boolean>
   updateName: (firstName: string, lastName: string) => Promise<boolean>
+  /** Ajoute un PIN, ou le change si `currentPin` est fourni */
+  setPin: (newPin: string, currentPin?: string) => Promise<boolean>
+  /** Retire le PIN (nécessite le PIN actuel) */
+  clearPin: (currentPin: string) => Promise<boolean>
+  /** Revient à l'écran d'identité (utile pour « changer de nom ») */
+  resetToIdentity: () => void
   logout: () => void
 }
 
@@ -213,8 +219,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user, connect]
   )
 
+  /**
+   * Ajoute un PIN, ou le remplace si `currentPin` est fourni.
+   *
+   * - Profil sans PIN → ajout direct
+   * - Profil avec PIN → l'ancien doit être correct, sinon false
+   */
+  const setPin = useCallback(
+    async (newPin: string, currentPin?: string): Promise<boolean> => {
+      if (!user) return false
+
+      try {
+        const profile = await getUserProfile(user.id)
+        if (!profile) return false
+
+        // PIN existant : on exige l'ancien avant de le changer
+        if (profile.pin_hash && (!currentPin || profile.pin_hash !== hashPin(currentPin))) {
+          return false
+        }
+
+        await updateUserProfile(user.id, { pin_hash: hashPin(newPin) })
+        return true
+      } catch (err) {
+        console.error('[AUTH] Erreur changement de PIN:', err)
+        return false
+      }
+    },
+    [user]
+  )
+
+  /** Retire le PIN du profil (l'ancien PIN est exigé) */
+  const clearPin = useCallback(
+    async (currentPin: string): Promise<boolean> => {
+      if (!user) return false
+
+      try {
+        const profile = await getUserProfile(user.id)
+        if (!profile || !profile.pin_hash) return false
+        if (profile.pin_hash !== hashPin(currentPin)) return false
+
+        await updateUserProfile(user.id, { pin_hash: null })
+        return true
+      } catch (err) {
+        console.error('[AUTH] Erreur suppression du PIN:', err)
+        return false
+      }
+    },
+    [user]
+  )
+
+  /** Revient à l'écran d'identité — pour « Changer de nom » */
+  const resetToIdentity = useCallback(() => {
+    setPendingUser(null)
+    setMode('first_login')
+  }, [])
+
   const logout = useCallback(() => {
-    localStorage.removeItem('running_user')
+    clearUser()
     setUser(null)
     setPendingUser(null)
     setMode('first_login')
@@ -232,9 +293,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       createUserProfile,
       verifyUserPin,
       updateName,
+      setPin,
+      clearPin,
+      resetToIdentity,
       logout,
     }),
-    [user, mode, pendingUser, createUserProfile, verifyUserPin, updateName, logout]
+    [
+      user,
+      mode,
+      pendingUser,
+      createUserProfile,
+      verifyUserPin,
+      updateName,
+      setPin,
+      clearPin,
+      resetToIdentity,
+      logout,
+    ]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

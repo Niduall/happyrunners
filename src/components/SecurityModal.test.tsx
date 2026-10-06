@@ -119,7 +119,7 @@ describe('SecurityModal — profil SANS PIN', () => {
     expect(mockUpdate).not.toHaveBeenCalled()
   })
 
-  it('active le PIN et bascule sur l’écran « changer »', async () => {
+  it('affiche une confirmation claire après activation', async () => {
     const { user } = await openModal(null)
 
     await user.type(await screen.findByLabelText('PIN à 4 chiffres'), '1234')
@@ -128,9 +128,29 @@ describe('SecurityModal — profil SANS PIN', () => {
 
     expect(await screen.findByText('PIN activé')).toBeInTheDocument()
     expect(mockUpdate).toHaveBeenCalledWith(3, { pin_hash: hashPin('1234') })
-    // L'écran propose maintenant le changement et le retrait
-    expect(screen.getByLabelText('PIN actuel')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Retirer le PIN$/ })).toBeInTheDocument()
+
+    // Aucun formulaire ne doit subsister : sinon on dirait que ça a échoué
+    expect(screen.queryByLabelText('PIN à 4 chiffres')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Confirmer le PIN')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('PIN actuel')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Nouveau PIN')).not.toBeInTheDocument()
+    // Aucun bouton d'action ne doit subsister, juste la fermeture
+    expect(screen.queryByRole('button', { name: /Activer le PIN/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Changer le PIN/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Fermer' })).toBeInTheDocument()
+  })
+
+  it('ferme la modale depuis l’écran de confirmation', async () => {
+    const { user, onClose } = await openModal(null)
+
+    await user.type(await screen.findByLabelText('PIN à 4 chiffres'), '1234')
+    await user.type(screen.getByLabelText('Confirmer le PIN'), '1234')
+    await user.click(screen.getByRole('button', { name: /Activer le PIN/ }))
+
+    await screen.findByText('PIN activé')
+    await user.click(screen.getByRole('button', { name: 'Fermer' }))
+
+    expect(onClose).toHaveBeenCalled()
   })
 })
 
@@ -154,6 +174,8 @@ describe('SecurityModal — profil AVEC PIN', () => {
 
     expect(await screen.findByText('PIN modifié')).toBeInTheDocument()
     expect(mockUpdate).toHaveBeenCalledWith(3, { pin_hash: hashPin('5678') })
+    // Plus aucun formulaire derrière la confirmation
+    expect(screen.queryByLabelText('PIN actuel')).not.toBeInTheDocument()
   })
 
   it('refuse un ancien PIN incorrect', async () => {
@@ -183,8 +205,8 @@ describe('SecurityModal — profil AVEC PIN', () => {
 
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith(3, { pin_hash: null }))
     expect(await screen.findByText('PIN retiré')).toBeInTheDocument()
-    // Retour à l'écran d'ajout
-    expect(await screen.findByLabelText('PIN à 4 chiffres')).toBeInTheDocument()
+    // Confirmation seule : le formulaire d'ajout ne revient qu'en rouvrant
+    expect(screen.queryByLabelText('PIN à 4 chiffres')).not.toBeInTheDocument()
   })
 
   it('refuse de retirer le PIN avec un mauvais ancien PIN', async () => {

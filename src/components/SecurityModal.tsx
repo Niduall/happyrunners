@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ShieldCheck, ShieldOff, X } from 'lucide-react'
+import { ShieldCheck, ShieldOff, X, Check } from 'lucide-react'
 import { Button } from './ui/Button'
 import { useAuth } from '../hooks/useAuth'
 import { getUserProfile } from '../services/supabaseService'
@@ -10,6 +10,12 @@ interface SecurityModalProps {
 
 type Action = 'none' | 'add' | 'change' | 'remove'
 
+/** Écran de confirmation affiché après une action réussie */
+interface Done {
+  title: string
+  detail: string
+}
+
 export function SecurityModal({ onClose }: SecurityModalProps) {
   const { user, setPin, clearPin } = useAuth()
   const [hasPin, setHasPin] = useState<boolean | null>(null)
@@ -18,7 +24,7 @@ export function SecurityModal({ onClose }: SecurityModalProps) {
   const [newPin, setNewPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const [done, setDone] = useState<Done | null>(null)
   const [saving, setSaving] = useState(false)
 
   // Charge l'état réel du PIN pour proposer la bonne action par défaut
@@ -63,7 +69,6 @@ export function SecurityModal({ onClose }: SecurityModalProps) {
 
   const handleSave = async () => {
     setError('')
-    setSuccess('')
 
     // La suppression ne demande que le PIN actuel : pas de nouveau PIN à valider
     if (action !== 'remove') {
@@ -85,9 +90,10 @@ export function SecurityModal({ onClose }: SecurityModalProps) {
           setHasPin(false)
           setAction('add')
           setCurrentPin('')
-          setNewPin('')
-          setConfirmPin('')
-          setSuccess('PIN retiré')
+          setDone({
+            title: 'PIN retiré',
+            detail: 'Ton profil n’est plus protégé.',
+          })
         } else {
           setError('PIN actuel incorrect')
         }
@@ -97,7 +103,10 @@ export function SecurityModal({ onClose }: SecurityModalProps) {
           setCurrentPin('')
           setNewPin('')
           setConfirmPin('')
-          setSuccess('PIN modifié')
+          setDone({
+            title: 'PIN modifié',
+            detail: 'Ton nouveau PIN est actif.',
+          })
         } else {
           setError('PIN actuel incorrect')
         }
@@ -108,7 +117,10 @@ export function SecurityModal({ onClose }: SecurityModalProps) {
           setAction('change')
           setNewPin('')
           setConfirmPin('')
-          setSuccess('PIN activé')
+          setDone({
+            title: 'PIN activé',
+            detail: 'Il te sera demandé à chaque connexion.',
+          })
         } else {
           setError('Impossible d’activer le PIN')
         }
@@ -151,17 +163,27 @@ export function SecurityModal({ onClose }: SecurityModalProps) {
             {error}
           </div>
         )}
-        {success && (
-          <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
-            {success}
+
+        {/* Confirmation pleine page : pas de formulaire derrière, sinon on
+            dirait que l'enregistrement a échoué */}
+        {done && (
+          <div className="py-6 text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Check className="w-8 h-8 text-green-600" />
+            </div>
+            <p className="text-lg font-semibold text-gray-900">{done.title}</p>
+            <p className="text-sm text-gray-500 mt-1">{done.detail}</p>
+            <Button className="w-full mt-6" onClick={onClose}>
+              Fermer
+            </Button>
           </div>
         )}
 
-        {action === 'none' && (
+        {!done && action === 'none' && (
           <p className="text-sm text-gray-500">Chargement…</p>
         )}
 
-        {action === 'add' && (
+        {!done && action === 'add' && (
           <>
             <p className="text-sm text-gray-600">
               Un PIN empêche les autres de voter à ta place sur ton téléphone. Personne ne
@@ -175,7 +197,7 @@ export function SecurityModal({ onClose }: SecurityModalProps) {
           </>
         )}
 
-        {action === 'change' && (
+        {!done && action === 'change' && (
           <>
             <p className="text-sm text-gray-600">
               Ton PIN actuel protège ton profil. Saisis-le pour le modifier.
@@ -190,7 +212,6 @@ export function SecurityModal({ onClose }: SecurityModalProps) {
               onClick={() => {
                 setAction('remove')
                 setError('')
-                setSuccess('')
               }}
               className="w-full text-sm text-gray-500 hover:text-red-600"
             >
@@ -199,7 +220,7 @@ export function SecurityModal({ onClose }: SecurityModalProps) {
           </>
         )}
 
-        {action === 'remove' && (
+        {!done && action === 'remove' && (
           <>
             <p className="text-sm text-gray-600">
               Ton profil ne sera plus protégé : n'importe qui pourra voter à ta place depuis
@@ -226,9 +247,11 @@ export function SecurityModal({ onClose }: SecurityModalProps) {
           </>
         )}
 
-        <Button variant="ghost" className="w-full" onClick={onClose}>
-          Fermer
-        </Button>
+        {!done && (
+          <Button variant="ghost" className="w-full" onClick={onClose}>
+            Fermer
+          </Button>
+        )}
       </div>
     </div>
   )

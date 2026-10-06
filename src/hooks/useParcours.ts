@@ -64,6 +64,9 @@ export function useParcours() {
 
   const removeParcours = async (id: string) => {
     await deleteParcours(id)
+    // ⚠️ Sans ce rechargement, la ligne supprimée reste affichée jusqu'au
+    // prochain polling (30 s) : l'app semblait ne rien faire.
+    await loadParcours({ silent: true })
   }
 
   return {

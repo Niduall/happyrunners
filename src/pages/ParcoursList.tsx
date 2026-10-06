@@ -1,22 +1,29 @@
-import { useState } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Plus, ArrowLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
 import { Card, CardContent } from '../components/ui/Card'
 import { ParcoursCard } from '../components/ParcoursCard'
+import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal'
 import { parseGPX } from '../services/gpxParser'
-import { addParcours, deleteParcours } from '../services/supabaseService'
+import { addParcours, deleteParcours, getWeekTallies } from '../services/supabaseService'
 import { useParcours } from '../hooks/useParcours'
+import { useTargetWednesday } from '../hooks/useTargetWednesday'
 import type { Parcours } from '../types/supabase'
 
 export function ParcoursList() {
   const navigate = useNavigate()
   const { parcoursList, loading, createParcours, removeParcours } = useParcours()
+  const { weekKey } = useTargetWednesday()
   const [showAddForm, setShowAddForm] = useState(false)
   const [newParcoursName, setNewParcoursName] = useState('')
   const [uploading, setUploading] = useState(false)
   const [parsedParcours, setParsedParcours] = useState<any>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  // Parcours en attente de confirmation de suppression
+  const [pendingDelete, setPendingDelete] = useState<Parcours | null>(null)
+  // Nombre de votes par parcours, pour annoncer ce qui sera perdu
+  const [voteCounts, setVoteCounts] = useState<Record<string, number>>({})
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -65,11 +72,50 @@ export function ParcoursList() {
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Supprimer ce parcours ?')) {
+  // Un clic sur la poubelle ouvre la confirmation, rien n'est supprimé avant
+  const handleDelete = useCallback((id: string) => {
+    const parcours = parcoursList.find((p) => p.id === id)
+    if (parcours) setPendingDelete(parcours)
+  }, [parcoursList])
+
+  const confirmDelete = useCallback(async () => {
+    if (!pendingDelete) return
+    const { id, name } = pendingDelete
+
+    try {
       await removeParcours(id)
+      setPendingDelete(null)
+      // Le vote venait d'être perdu : on ne l'affiche plus
+      setVoteCounts((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+    } catch (err) {
+      console.error('Erreur suppression parcours:', err)
+      alert(`Impossible de supprimer « ${name} »`)
     }
-  }
+  }, [pendingDelete, removeParcours])
+
+  const cancelDelete = useCallback(() => setPendingDelete(null), [])
+
+  // Comptes de votes de la semaine, pour la confirmation
+  useEffect(() => {
+    let cancelled = false
+    void getWeekTallies(weekKey)
+      .then((tallies) => {
+        if (cancelled) return
+        const counts: Record<string, number> = {}
+        for (const t of tallies) counts[t.parcoursId] = t.yes
+        setVoteCounts(counts)
+      })
+      .catch(() => {
+        /* le compteur est informatif : on ne bloque pas la suppression */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [weekKey, parcoursList])
 
   const handleCancel = () => {
     setShowAddForm(false)
@@ -145,6 +191,16 @@ export function ParcoursList() {
               />
             ))}
           </div>
+        )}
+
+        {/* Confirmation avant suppression — rien n'est effacé avant « Supprimer » */}
+        {pendingDelete && (
+          <ConfirmDeleteModal
+            parcoursName={pendingDelete.name}
+            voteCount={voteCounts[pendingDelete.id] ?? 0}
+            onConfirm={() => void confirmDelete()}
+            onCancel={cancelDelete}
+          />
         )}
 
         {/* Formulaire d'ajout */}

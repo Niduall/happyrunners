@@ -3,7 +3,7 @@ import { renderHook, act, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { AuthProvider } from './useAuth'
 import { useParcours } from './useParcours'
-import { getParcours } from '../services/supabaseService'
+import { getParcours, deleteParcours } from '../services/supabaseService'
 import { parseGPX } from '../services/gpxParser'
 
 vi.mock('../services/supabaseService', () => ({
@@ -25,6 +25,7 @@ vi.mock('../services/supabaseService', () => ({
 vi.mock('../services/gpxParser', () => ({ parseGPX: vi.fn() }))
 
 const mockGetParcours = vi.mocked(getParcours)
+const mockDeleteParcours = vi.mocked(deleteParcours)
 
 const wrapper = ({ children }: { children: ReactNode }) => <AuthProvider>{children}</AuthProvider>
 
@@ -157,6 +158,67 @@ describe('useParcours — polling silencieux', () => {
 
     // Aucun poll après le démontage
     expect(mockGetParcours).toHaveBeenCalledTimes(callsBefore)
+  })
+
+  describe('suppression', () => {
+    beforeEach(() => {
+      localStorage.clear()
+      vi.clearAllMocks()
+      vi.useRealTimers()
+      mockGetParcours.mockResolvedValue(SAMPLE as never)
+      mockDeleteParcours.mockResolvedValue(undefined)
+    })
+
+    it('retire le parcours de la liste immédiatement', async () => {
+      // ⚠️ Régression : removeParcours supprimait en base sans recharger la
+      // liste. La ligne restait affichée jusqu'au polling suivant (30 s),
+      // ce qui donnait l'impression que la suppression n'avait rien fait.
+      const { result } = renderHook(() => useParcours(), { wrapper })
+      await waitFor(() => expect(result.current.parcoursList).toHaveLength(2))
+
+      // La base ne renvoie plus que le parcours restant
+      mockGetParcours.mockResolvedValue([SAMPLE[1]] as never)
+
+      await act(async () => {
+        await result.current.removeParcours('p1')
+      })
+
+      expect(mockDeleteParcours).toHaveBeenCalledWith('p1')
+      expect(result.current.parcoursList).toHaveLength(1)
+      expect(result.current.parcoursList[0].id).toBe('p2')
+      // Et le « prochain parcours » suit
+      expect(result.current.nextParcours?.id).toBe('p2')
+    })
+
+    it('recharge sans afficher le spinner', async () => {
+      const { result } = renderHook(() => useParcours(), { wrapper })
+      await waitFor(() => expect(result.current.parcoursList).toHaveLength(2))
+      mockGetParcours.mockResolvedValue([SAMPLE[1]] as never)
+
+      const loadingDuringDelete: boolean[] = []
+      await act(async () => {
+        const p = result.current.removeParcours('p1')
+        loadingDuringDelete.push(result.current.loading)
+        await p
+      })
+
+      expect(loadingDuringDelete).toEqual([false])
+      expect(result.current.loading).toBe(false)
+    })
+
+    it('ne masque pas la liste si la suppression échoue', async () => {
+      const { result } = renderHook(() => useParcours(), { wrapper })
+      await waitFor(() => expect(result.current.parcoursList).toHaveLength(2))
+
+      mockDeleteParcours.mockRejectedValue(new Error('network'))
+
+      await act(async () => {
+        await expect(result.current.removeParcours('p1')).rejects.toThrow('network')
+      })
+
+      // La liste reste telle quelle : rien n'a été supprimé
+      expect(result.current.parcoursList).toHaveLength(2)
+    })
   })
 
   void parseGPX

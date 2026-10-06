@@ -65,10 +65,20 @@ describe('LoginForm — écran identité', () => {
     expect(screen.getByRole('button', { name: /Continuer/ })).toBeInTheDocument()
   })
 
-  it('précise que le nom est un identifiant', async () => {
+  it('précise que le nom identifie la personne dans le groupe', async () => {
     renderForm()
     await waitFor(() => expect(screen.getByLabelText('Prénom')).toBeInTheDocument())
-    expect(screen.getByText(/C'est ton identifiant dans le groupe/)).toBeInTheDocument()
+    expect(
+      screen.getByText("Ton nom te sert d'identifiant dans le groupe.")
+    ).toBeInTheDocument()
+  })
+
+  it('ne prétend pas que le nom est définitif — il est modifiable', async () => {
+    renderForm()
+    await waitFor(() => expect(screen.getByLabelText('Prénom')).toBeInTheDocument())
+    // « Modifier le nom » existe dans le menu : l'écran ne doit pas dire
+    // le contraire, c'était le message de l'ancien identifiant dérivé du nom
+    expect(screen.queryByText(/ne sera plus modifiable/)).not.toBeInTheDocument()
   })
 
   it("n'affiche aucun champ PIN au départ", async () => {
@@ -88,7 +98,7 @@ describe('LoginForm — écran identité', () => {
     expect(mockCreate).not.toHaveBeenCalled()
   })
 
-  it('crée le profil et connecte si le nom est inconnu', async () => {
+  it('propose un écran de création si le nom est inconnu', async () => {
     const user = userEvent.setup()
     mockFind.mockResolvedValue(null)
     mockCreate.mockResolvedValue(profile({ user_number: 7 }))
@@ -98,14 +108,10 @@ describe('LoginForm — écran identité', () => {
     await fillIdentity(user)
     await user.click(screen.getByRole('button', { name: /Continuer/ }))
 
-    await waitFor(() => expect(mockCreate).toHaveBeenCalled())
-    // Aucun PIN demandé à la création : il reste modifiable depuis le menu
-    expect(screen.getByLabelText('Prénom')).toBeInTheDocument()
-    expect(mockCreate).toHaveBeenCalledWith({
-      first_name: 'Paul',
-      last_name: 'Martin',
-      pin_hash: null,
-    })
+    // Rien n'est encore écrit en base : on demande le PIN d'abord
+    expect(await screen.findByLabelText('PIN à 4 chiffres')).toBeInTheDocument()
+    expect(screen.getByLabelText('Confirmer le PIN')).toBeInTheDocument()
+    expect(mockCreate).not.toHaveBeenCalled()
   })
 
   it('connecte directement un profil existant SANS PIN — pas d’écran PIN inutile', async () => {
@@ -120,6 +126,142 @@ describe('LoginForm — écran identité', () => {
     await waitFor(() => expect(mockFind).toHaveBeenCalled())
     expect(screen.queryByLabelText(/PIN à 4 chiffres/)).not.toBeInTheDocument()
     expect(mockCreate).not.toHaveBeenCalled()
+  })
+})
+
+describe('LoginForm — écran de création', () => {
+  /** Amène à l'écran de création (nom inconnu) */
+  const goToSignup = async (
+    user: ReturnType<typeof userEvent.setup>,
+    first = 'Jean',
+    last = 'Dupont'
+  ) => {
+    mockFind.mockResolvedValue(null)
+    renderForm()
+    await waitFor(() => expect(screen.getByLabelText('Prénom')).toBeInTheDocument())
+    await fillIdentity(user, first, last)
+    await user.click(screen.getByRole('button', { name: /Continuer/ }))
+    await screen.findByLabelText('Confirmer le PIN')
+  }
+
+  it('accueille la nouvelle personne par son prénom et son nom', async () => {
+    const user = userEvent.setup()
+    await goToSignup(user)
+
+    expect(screen.getByText('Bienvenue !')).toBeInTheDocument()
+    expect(screen.getByText(/Tu rejoins le groupe en tant que Jean Dupont/)).toBeInTheDocument()
+  })
+
+  it('demande PIN + confirmation', async () => {
+    const user = userEvent.setup()
+    await goToSignup(user)
+
+    expect(screen.getByLabelText('PIN à 4 chiffres')).toBeInTheDocument()
+    expect(screen.getByLabelText('Confirmer le PIN')).toBeInTheDocument()
+    // Pas de « PIN actuel » : ici on crée, on ne modifie pas
+    expect(screen.queryByLabelText('PIN actuel')).not.toBeInTheDocument()
+  })
+
+  it('crée le profil avec le PIN hashé', async () => {
+    const user = userEvent.setup()
+    await goToSignup(user)
+
+    await user.type(screen.getByLabelText('PIN à 4 chiffres'), '4321')
+    await user.type(screen.getByLabelText('Confirmer le PIN'), '4321')
+    await user.click(screen.getByRole('button', { name: /Créer mon compte/ }))
+
+    await waitFor(() =>
+      expect(mockCreate).toHaveBeenCalledWith({
+        first_name: 'Jean',
+        last_name: 'Dupont',
+        pin_hash: hashPin('4321'),
+      })
+    )
+  })
+
+  it('refuse deux PIN différents', async () => {
+    const user = userEvent.setup()
+    await goToSignup(user)
+
+    await user.type(screen.getByLabelText('PIN à 4 chiffres'), '4321')
+    await user.type(screen.getByLabelText('Confirmer le PIN'), '9999')
+    await user.click(screen.getByRole('button', { name: /Créer mon compte/ }))
+
+    expect(await screen.findByText('Les PIN ne correspondent pas')).toBeInTheDocument()
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+
+  it('refuse un PIN trop court', async () => {
+    const user = userEvent.setup()
+    await goToSignup(user)
+
+    await user.type(screen.getByLabelText('PIN à 4 chiffres'), '43')
+    await user.type(screen.getByLabelText('Confirmer le PIN'), '43')
+    await user.click(screen.getByRole('button', { name: /Créer mon compte/ }))
+
+    expect(await screen.findByText('Le PIN doit faire 4 chiffres')).toBeInTheDocument()
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+
+  it('« Passer sans PIN » crée quand même le profil', async () => {
+    const user = userEvent.setup()
+    await goToSignup(user)
+
+    await user.click(screen.getByRole('button', { name: /Passer sans PIN/ }))
+
+    await waitFor(() =>
+      expect(mockCreate).toHaveBeenCalledWith({
+        first_name: 'Jean',
+        last_name: 'Dupont',
+        pin_hash: null,
+      })
+    )
+  })
+
+  it('avertit qu’un PIN oublié est définitif', async () => {
+    const user = userEvent.setup()
+    await goToSignup(user)
+
+    expect(screen.getByText(/Personne ne peut le réinitialiser/)).toBeInTheDocument()
+  })
+
+  it('« Changer de nom » revient à l’identité en gardant le nom', async () => {
+    const user = userEvent.setup()
+    await goToSignup(user)
+
+    await user.click(screen.getByRole('button', { name: /Changer de nom/ }))
+
+    // Le nom est conservé : il s'agissait de le corriger, pas de le ressaisir
+    expect(await screen.findByLabelText('Prénom')).toHaveValue('Jean')
+    expect(screen.getByLabelText('Nom')).toHaveValue('Dupont')
+    // Et rien n'a été créé
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+
+  it('permet de changer de nom puis de créer le bon profil', async () => {
+    const user = userEvent.setup()
+    mockFind.mockImplementation(async (first: string) =>
+      first === 'Jean' ? null : (profile({ user_number: 3, pin_hash: hashPin('1234') }) as never)
+    )
+
+    renderForm()
+    await waitFor(() => expect(screen.getByLabelText('Prénom')).toBeInTheDocument())
+    await fillIdentity(user, 'Jean', 'Dupont')
+    await user.click(screen.getByRole('button', { name: /Continuer/ }))
+    await screen.findByLabelText('Confirmer le PIN')
+
+    // On s'était trompé de personne
+    await user.click(screen.getByRole('button', { name: /Changer de nom/ }))
+    await user.clear(screen.getByLabelText('Prénom'))
+    await user.clear(screen.getByLabelText('Nom'))
+    await user.type(screen.getByLabelText('Prénom'), 'Paul')
+    await user.type(screen.getByLabelText('Nom'), 'Martin')
+    await user.click(screen.getByRole('button', { name: /Continuer/ }))
+
+    // Paul existe avec un PIN → écran de vérification, pas de création
+    expect(await screen.findByLabelText('PIN à 4 chiffres')).toBeInTheDocument()
+    expect(screen.getByText('Bonjour Paul')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Créer mon compte/ })).not.toBeInTheDocument()
   })
 })
 
@@ -245,13 +387,19 @@ describe('LoginForm — bouton retour', () => {
     await fillIdentity(user, 'Jean', 'Dupont')
     await user.click(screen.getByRole('button', { name: /Continuer/ }))
 
-    // Jean n'existe pas → profil créé, écran PIN non affiché
-    await waitFor(() => expect(mockCreate).toHaveBeenCalled())
-    expect(mockCreate).toHaveBeenCalledWith({
-      first_name: 'Jean',
-      last_name: 'Dupont',
-      pin_hash: null,
-    })
+    // Jean n'existe pas → écran de création
+    expect(await screen.findByLabelText('Confirmer le PIN')).toBeInTheDocument()
+    expect(screen.getByText(/Tu rejoins le groupe en tant que Jean Dupont/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Passer sans PIN/ }))
+
+    await waitFor(() =>
+      expect(mockCreate).toHaveBeenCalledWith({
+        first_name: 'Jean',
+        last_name: 'Dupont',
+        pin_hash: null,
+      })
+    )
   })
 
   it('« J’ai oublié mon PIN » déconnecte proprement', async () => {
@@ -310,8 +458,10 @@ describe('LoginForm — le PIN est demandé à chaque reconnexion par nom', () =
     await fillIdentity(user)
     await user.click(screen.getByRole('button', { name: /Continuer/ }))
 
-    await waitFor(() => expect(mockFind).toHaveBeenCalledTimes(2))
+    // Connexion directe : ni écran PIN, ni écran de création
+    await waitFor(() => expect(screen.queryByLabelText(/Confirmer/)).not.toBeInTheDocument())
     expect(screen.queryByLabelText(/PIN à 4 chiffres/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Créer mon compte/ })).not.toBeInTheDocument()
   })
 })
 

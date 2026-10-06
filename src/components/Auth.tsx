@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Lock,
   User as UserIcon,
-  Shield,
+  SportShoe,
   ArrowLeft,
   Eye,
   EyeOff,
   KeyRound,
   Info,
+  UserPlus,
 } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Card, CardContent } from './ui/Card'
@@ -62,6 +63,7 @@ function PinField({ id, value, onChange, label, autoFocus, onEnter }: PinFieldPr
 export function LoginForm() {
   const {
     createUserProfile,
+    profileExists,
     verifyUserPin,
     isFirstLogin,
     needsPin,
@@ -71,14 +73,16 @@ export function LoginForm() {
     logout,
   } = useAuth()
 
-  // 'identity' | 'pin'
-  const [step, setStep] = useState<'identity' | 'pin'>('identity')
+  // 'identity' | 'setup' (création) | 'pin' (vérification)
+  const [step, setStep] = useState<'identity' | 'setup' | 'pin'>('identity')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [pin, setPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  // Nom retenu pendant l'écran de création, pour ne pas le ressaisir
+  const [newName, setNewName] = useState({ first: '', last: '' })
 
   // Un profil existant avec PIN bascule sur l'étape « pin »
   useEffect(() => {
@@ -86,7 +90,6 @@ export function LoginForm() {
     if (isFirstLogin) setStep('identity')
   }, [needsPin, isFirstLogin])
 
-  // Le mode PIN peut aussi être atteint juste après une création
   const handleIdentitySubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
@@ -101,10 +104,15 @@ export function LoginForm() {
 
       setSubmitting(true)
       try {
-        // createUserProfile bascule en pin_verification si un PIN existe,
-        // ou connecte directement sinon. Pas de PIN à saisir ici :
-        // la décision appartient à la base.
-        await createUserProfile(first, last)
+        // Nom inconnu → écran de création, car c'est le moment de choisir
+        // son PIN. Nom connu → reconnexion directe (le PIN éventuel est
+        // demandé par createUserProfile).
+        if (await profileExists(first, last)) {
+          await createUserProfile(first, last)
+        } else {
+          setNewName({ first, last })
+          setStep('setup')
+        }
       } catch (err) {
         console.error('[AUTH] Erreur:', err)
         setError('Impossible de te connecter. Réessaie.')
@@ -112,7 +120,43 @@ export function LoginForm() {
         setSubmitting(false)
       }
     },
-    [firstName, lastName, createUserProfile]
+    [firstName, lastName, profileExists, createUserProfile]
+  )
+
+  /** Création effective du profil, avec ou sans PIN */
+  const finishSignup = useCallback(
+    async (withPin?: string) => {
+      setError('')
+      setSubmitting(true)
+      try {
+        await createUserProfile(newName.first, newName.last, withPin)
+      } catch (err) {
+        console.error('[AUTH] Erreur création:', err)
+        setError('Impossible de créer le compte. Réessaie.')
+      } finally {
+        setSubmitting(false)
+      }
+    },
+    [newName, createUserProfile]
+  )
+
+  const handleSignupSubmit = useCallback(
+    async (e?: React.FormEvent) => {
+      e?.preventDefault()
+      setError('')
+
+      if (pin.length !== 4) {
+        setError('Le PIN doit faire 4 chiffres')
+        return
+      }
+      if (pin !== confirmPin) {
+        setError('Les PIN ne correspondent pas')
+        return
+      }
+
+      await finishSignup(pin)
+    },
+    [pin, confirmPin, finishSignup]
   )
 
   const handlePinSubmit = useCallback(
@@ -140,16 +184,95 @@ export function LoginForm() {
   )
 
   const handleBack = useCallback(() => {
-    // On repart d'un écran d'identité vierge : sinon la saisie suivante
-    // s'ajoute à l'ancien nom ("Paul" + "Jean" → "PaulJean")
-    setFirstName('')
-    setLastName('')
+    // Depuis l'écran de création on revient en gardant le nom : il est juste
+    // mal orthographié, pas absent. Depuis l'écran PIN on repart de zéro
+    // (sinon la saisie suivante s'ajoute à l'ancien nom : « PaulJean »).
+    const fromSetup = step === 'setup'
     setPin('')
     setConfirmPin('')
     setError('')
-    setStep('identity')
-    resetToIdentity()
-  }, [resetToIdentity])
+
+    if (fromSetup) {
+      setFirstName(newName.first)
+      setLastName(newName.last)
+      setStep('identity')
+    } else {
+      setFirstName('')
+      setLastName('')
+      setStep('identity')
+      resetToIdentity()
+    }
+  }, [step, newName, resetToIdentity])
+
+  // ---------- Écran de création (compte + PIN) ----------
+  if (step === 'setup') {
+    return (
+      <Card className="w-full max-w-md mx-auto">
+        <CardContent className="p-6">
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <UserPlus className="w-8 h-8 text-primary" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900">Bienvenue !</h3>
+            <p className="text-gray-500 mt-1">
+              Tu rejoins le groupe en tant que {newName.first} {newName.last}
+            </p>
+          </div>
+
+          <form onSubmit={handleSignupSubmit} className="space-y-4">
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {error}
+              </div>
+            )}
+
+            <p className="text-sm text-gray-600">
+              Un PIN empêche les autres de voter à ta place sur ton téléphone. Personne ne
+              peut le réinitialiser — si tu l'oublies, tu perds l'accès à ce profil.
+            </p>
+
+            <PinField
+              id="pin-signup"
+              value={pin}
+              onChange={setPin}
+              label="PIN à 4 chiffres"
+              autoFocus
+              onEnter={() => void handleSignupSubmit()}
+            />
+            <PinField
+              id="pin-signup-confirm"
+              value={confirmPin}
+              onChange={setConfirmPin}
+              label="Confirmer le PIN"
+            />
+
+            <Button type="submit" className="w-full" disabled={loading || submitting}>
+              {submitting ? 'Création...' : 'Créer mon compte'}
+            </Button>
+
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full"
+              onClick={() => void finishSignup(undefined)}
+              disabled={loading || submitting}
+            >
+              Passer sans PIN
+            </Button>
+          </form>
+
+          <button
+            type="button"
+            onClick={handleBack}
+            className="mt-4 flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Changer de nom
+          </button>
+        </CardContent>
+      </Card>
+    )
+  }
 
   // ---------- Écran PIN ----------
   if (step === 'pin' && needsPin && pendingUser) {
@@ -214,9 +337,9 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-md mx-auto">
       <CardContent className="p-6">
-        <div className="text-center mb-6">
-          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Shield className="w-8 h-8 text-primary" />
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-11 h-11 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
+            <SportShoe className="w-6 h-6 text-primary" />
           </div>
           <h3 className="text-xl font-semibold text-gray-900">HappyRunners</h3>
         </div>
@@ -230,14 +353,11 @@ export function LoginForm() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Ton prénom et ton nom
+              Identification
             </label>
             <p className="text-sm text-gray-500 mb-3 flex items-start gap-2">
               <Info className="w-4 h-4 shrink-0 mt-0.5 text-gray-400" />
-              <span>
-                C'est ton identifiant dans le groupe. Écris-le exactement comme tu veux
-                qu'il apparaisse, il ne sera plus modifiable après.
-              </span>
+              <span>Ton nom te sert d'identifiant dans le groupe.</span>
             </p>
           </div>
 
@@ -283,6 +403,10 @@ export function LoginForm() {
             {submitting ? 'Connexion...' : 'Continuer'}
           </Button>
         </form>
+
+        <p className="mt-6 pt-4 border-t border-gray-100 text-center text-sm text-gray-400">
+          Le mercredi à 12h30, quand on veut.
+        </p>
       </CardContent>
     </Card>
   )

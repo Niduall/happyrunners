@@ -144,7 +144,7 @@ export function Home() {
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
         {!isAuthenticated && (
-          <div className="text-center py-12">
+          <div className="flex justify-center py-8">
             <LoginForm />
           </div>
         )}

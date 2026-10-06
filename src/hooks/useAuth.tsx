@@ -27,6 +27,11 @@ export interface AuthState {
   isFirstLogin: boolean
   needsPin: boolean
   createUserProfile: (firstName: string, lastName: string, pin?: string) => Promise<boolean>
+  /**
+   * Un profil existe-t-il déjà pour ce nom ?
+   * Permet d'afficher l'écran de création (avec PIN) AVANT d'écrire en base.
+   */
+  profileExists: (firstName: string, lastName: string) => Promise<boolean>
   verifyUserPin: (pin: string) => Promise<boolean>
   updateName: (firstName: string, lastName: string) => Promise<boolean>
   /** Ajoute un PIN, ou le change si `currentPin` est fourni */
@@ -168,6 +173,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [connect, requestPin]
   )
 
+  const profileExists = useCallback(
+    async (firstName: string, lastName: string): Promise<boolean> => {
+      const first = firstName.trim()
+      const last = lastName.trim()
+      if (!first || !last) return false
+
+      try {
+        const existing = await findProfileByName(first, last)
+        return !!existing
+      } catch (err) {
+        console.error('[AUTH] Erreur recherche profil:', err)
+        return false
+      }
+    },
+    []
+  )
+
   const verifyUserPin = useCallback(
     async (pin: string): Promise<boolean> => {
       if (!pendingUser) return false
@@ -291,6 +313,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isFirstLogin: mode === 'first_login',
       needsPin: mode === 'pin_verification',
       createUserProfile,
+      profileExists,
       verifyUserPin,
       updateName,
       setPin,
@@ -303,6 +326,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mode,
       pendingUser,
       createUserProfile,
+      profileExists,
       verifyUserPin,
       updateName,
       setPin,

@@ -12,6 +12,10 @@ build/
 .env.local
 .env.*.local
 
+# Backups de la base
+# Contiennent les noms et les votes de tes collègues : JAMAIS versionnés.
+backups/
+
 # IDE
 .idea/
 .vscode/

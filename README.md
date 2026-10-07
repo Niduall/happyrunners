@@ -4,22 +4,21 @@ Application PWA pour organiser les sorties running du mercredi midi avec les col
 
 ## Fonctionnalités
 
-- 📅 **Prochain mercredi** : Météo + parcours proposé + participation
-- 🌤️ **Météo** : Via OpenWeatherMap (gratuit, 1000 req/jour)
-- 🗺️ **Parcours** : Import GPX (export Strava) + affichage carte Leaflet
-- ✅ **Participation** : Boutons "Je participe / Je ne participe pas" (stocké localement)
-- 📱 **PWA** : Installable sur iOS/Android, fonctionne offline
-- 💾 **Pas de backend** : Tout en LocalStorage pour commencer
+- 📅 **Prochain mercredi** : météo à 12h30, parcours proposés, vote
+- 🌤️ **Météo** : Open-Meteo — 16 jours de prévision, **aucune clé API requise**
+- 🗺️ **Parcours** : import GPX (Strava inclus) + carte Leaflet
+- ✅ **Présence** : « Je viens » / « Pas aujourd'hui » par semaine
+- 🗳️ **Vote** : un parcours par personne et par semaine, égalité signalée
+- 🔐 **PIN** : 4 chiffres, optionnel, gérable depuis le menu du profil
+- 📱 **PWA** : installable iOS/Android, fonctionne hors ligne
 
 ## Stack
 
 - React 18 + TypeScript + Vite
 - Tailwind CSS v4
-- Leaflet + OpenStreetMap (carte gratuite)
-- gpxparser (parse GPX)
-- date-fns (dates)
-- lucide-react (icônes)
-- vite-plugin-pwa (PWA)
+- Leaflet + OpenStreetMap
+- Supabase (base seule — pas d'authentification serveur)
+- lucide-react · vite-plugin-pwa
 
 ## Installation
 
@@ -27,16 +26,49 @@ Application PWA pour organiser les sorties running du mercredi midi avec les col
 npm install
 ```
 
-## Configuration météo
+## Configuration
 
-1. Créez un compte gratuit sur [OpenWeatherMap](https://openweathermap.org/api)
-2. Récupérez votre API Key
-3. Copiez `.env.example` vers `.env` et ajoutez votre clé :
-   ```env
-   VITE_OPENWEATHER_API_KEY=votre_cle
-   VITE_DEFAULT_LAT=48.8566  # Votre latitude
-   VITE_DEFAULT_LON=2.3522   # Votre longitude
-   ```
+Copiez `.env.example` vers `.env` :
+
+```env
+VITE_SUPABASE_URL=https://votre-projet.supabase.co
+VITE_SUPABASE_ANON_KEY=votre_cle_anon
+VITE_DEFAULT_LAT=48.6833   # Tomblaine
+VITE_DEFAULT_LON=6.2167
+```
+
+La clé anon est **régénérable** depuis le dashboard Supabase. Aucune clé
+météo : Open-Meteo n'en demande pas.
+
+## Base de données
+
+`schema.sql` est la **source de vérité** de la structure : tables, séquence
+`user_number`, contraintes, clés étrangères, index et politiques RLS. Il est
+rejouable tel quel sur une base vide, et `src/services/schema.test.ts` le
+verrouille (une dérive entre le fichier et la prod fait échouer les tests).
+
+Pour reconstruire une base neuve : jouer `schema.sql`, puis
+`python3 backup.py restore <fichier>`.
+
+### Sauvegarde
+
+```bash
+python3 backup.py save              # exporte la prod dans backups/<date>.json
+python3 backup.py list              # backups disponibles
+python3 backup.py restore <fichier> # ⚠️ REMPLACE le contenu des tables
+```
+
+Les backups contiennent les noms et les votes des membres : ils sont ignorés
+par git (`backups/`) et ne doivent pas circuler.
+
+## Sécurité
+
+Les politiques RLS sont **ouvertes** (`USING (true)`) et l'authentification est
+uniquement côté client (nom + PIN hashé). Conséquence : quiconque possède l'URL
+et la clé anon peut lire et écrire toutes les tables.
+
+C'est une **dissuasion**, pas une sécurité. Adapté à un club entre
+collègues ; à revoir avant toute mise en ligne publique.
 
 ## Développement
 
@@ -60,29 +92,27 @@ Le dossier `dist/` est prêt à déployer sur **Vercel**, **Netlify** ou **GitHu
 
 ## Utilisation
 
-1. **Page d'accueil** : Voit le prochain mercredi, la météo, le parcours, et vote
-2. **Page Parcours** : Liste tous les parcours, ajoute/en supprime via upload GPX
-3. **Export Strava** : Sur strava.com → Mes activités → menu → "Exporter GPX"
+1. **Identification** : prénom + nom → crée le profil, avec PIN optionnel
+2. **Accueil** : météo du mercredi 12h30, parcours proposés, vote
+3. **Gérer les parcours** : import GPX, suppression confirmée
+4. **Export Strava** : strava.com → Mes activités → menu → « Exporter GPX »
 
 ## Structure
 
 ```
+schema.sql          # structure de la base — SOURCE DE VÉRITÉ
+backup.py           # export / restauration
+ARCHITECTURE.md     # machine à états, flux, points d'attention
 src/
-├── components/     # UI components (MapView, WeatherCard, ParticipationBtn, ParcoursCard)
+├── components/     # Auth, UserMenu, SecurityModal, WeatherCard, ParticipantsTable…
 ├── pages/          # Home, ParcoursList
-├── services/       # weatherApi, gpxParser, storage
-├── hooks/          # useWeather, useParticipation
-├── types/          # TypeScript interfaces
-├── lib/            # utils (cn)
-├── App.tsx         # Routes
-└── main.tsx        # Entry point
+├── hooks/          # useAuth, useParcours, useParcoursVotes, useAttendance…
+├── services/       # supabaseService, weatherApi, gpxParser, storage, weekKey
+├── types/          # interfaces TypeScript
+└── lib/            # utils (cn)
 ```
 
-## Prochaines étapes (v2)
+## Historique des sorties
 
-- [ ] Backend simple (Supabase/Firebase) pour synchroniser les participations
-- [ ] Partage de lien vers le parcours
-- [ ] Notifications push (mercredi matin)
-- [ ] Historique des sorties
-- [ ] Statistiques (km cumulés, participation)
-- [ ] Authentification simple (nom seulement)
+Pas encore implémenté. L'app ne conserve qu'une semaine active : elle bascule
+sur le mercredi suivant à 14h (voir `weekKey.ts`).

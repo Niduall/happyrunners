@@ -41,7 +41,7 @@ npm run build      # 0 erreur TypeScript
 ## Architecture (résumé)
 - **SPA**: React 18 + React Router
 - **PWA**: vite-plugin-pwa, autoUpdate
-- **Auth**: Prénom/Nom → `generateUserId()` déterministe. PIN 4 chiffres hashé stocké en base (`user_profiles.pin_hash`), jamais en localStorage
+- **Auth**: Prénom/Nom → `user_number` (entier attribué par la base, **jamais dérivé du nom**). PIN 4 chiffres hashé stocké en base (`user_profiles.pin_hash`), jamais en localStorage
 - **State**: Supabase = source de vérité. localStorage = cache utilisateur local
 - **Polling**: 30s pour parcours + participations
 
@@ -54,7 +54,7 @@ npm run build      # 0 erreur TypeScript
 | `src/hooks/useParcoursVotes.ts` | Votes hebdo multi-parcours + roster + 30s polling — **source unique** |
 | `src/hooks/useWeather.ts` | Météo mercredi 12h30 |
 | `src/services/supabaseService.ts` | API Supabase |
-| `src/services/storage.ts` | localStorage + `generateUserId` |
+| `src/services/storage.ts` | cache utilisateur local (invalide les ids non entiers) |
 | `src/services/gpxParser.ts` | GPX (XML + JSON Strava) |
 | `src/services/weatherApi.ts` | Open-Meteo (16 jours, sans clé) |
 | `src/services/weatherCode.ts` | Codes WMO → emoji |
@@ -130,20 +130,32 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 
 ## Database Schema
 
-### `user_profiles`
-```sql
-id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-user_number INTEGER NOT NULL UNIQUE,   -- SEQUENCE, stable
-first_name TEXT NOT NULL,
-last_name TEXT NOT NULL,
-pin_hash TEXT,                        -- NULL = pas de PIN
-created_at, updated_at TIMESTAMPTZ
-```
+**Source de vérité : `schema.sql`.** Ce fichier est rejouable tel quel sur une
+base vide. Ne jamais décrire le schéma dans la prose ci-dessous : c'est ainsi
+que ce document avait fini par annoncer un `participations(local_user_id)`
+qui n'existait plus depuis la migration `user_number`.
 
-### `participations`
-```sql
-UNIQUE (parcours_id, local_user_id)  -- ⚠️ pas (parcours_id, user_id)
-user_id UUID NULL                    -- legacy, toujours NULL
+### Les 4 tables
+| Table | Clé | Particularité |
+|---|---|---|
+| `user_profiles` | `user_number` (SEQUENCE) | identifiant **stable**, indépendant du nom |
+| `parcours` | `id` uuid | `points` jsonb = tracé GPX |
+| `attendances` | `UNIQUE(week_key, user_number)` | `going` \| `skip` |
+| `participations` | `UNIQUE(user_number, week_key)` | **un seul parcours par personne et par semaine** |
+
+### Points non négociables
+- `participations.parcours_id` est en **`ON DELETE CASCADE`** : supprimer un
+  parcours emporte ses votes. C'est ce que la confirmation annonce.
+- `onConflict` des votes = **`user_number,week_key`**, jamais `parcours_id`.
+- La séquence `user_number` est irremplaçable. La perdre casse la création.
+- `profiles` et `responses` sont des tables **mortes** (ancien identifiant
+  dérivé du nom). `schema.sql` les supprime ; ne pas les recréer.
+
+### Sauvegarde
+```bash
+python3 backup.py save              # exporte la prod (hors dépôt)
+python3 backup.py list              # backups disponibles
+python3 backup.py restore <fichier> # ⚠️ remplace le contenu des tables
 ```
 
 ## Testing
@@ -152,7 +164,7 @@ npm test
 ```
 | Fichier | Couvre |
 |---------|--------|
-| `src/services/storage.test.ts` | `generateUserId`, `createUser` |
+| `src/services/storage.test.ts` | cache utilisateur local |
 | `src/hooks/useAuth.hash.test.tsx` | `hashPin` (6 tests) |
 | `src/hooks/useAuth.integration.test.tsx` | Flux auth complet + partage d'état (16 tests) |
 | `src/services/weekKey.test.ts` | Bascule 14h, passage d'année, bissextile (37 tests) |
@@ -176,7 +188,7 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
 4. **Ne pas écraser un `pin_hash` existant** lors d'une "création" de compte
 4b. **Ne jamais recréer `useAuth` sans Context** — l'état doit être partagé, pas dupliqué
 5. **Tester en navigation privée** (Ctrl+Shift+N) — le cache Vercel masque les changements
-6. **`onConflict` des votes** doit être `parcours_id,local_user_id`
+6. **`onConflict` des votes** doit être `user_number,week_key` — un seul parcours par personne et par semaine
 7. **Realtime instable** sur plan gratuit → polling 30s
 7b. **Consommer `useTargetWednesday()`** plutôt que `getCurrentWeekKey()` figé au montage
 7c. **Météo : vent déjà en km/h** — ne pas reconvertir (Open-Meteo ≠ OpenWeather)

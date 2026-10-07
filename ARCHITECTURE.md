@@ -23,7 +23,7 @@ src/
 │   ├── supabase.ts          # Client Supabase
 │   └── utils.ts             # Utilitaires (cn, etc.)
 ├── services/
-│   ├── storage.ts           # localStorage wrapper + generateUserId
+│   ├── storage.ts           # cache utilisateur local
 │   ├── supabaseService.ts   # API Supabase (Parcours, Participations, UserProfiles)
 │   ├── weatherApi.ts        # Open-Meteo (16 jours, sans clé)
 │   ├── weatherCode.ts       # Codes WMO → emoji + couleurs
@@ -81,17 +81,15 @@ loading
         └─ logout() → first_login
 ```
 
-### Identifiant unique
-`generateUserId(firstName, lastName)` — déterministe, cross-browser/OS :
-- minuscules, sans accents, sans ponctuation, `_` entre prénom et nom
-- `"André" + "Müller"` → `andre_muller`
-- **Même nom = même ID = même vote sur tous les appareils**
-
 ### PIN
 - Hashé côté client (`hashPin`) → base36 préfixé `pin_`
 - Stocké **uniquement** en base : `user_profiles.pin_hash`
 - **Jamais** dans localStorage
 - Coté client uniquement (pas de Supabase Auth) → sécurité faible par conception, suffisant pour un club de collègues
+
+> L'ancien `generateUserId(firstName, lastName)` a été **supprimé**. Un
+> identifiant dérivé du nom est la source du bug « changer de nom casse les
+> votes ». Voir la section « Identité : `user_number` » ci-dessous.
 
 ---
 
@@ -128,8 +126,16 @@ Reconnexion sur un autre appareil : on retrouve son `user_number` via
 | Table | PK | Contrainte unique | Colonnes clés |
 |-------|-----|-------------------|---------------|
 | `parcours` | `id` (uuid) | — | `name`, `distance_km`, `elevation_gain_m`, `points` (jsonb), `created_by` (nullable) |
-| `participations` | `id` (uuid) | `(parcours_id, local_user_id, week_key)` | `local_user_id` (text), `status` (yes/no), `week_key`, `first_name`, `last_name`, `user_id` (nullable, legacy) |
-| `user_profiles` | `user_number` (SERIAL) | — | `first_name`, `last_name`, `pin_hash` (nullable) |
+| `participations` | `id` (uuid) | **`(user_number, week_key)`** | `parcours_id` (FK, **CASCADE**), `user_number`, `status` (yes/no), `week_key` |
+| `attendances` | `id` (uuid) | **`(week_key, user_number)`** | `user_number`, `status` (going/skip), `week_key` |
+| `user_profiles` | `id` (uuid) | `user_number` | `user_number` (SEQUENCE, **stable**), `first_name`, `last_name`, `pin_hash` (nullable) |
+
+> ⚠️ `participations` est en `UNIQUE(user_number, week_key)` : une personne ne
+> peut être comptée que sur **un seul parcours** par semaine. Le `onConflict`
+> de `castWeekVote()` doit refléter cet ordre, sinon l'upsert échoue.
+>
+> `profiles` et `responses` sont des tables mortes (ancien identifiant dérivé
+> du nom). `schema.sql` les supprime.
 ---
 
 ## Polling 30s
@@ -242,7 +248,7 @@ npm test:watch    # watch mode
 
 | Fichier | Couvre |
 |---------|--------|
-| `src/services/storage.test.ts` | `generateUserId` (casse, accents, espaces, ponctuation, Unicode), `createUser` |
+| `src/services/storage.test.ts` | cache local, invalidation des ids non entiers |
 | `src/hooks/useAuth.test.ts` | `hashPin` (déterminisme, format, zéros en tête) |
 | `src/hooks/useAuth.integration.test.ts` | Flux complet : first_login, création, PIN, nouvel appareil, reconnexion, robustesse |
 

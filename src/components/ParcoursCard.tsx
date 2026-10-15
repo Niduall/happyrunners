@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { MapPin, Calendar, Upload, Trash2, Edit2, Eye } from 'lucide-react'
+import { MapPin, Calendar, Upload, Trash2, Edit2, Eye, Lock } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Card, CardHeader, CardContent, CardFooter } from './ui/Card'
 import { MapView } from './MapView'
@@ -15,9 +15,22 @@ interface ParcoursCardProps {
   onDelete?: (id: string) => void
   onView?: (parcours: Parcours) => void
   showActions?: boolean
+  /** true → modification et suppression accessibles */
+  adminUnlocked?: boolean
+  /** Ouvre la demande de code admin (absent → pas de cadenas) */
+  onRequestAdmin?: () => void
 }
 
-export function ParcoursCard({ parcours, isNext, onEdit, onDelete, onView, showActions = true }: ParcoursCardProps) {
+export function ParcoursCard({
+  parcours,
+  isNext,
+  onEdit,
+  onDelete,
+  onView,
+  showActions = true,
+  adminUnlocked = false,
+  onRequestAdmin,
+}: ParcoursCardProps) {
   const [showMap, setShowMap] = useState(false)
   const [uploading, setUploading] = useState(false)
 
@@ -81,12 +94,32 @@ export function ParcoursCard({ parcours, isNext, onEdit, onDelete, onView, showA
               <Button variant="ghost" size="sm" onClick={() => setShowMap(!showMap)} aria-label={showMap ? 'Masquer la carte' : 'Voir la carte'}>
                 <Eye className="w-4 h-4" />
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => onEdit?.(parcours)} aria-label="Modifier">
-                <Edit2 className="w-4 h-4" />
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => onDelete?.(parcours.id)} aria-label="Supprimer" className="text-error hover:text-error/80">
-                <Trash2 className="w-4 h-4" />
-              </Button>
+
+              {/* Modification et suppression réservées à l'admin : un seul
+                  cadenas à la place des deux boutons. La carte reste
+                  visible, elle est inoffensive. */}
+              {adminUnlocked ? (
+                <>
+                  <Button variant="ghost" size="sm" onClick={() => onEdit?.(parcours)} aria-label="Modifier">
+                    <Edit2 className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => onDelete?.(parcours.id)} aria-label="Supprimer" className="text-error hover:text-error/80">
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </>
+              ) : (
+                onRequestAdmin && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onRequestAdmin}
+                    aria-label="Déverrouiller la gestion des parcours"
+                    title="Code administrateur requis"
+                  >
+                    <Lock className="w-4 h-4 text-gray-400" />
+                  </Button>
+                )
+              )}
             </div>
           )}
         </div>

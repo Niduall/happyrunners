@@ -7,6 +7,12 @@ import {
   findProfileByName,
 } from '../services/supabaseService'
 import { hashPin } from '../services/pin'
+import {
+  isAdminLockEnabled,
+  isAdminUnlocked as readAdminUnlocked,
+  setAdminUnlocked as writeAdminUnlocked,
+  verifyAdminCode,
+} from '../services/adminCode'
 
 export type { User }
 
@@ -38,6 +44,14 @@ export interface AuthState {
   setPin: (newPin: string, currentPin?: string) => Promise<boolean>
   /** Retire le PIN (nécessite le PIN actuel) */
   clearPin: (currentPin: string) => Promise<boolean>
+  /** Le verrou admin est-il configuré ? (sinon aucun cadenas affiché) */
+  adminLockEnabled: boolean
+  /** L'admin est-il déverrouillé pour cet onglet ? */
+  adminUnlocked: boolean
+  /** Vérifie le code admin et déverrouille l'onglet. false si incorrect. */
+  unlockAdmin: (code: string) => boolean
+  /** Reverrouille immédiatement */
+  lockAdmin: () => void
   /** Revient à l'écran d'identité (utile pour « changer de nom ») */
   resetToIdentity: () => void
   logout: () => void
@@ -49,6 +63,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [mode, setMode] = useState<AuthMode>('loading')
   const [pendingUser, setPendingUser] = useState<PendingUser | null>(null)
+  // Pas de code configuré → pas de verrou → l'admin est libre partout
+  const [adminUnlockedState, setAdminUnlockedState] = useState<boolean>(() =>
+    isAdminLockEnabled() ? readAdminUnlocked() : true
+  )
 
   const connect = useCallback(
     (profile: { user_number: number; first_name: string; last_name: string }) => {
@@ -296,12 +314,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMode('first_login')
   }, [])
 
+  /** Reverrouille l'admin — à appeler à la déconnexion */
+  const lockAdmin = useCallback(() => {
+    writeAdminUnlocked(false)
+    setAdminUnlockedState(false)
+  }, [])
+
+  /** Vérifie le code admin. L'état est mémorisé pour la session de l'onglet. */
+  const unlockAdmin = useCallback((code: string): boolean => {
+    // Pas de code configuré → pas de verrou à ouvrir
+    if (!isAdminLockEnabled()) return false
+    if (!verifyAdminCode(code)) return false
+    writeAdminUnlocked(true)
+    setAdminUnlockedState(true)
+    return true
+  }, [])
+
   const logout = useCallback(() => {
     clearUser()
     setUser(null)
     setPendingUser(null)
     setMode('first_login')
-  }, [])
+    // Déconnexion = reverrouillage. Sinon on laisse le code admin actif sur
+    // un téléphone partagé : le suivant se connecte et supprime des parcours.
+    lockAdmin()
+  }, [lockAdmin])
 
   const value = useMemo<AuthState>(
     () => ({
@@ -318,6 +355,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateName,
       setPin,
       clearPin,
+      adminLockEnabled: isAdminLockEnabled(),
+      adminUnlocked: adminUnlockedState,
+      unlockAdmin,
+      lockAdmin,
       resetToIdentity,
       logout,
     }),
@@ -325,12 +366,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       mode,
       pendingUser,
+      adminUnlockedState,
       createUserProfile,
       profileExists,
       verifyUserPin,
       updateName,
       setPin,
       clearPin,
+      unlockAdmin,
+      lockAdmin,
       resetToIdentity,
       logout,
     ]

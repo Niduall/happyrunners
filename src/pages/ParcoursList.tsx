@@ -5,9 +5,11 @@ import { Button } from '../components/ui/Button'
 import { Card, CardContent } from '../components/ui/Card'
 import { ParcoursCard } from '../components/ParcoursCard'
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal'
+import { AdminCodeModal } from '../components/AdminCodeModal'
 import { parseGPX } from '../services/gpxParser'
 import { addParcours, deleteParcours, getWeekTallies } from '../services/supabaseService'
 import { useParcours } from '../hooks/useParcours'
+import { useAuth } from '../hooks/useAuth'
 import { useTargetWednesday } from '../hooks/useTargetWednesday'
 import type { Parcours } from '../types/supabase'
 
@@ -15,6 +17,7 @@ export function ParcoursList() {
   const navigate = useNavigate()
   const { parcoursList, loading, createParcours, removeParcours } = useParcours()
   const { weekKey } = useTargetWednesday()
+  const { adminUnlocked, adminLockEnabled, unlockAdmin } = useAuth()
   const [showAddForm, setShowAddForm] = useState(false)
   const [newParcoursName, setNewParcoursName] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -24,6 +27,8 @@ export function ParcoursList() {
   const [pendingDelete, setPendingDelete] = useState<Parcours | null>(null)
   // Nombre de votes par parcours, pour annoncer ce qui sera perdu
   const [voteCounts, setVoteCounts] = useState<Record<string, number>>({})
+  // Demande du code administrateur
+  const [adminModalOpen, setAdminModalOpen] = useState(false)
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -188,12 +193,28 @@ export function ParcoursList() {
                 parcours={parcours}
                 isNext={index === 0}
                 onDelete={handleDelete}
+                adminUnlocked={adminUnlocked}
+                onRequestAdmin={
+                  adminLockEnabled && !adminUnlocked ? () => setAdminModalOpen(true) : undefined
+                }
               />
             ))}
           </div>
         )}
 
-        {/* Confirmation avant suppression — rien n'est effacé avant « Supprimer » */}
+        {/* Code administrateur — demandé avant d'ouvrir modification / suppression */}
+      {adminModalOpen && (
+        <AdminCodeModal
+          onUnlock={(code) => {
+            const ok = unlockAdmin(code)
+            if (ok) setAdminModalOpen(false)
+            return ok
+          }}
+          onCancel={() => setAdminModalOpen(false)}
+        />
+      )}
+
+      {/* Confirmation avant suppression — rien n'est effacé avant « Supprimer » */}
         {pendingDelete && (
           <ConfirmDeleteModal
             parcoursName={pendingDelete.name}

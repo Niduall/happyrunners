@@ -61,6 +61,31 @@ python3 backup.py restore <fichier> # ⚠️ REMPLACE le contenu des tables
 Les backups contiennent les noms et les votes des membres : ils sont ignorés
 par git (`backups/`) et ne doivent pas circuler.
 
+## Code administrateur
+
+La **suppression** et la **modification** d'un parcours demandent un code
+administrateur. L'**import GPX reste libre** : chaque membre peut ajouter
+ses propres tracés.
+
+| | |
+|---|---|
+| Où le définir | `.env` en local, Vercel → Settings → Environment Variables en prod |
+| Variable | `VITE_ADMIN_CODE` |
+| Durée | L'onglet courant — se referme à la fermeture, et à la déconnexion |
+| Code oublié | Changer la variable dans Vercel et redéployer. Aucune base à ouvrir |
+
+Si `VITE_ADMIN_CODE` est absente, aucun cadenas n'apparaît et tout reste
+accessible : un déploiement ne bloque donc jamais l'administrateur par surprise.
+
+### Ce que ce code n'est pas
+
+Il vit dans une variable d'environnement, donc **il est lisible dans le bundle
+JavaScript**. Il empêche la suppression accidentelle ou curieuse en un clic ;
+il n'empêche pas quelqu'un d'écrire un `fetch` à la main avec la clé anon.
+
+Un vrai verrouillage demande une authentification serveur
+(Supabase Auth + politiques RLS restreintes).
+
 ## Sécurité
 
 Les politiques RLS sont **ouvertes** (`USING (true)`) et l'authentification est

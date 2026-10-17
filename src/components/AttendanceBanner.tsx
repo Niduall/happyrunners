@@ -11,23 +11,43 @@ interface AttendanceBannerProps {
 }
 
 export function AttendanceBanner({ myStatus, saving, weekLabel, onChange }: AttendanceBannerProps) {
+  // Tant que la question n'a pas reçu de réponse, l'encadré se signale.
+  // Une fois répondu, il se calme : la réponse est connue, inutile d'y
+  // attirer l'œil à chaque visite.
+  const answered = myStatus !== null
+
   return (
-    <Card className="border-primary/20 bg-primary/5">
+    <Card
+      className={
+        answered
+          ? 'border-primary/20 bg-primary/5'
+          : 'border-primary/40 bg-primary/10 ring-1 ring-primary/20'
+      }
+    >
       <CardContent className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm text-primary">Run du mercredi</p>
-            <p className="text-xs text-gray-500">{weekLabel}</p>
+            {/* Même taille que « Météo pour la course » et « Qui vient ? » */}
+            <p className="text-lg font-semibold text-gray-900">Tu viens ?</p>
+            <p className="text-xs text-gray-500 mt-0.5">Run du mercredi · {weekLabel}</p>
           </div>
 
           <div className="flex gap-2" role="group" aria-label="Participation">
             <Button
-              variant={myStatus === 'going' ? 'primary' : 'outline'}
+              variant={myStatus === 'going' ? 'primary' : answered ? 'secondary' : 'primary'}
               size="sm"
               disabled={saving}
               onClick={() => onChange('going')}
               aria-pressed={myStatus === 'going'}
-              className={myStatus === 'going' ? '' : 'border-gray-300 text-gray-700 hover:bg-white'}
+              className={
+                myStatus === 'going'
+                  ? '' // le variant primary gère son survol
+                  : answered
+                    ? // secondary : survol gris, pas blanc — sinon le bouton
+                      // disparaît sur le fond teinté de la carte
+                      'border-gray-300 text-gray-700 hover:bg-gray-100'
+                    : 'shadow-sm'
+              }
             >
               <Smile className="w-4 h-4" />
               Je viens
@@ -38,7 +58,12 @@ export function AttendanceBanner({ myStatus, saving, weekLabel, onChange }: Atte
               disabled={saving}
               onClick={() => onChange('skip')}
               aria-pressed={myStatus === 'skip'}
-              className={myStatus === 'skip' ? '' : 'border-gray-300 text-gray-700 hover:bg-white'}
+              className={
+                // Couleurs d'origine : le bouton garde l'apparence du
+                // variant outline, seul son survol change pour rester lisible
+                // sur le fond teinté de la carte.
+                'border-gray-300 text-gray-700 hover:bg-gray-100'
+              }
             >
               <Coffee className="w-4 h-4" />
               Pas aujourd'hui
@@ -46,13 +71,9 @@ export function AttendanceBanner({ myStatus, saving, weekLabel, onChange }: Atte
           </div>
         </div>
 
-        {myStatus === null && (
-          <p className="text-xs text-gray-500 mt-2">Tu n'as pas encore répondu pour cette semaine.</p>
-        )}
-
-        {myStatus === 'skip' && (
-          <p className="text-xs text-gray-500 mt-2">
-            Ton choix de parcours a été retiré — tu ne viens pas, donc ça ne compte pas.
+        {!answered && (
+          <p className="mt-3 text-sm font-medium text-primary">
+            Tu n'as pas encore répondu pour cette semaine.
           </p>
         )}
       </CardContent>

@@ -227,10 +227,15 @@ export function Home() {
                 </Button>
               </div>
 
-              {weatherError && (
+              {/* L'erreur ne concerne que l'absence de données. Si une météo est
+                  déjà affichée (cache, tentative précédente), un échec
+                  isolé ne doit pas laisser un bandeau au-dessus d'une
+                  carte valide. */}
+              {weatherError && !weather && (
                 <Card className="border-error/20 bg-error/5">
                   <CardContent className="p-4 flex items-center gap-3 text-error">
-                    <span>Erreur météo : {weatherError}</span>
+                    {/* weatherApi préfixe déjà « Erreur météo : » */}
+                    <span>{weatherError}</span>
                     <Button variant="ghost" size="sm" onClick={refreshWeather}>
                       Réessayer
                     </Button>

@@ -123,9 +123,20 @@ describe('useAttendance — « pas aujourd’hui » retire le choix de parcours'
     expect(result.current.error).toBeTruthy()
   })
 
-  it('masque les préférences de parcours quand skip', async () => {
+  it('ne propose un parcours qu’après « je viens »', async () => {
+    // Régression : sans réponse (myStatus === null), les parcours étaient
+    // proposés. Un nouveau membre pouvait donc voter avant d'avoir dit
+    // qu'il venait, et son vote pesait sur le choix du groupe.
     const { result } = renderAttendance()
     await waitFor(() => expect(result.current.loading).toBe(false))
+
+    // Pas encore répondu → pas de parcours proposés
+    expect(result.current.myStatus).toBeNull()
+    expect(result.current.showParcours).toBe(false)
+
+    await act(async () => {
+      await result.current.setMyStatus('going')
+    })
     expect(result.current.showParcours).toBe(true)
 
     await act(async () => {

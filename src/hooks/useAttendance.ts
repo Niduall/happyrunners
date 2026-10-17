@@ -144,8 +144,11 @@ export function useAttendance(): AttendanceState {
       error,
       setMyStatus,
       statusOf,
-      // "skip" masque les préférences de parcours
-      showParcours: myStatus !== 'skip',
+      // On ne propose un parcours qu'à qui a confirmé sa présence.
+      // ⚠️ `myStatus === null` (pas encore répondu) doit être exclu : sinon
+      // un nouveau membre peut voter avant de répondre, et son vote pèse
+      // alors qu'il n'a jamais dit qu'il venait.
+      showParcours: myStatus === 'going',
     }),
     [myStatus, attendees, weekKey, weekLabel, loading, authLoading, saving, error, setMyStatus, statusOf]
   )

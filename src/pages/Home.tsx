@@ -48,6 +48,15 @@ export function Home() {
     showParcours,
   } = useAttendance()
 
+  /**
+   * Qui a dit « je viens ». Passe aux votes pour qu'un choix d'un absent
+   * soit retiré du décompte immédiatement, sans attendre le polling.
+   */
+  const goingUserNumbers = useMemo(
+    () => attendees.filter((a) => a.status === 'going').map((a) => a.userNumber),
+    [attendees]
+  )
+
   const {
     tallies,
     myChoice,
@@ -58,7 +67,7 @@ export function Home() {
     rankedParcoursIds,
     winners,
     isTie,
-  } = useParcoursVotes(parcoursIds, parcoursNames)
+  } = useParcoursVotes(parcoursIds, parcoursNames, goingUserNumbers)
 
   const parcoursById = useMemo(() => new Map(parcoursList.map((p) => [p.id, p])), [parcoursList])
 
@@ -78,7 +87,11 @@ export function Home() {
   /** Une ligne par personne ayant répondu, avec le parcours qu'elle a choisi */
   const presenceRows = useMemo<PresenceRow[]>(() => {
     return attendees.map((a) => {
-      const chosenId = choiceOf(a.userNumber)
+      // Seuls les présents comptent. Un vote résiduel d'un absent — ou
+      // d'une personne qui n'a jamais répondu — ne doit jamais apparaître
+      // dans le tableau ni peser sur le choix du groupe.
+      const isGoing = a.status === 'going'
+      const chosenId = isGoing ? choiceOf(a.userNumber) : null
       return {
         userNumber: a.userNumber,
         firstName: a.firstName,
@@ -240,8 +253,11 @@ export function Home() {
               ) : null}
             </div>
 
-            {/* 2. Choix du parcours — masqué si "pas aujourd'hui" */}
-            {showParcours && (
+            {/* 2. Parcours proposés — visibles toujours sauf si absent.
+                Le vote reste verrouillé tant que la présence n'est pas
+                confirmée : on voit les parcours et les compteurs, mais on
+                ne peut pas peser dessus sans avoir dit qu'on vient. */}
+            {myStatus !== 'skip' && (
               <div>
                 <div className="flex items-baseline justify-between gap-2 mb-1">
                   <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -253,7 +269,7 @@ export function Home() {
                 <p className="text-sm text-gray-500 mb-3">
                   {myStatus === 'going'
                     ? 'Choisis le parcours qui te convient. Le plus plébiscité sera retenu.'
-                    : 'Réponds « Je viens » pour choisir ton parcours.'}
+                    : 'Tu verras les choix dès que tu auras répondu ci-dessus.'}
                 </p>
 
                 {votesError && (
@@ -302,6 +318,7 @@ export function Home() {
                         isWinner={winners.includes(parcours!.id)}
                         isTied={isTie}
                         saving={savingParcoursId === parcours!.id}
+                        voteLocked={!showParcours}
                         onToggle={() => void toggleChoice(parcours!.id)}
                       />
                     ))}

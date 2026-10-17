@@ -12,6 +12,12 @@ interface ParcoursVoteCardProps {
   isTied?: boolean
   saving: boolean
   onToggle: () => void
+  /**
+   * Vote verrouillé : la présence n'est pas encore confirmée.
+   * Les parcours restent visibles et les compteurs lisibles, mais aucun
+   * bouton n'est affiché — on n'affiche pas une action qui rejette un clic.
+   */
+  voteLocked?: boolean
 }
 
 export function ParcoursVoteCard({
@@ -22,6 +28,7 @@ export function ParcoursVoteCard({
   isTied = false,
   saving,
   onToggle,
+  voteLocked = false,
 }: ParcoursVoteCardProps) {
   return (
     <Card
@@ -68,17 +75,27 @@ export function ParcoursVoteCard({
             </p>
           </div>
 
-          <Button
-            variant={isMyChoice ? 'primary' : 'outline'}
-            size="sm"
-            disabled={saving}
-            onClick={onToggle}
-            aria-pressed={isMyChoice}
-            className={isMyChoice ? '' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}
-          >
-            <Check className="w-4 h-4" />
-            {isMyChoice ? 'Mon choix' : 'Je veux celui-ci'}
-          </Button>
+          {/* Pas de bouton du tout tant que la présence n'est pas confirmée :
+              le parcours reste visible et lisible, mais on n'affiche pas
+              d'action qui rejette un clic. */}
+          {!voteLocked ? (
+            <Button
+              variant={isMyChoice ? 'primary' : 'outline'}
+              size="sm"
+              disabled={saving}
+              onClick={onToggle}
+              aria-pressed={isMyChoice}
+              className={isMyChoice ? '' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}
+            >
+              <Check className="w-4 h-4" />
+              {isMyChoice ? 'Mon choix' : 'Je veux celui-ci'}
+            </Button>
+          ) : isMyChoice ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-primary/10 text-primary shrink-0">
+              <Check className="w-4 h-4" />
+              Mon choix
+            </span>
+          ) : null}
         </div>
       </CardContent>
     </Card>

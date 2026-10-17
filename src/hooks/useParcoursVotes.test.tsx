@@ -9,6 +9,7 @@ import {
   castWeekVote,
   deleteWeekVote,
   getUserProfile,
+  getWeekAttendances,
 } from '../services/supabaseService'
 
 vi.mock('../services/supabaseService', () => ({
@@ -29,6 +30,7 @@ const mockVotes = vi.mocked(getWeekVotes)
 const mockCast = vi.mocked(castWeekVote)
 const mockDelete = vi.mocked(deleteWeekVote)
 const mockGetProfile = vi.mocked(getUserProfile)
+const mockAttendances = vi.mocked(getWeekAttendances)
 
 const wrapper = ({ children }: { children: ReactNode }) => <AuthProvider>{children}</AuthProvider>
 
@@ -45,6 +47,23 @@ interface StoreVote {
 
 /** Store simulé respectant UNIQUE(user_number, week_key) */
 let store: StoreVote[] = []
+
+/**
+ * Présences de la semaine. Un vote ne compte que pour une personne
+ * présente — le hook filtre là-dessus.
+ */
+let attendance: Map<number, 'going' | 'skip'> = new Map()
+
+/**
+ * Déclare présents tous les votants du store.
+ *
+ * À appeler après chaque `store = [...]` qui injecte des votes d'autres
+ * personnes : sinon le hook les filtre (à juste titre) et les compteurs
+ * tombent à zéro.
+ */
+const everyoneComing = () => {
+  attendance = new Map(store.map((v) => [v.userNumber, 'going' as const]))
+}
 
 const tallyOf = (): { parcoursId: string; yes: number; no: number }[] => {
   const acc: { parcoursId: string; yes: number; no: number }[] = []
@@ -64,6 +83,8 @@ describe('useParcoursVotes — un choix unique par semaine', () => {
     localStorage.clear()
     vi.clearAllMocks()
     store = []
+    // Par défaut, tout votant est présent
+    attendance = new Map([[ALICE, 'going' as const]])
     localStorage.setItem(
       'running_user',
       JSON.stringify({ id: ALICE, firstName: 'Alice', lastName: 'Dupont', name: 'Alice Dupont' })
@@ -81,9 +102,22 @@ describe('useParcoursVotes — un choix unique par semaine', () => {
 
     mockVotes.mockImplementation(() => Promise.resolve([...store]))
     mockTallies.mockImplementation(() => Promise.resolve(tallyOf()))
+    // Par défaut tout le monde est présent : sans cela aucun vote ne
+    // compterait et les tests de vote ne testeraient plus rien.
+    mockAttendances.mockImplementation(() =>
+      Promise.resolve(
+        [...attendance.entries()].map(([userNumber, status]) => ({
+          userNumber,
+          firstName: 'Test',
+          lastName: 'User',
+          status,
+        }))
+      )
+    )
     mockCast.mockImplementation(({ parcoursId, userNumber }) => {
       store = store.filter((v) => v.userNumber !== userNumber)
       store.push({ parcoursId, userNumber, status: 'yes' })
+      attendance.set(userNumber, 'going')
       return Promise.resolve()
     })
     mockDelete.mockImplementation((userNumber: number) => {
@@ -124,6 +158,7 @@ describe('useParcoursVotes — un choix unique par semaine', () => {
       { parcoursId: 'p3', userNumber: 7, status: 'yes' },
       { parcoursId: 'p3', userNumber: 8, status: 'yes' },
     ]
+    everyoneComing()
     const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.rankedParcoursIds).toEqual(['p2', 'p3', 'p1'])
@@ -168,6 +203,7 @@ describe('useParcoursVotes — un choix unique par semaine', () => {
       { parcoursId: 'p2', userNumber: 4, status: 'yes' },
       { parcoursId: 'p2', userNumber: 5, status: 'yes' },
     ]
+    everyoneComing()
 
     const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))
@@ -205,6 +241,7 @@ describe('useParcoursVotes — un choix unique par semaine', () => {
       { parcoursId: 'p1', userNumber: 2, status: 'yes' },
       { parcoursId: 'p1', userNumber: 3, status: 'yes' },
     ]
+    everyoneComing()
     mockCast.mockRejectedValue(new Error('network down'))
 
     const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
@@ -255,6 +292,7 @@ describe('useParcoursVotes — un choix unique par semaine', () => {
         { parcoursId: 'p2', userNumber: 2, status: 'yes' },
         { parcoursId: 'p3', userNumber: 1, status: 'yes' },
       ]
+      everyoneComing()
 
       const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
       await waitFor(() => expect(result.current.loading).toBe(false))
@@ -271,6 +309,7 @@ describe('useParcoursVotes — un choix unique par semaine', () => {
         { parcoursId: 'p2', userNumber: 1, status: 'yes' },
         { parcoursId: 'p3', userNumber: 1, status: 'yes' },
       ]
+      everyoneComing()
 
       const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
       await waitFor(() => expect(result.current.loading).toBe(false))
@@ -285,6 +324,7 @@ describe('useParcoursVotes — un choix unique par semaine', () => {
         { parcoursId: 'p1', userNumber: 2, status: 'yes' },
         { parcoursId: 'p2', userNumber: 1, status: 'yes' },
       ]
+      everyoneComing()
 
       const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
       await waitFor(() => expect(result.current.loading).toBe(false))
@@ -307,6 +347,7 @@ describe('useParcoursVotes — un choix unique par semaine', () => {
         { parcoursId: 'p1', userNumber: 2, status: 'yes' },
         { parcoursId: 'p2', userNumber: 3, status: 'yes' },
       ]
+      everyoneComing()
 
       const names = { p1: 'Bois', p2: 'Canal', p3: 'Standard' }
 
@@ -328,6 +369,7 @@ describe('useParcoursVotes — un choix unique par semaine', () => {
         { parcoursId: 'p1', userNumber: 2, status: 'yes' },
         { parcoursId: 'p2', userNumber: 3, status: 'yes' },
       ]
+      everyoneComing()
 
       const { result } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
       await waitFor(() => expect(result.current.loading).toBe(false))

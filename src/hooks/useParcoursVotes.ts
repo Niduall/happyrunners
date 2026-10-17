@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   castWeekVote,
   deleteWeekVote,
-  getWeekTallies,
   getWeekVotes,
+  getWeekAttendances,
   type ParcoursTally,
   type WeekVote,
 } from '../services/supabaseService'
@@ -39,7 +39,15 @@ const cellKey = (parcoursId: string, userNumber: number) => `${parcoursId}|${use
 export function useParcoursVotes(
   parcoursIds: string[],
   /** Noms des parcours — sert au tri alphabétique stable en cas d'égalité */
-  parcoursNames: Record<string, string> = {}
+  parcoursNames: Record<string, string> = {},
+  /**
+   * user_number des personnes ayant répondu « je viens » cette semaine.
+   *
+   * Un vote ne compte que si elle figure dans cette liste. Sans elle, le
+   * vote de quelqu'un qui vient de dire « pas aujourd'hui » continuerait
+   * d'être compté jusqu'au prochain polling.
+   */
+  goingUserNumbers?: number[]
 ): WeekVoteState {
   const { user, loading: authLoading } = useAuth()
   const [tallies, setTallies] = useState<Record<string, ParcoursTally>>({})
@@ -52,6 +60,10 @@ export function useParcoursVotes(
 
   const { weekKey, weekLabel } = useTargetWednesday()
 
+  // Signature des présents : change dès que quelqu'un répond, ce qui
+  // recalcule les compteurs sans attendre le polling.
+  const goingKey = (goingUserNumbers ?? []).join(',')
+
   const parcoursKey = parcoursIds.join(',')
   const ids = useMemo(() => (parcoursKey ? parcoursKey.split(',') : []), [parcoursKey])
 
@@ -59,19 +71,45 @@ export function useParcoursVotes(
     async (opts?: { keepError?: boolean }) => {
       if (!user?.id) return
       try {
-        const [tallyList, voteList] = await Promise.all([
-          getWeekTallies(weekKey),
+        const [voteList, attendanceList] = await Promise.all([
           getWeekVotes(weekKey),
+          getWeekAttendances(weekKey),
         ])
 
-        const nextTallies: Record<string, ParcoursTally> = {}
-        for (const t of tallyList) nextTallies[t.parcoursId] = t
-        setTallies(nextTallies)
+        // ⚠️ Un vote ne compte que si la personne a dit « je viens ».
+        // Deux cas réels de votes qui ne doivent pas peser :
+        //  - elle a répondu « pas aujourd'hui » (la suppression en base peut
+        //    avoir échoué, ou le client n'a pas encore rechargé)
+        //  - elle a voté sans jamais répondre à la présence
+        //
+        // La prop est l'état d'affichage : elle fait autorité quand elle est
+        // fournie. Sans elle, on se rabat sur la requête.
+        //
+        // ⚠️ Ne PAS fusionner les deux : une réponse « pas aujourd'hui »
+        //    enregistrée en base serait ré-adding par la requête, et le
+        //    vote continuerait d'être compté jusqu'au polling suivant.
+        const going =
+          goingUserNumbers !== undefined
+            ? new Set(goingUserNumbers)
+            : new Set(
+                attendanceList.filter((a) => a.status === 'going').map((a) => a.userNumber)
+              )
 
-        // Un seul choix par personne et par semaine
+        // Recompte en ne gardant que les votes des présents
+        const recomputed: Record<string, ParcoursTally> = {}
+        for (const v of voteList as WeekVote[]) {
+          if (!v.userNumber || !going.has(v.userNumber)) continue
+          const t = recomputed[v.parcoursId] ?? { parcoursId: v.parcoursId, yes: 0, no: 0 }
+          if (v.status === 'yes') t.yes += 1
+          else t.no += 1
+          recomputed[v.parcoursId] = t
+        }
+        setTallies(recomputed)
+
+        // Un seul choix par personne et par semaine, et seulement si venue
         const nextChoices: Record<number, string> = {}
         for (const v of voteList as WeekVote[]) {
-          if (v.userNumber) nextChoices[v.userNumber] = v.parcoursId
+          if (v.userNumber && going.has(v.userNumber)) nextChoices[v.userNumber] = v.parcoursId
         }
         setChoices(nextChoices)
         setMyChoice(nextChoices[user.id] ?? null)
@@ -84,7 +122,7 @@ export function useParcoursVotes(
         setLoading(false)
       }
     },
-    [user?.id, weekKey]
+    [user?.id, weekKey, goingKey]
   )
 
   useEffect(() => {
@@ -121,6 +159,15 @@ export function useParcoursVotes(
       if (!user?.id) {
         console.error('[VOTES] Vote ignoré : non connecté', { parcoursId })
         setError('Connecte-toi pour voter')
+        return
+      }
+
+      // Le bouton est désactivé tant que la présence n'est pas confirmée,
+      // mais l'interface n'est pas une garantie : cette garde empêche
+      // d'écrire un vote depuis un état obsolète (autre onglet, cache,
+      // appel direct à toggleChoice).
+      if (goingUserNumbers !== undefined && !goingUserNumbers.includes(user.id)) {
+        console.error('[VOTES] Vote ignoré : présence non confirmée', { parcoursId })
         return
       }
 
@@ -168,7 +215,7 @@ export function useParcoursVotes(
         setSavingParcoursId(null)
       }
     },
-    [user, myChoice, weekKey, loadAll]
+    [user, myChoice, weekKey, loadAll, goingUserNumbers]
   )
 
   const choiceOf = useCallback(

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Plus, ArrowLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
@@ -7,6 +7,7 @@ import { ParcoursCard } from '../components/ParcoursCard'
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal'
 import { AdminCodeModal } from '../components/AdminCodeModal'
 import { parseGPX } from '../services/gpxParser'
+import { verifyAdminCode } from '../services/adminCode'
 import { addParcours, deleteParcours, getWeekTallies } from '../services/supabaseService'
 import { useParcours } from '../hooks/useParcours'
 import { useAuth } from '../hooks/useAuth'
@@ -17,7 +18,7 @@ export function ParcoursList() {
   const navigate = useNavigate()
   const { parcoursList, loading, createParcours, removeParcours } = useParcours()
   const { weekKey } = useTargetWednesday()
-  const { adminUnlocked, adminLockEnabled, unlockAdmin } = useAuth()
+  const { adminLockEnabled, user } = useAuth()
   const [showAddForm, setShowAddForm] = useState(false)
   const [newParcoursName, setNewParcoursName] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -29,6 +30,33 @@ export function ParcoursList() {
   const [voteCounts, setVoteCounts] = useState<Record<string, number>>({})
   // Demande du code administrateur
   const [adminModalOpen, setAdminModalOpen] = useState(false)
+  // Déverrouillage admin : volontairement un état LOCAL à cette page.
+  //
+  // Il n'est ni en sessionStorage ni dans le contexte d'auth, pour deux
+  // raisons demandées explicitement :
+  //   - il ne vaut que tant qu'on reste sur la gestion des parcours : en
+  //     quittant l'écran, le composant est démonté et l'état disparaît ;
+  //   - il ne vaut que pour la personne qui a saisi le code : l'effet
+  //     ci-dessous reverrouille si l'identité change sans quitter la page.
+  const [adminUnlocked, setAdminUnlocked] = useState(false)
+
+  // ⚠️ Le profil arrive de façon ASYNCHRONE après le montage. Une première
+  // résolution d'identité n'est pas un changement : sans cette distinction,
+  // un déverrouillage saisi pendant le chargement serait effacé juste après.
+  // On ne reverrouille que sur une identité connue → une autre, ou → null.
+  const lastUserId = useRef<number | null | undefined>(undefined)
+
+  useEffect(() => {
+    const id = user?.id ?? null
+    const previous = lastUserId.current
+    lastUserId.current = id
+
+    const wasKnown = previous !== undefined && previous !== null
+    if (wasKnown && previous !== id) setAdminUnlocked(false)
+  }, [user?.id])
+
+  // Sans code configuré il n'y a pas de verrou : tout reste accessible.
+  const canManageParcours = !adminLockEnabled || adminUnlocked
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -193,7 +221,7 @@ export function ParcoursList() {
                 parcours={parcours}
                 isNext={index === 0}
                 onDelete={handleDelete}
-                adminUnlocked={adminUnlocked}
+                adminUnlocked={canManageParcours}
                 onRequestAdmin={
                   adminLockEnabled && !adminUnlocked ? () => setAdminModalOpen(true) : undefined
                 }
@@ -206,8 +234,11 @@ export function ParcoursList() {
       {adminModalOpen && (
         <AdminCodeModal
           onUnlock={(code) => {
-            const ok = unlockAdmin(code)
-            if (ok) setAdminModalOpen(false)
+            const ok = verifyAdminCode(code)
+            if (ok) {
+              setAdminUnlocked(true)
+              setAdminModalOpen(false)
+            }
             return ok
           }}
           onCancel={() => setAdminModalOpen(false)}

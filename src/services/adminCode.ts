@@ -9,9 +9,12 @@
  * anon permet un fetch écrit à la main).
  *
  * Verrouillage réel → Supabase Auth (voir README § Sécurité).
+ *
+ * ⚠️ Ce module ne mémorise RIEN. Le déverrouillage appartient à la page de
+ * gestion des parcours (`ParcoursList`), qui le perd en quittant l'écran.
+ * Il n'y a volontairement ni `sessionStorage` ni `localStorage` : un verrou
+ * rangé dans le navigateur survivrait à la personne qui l'a ouvert.
  */
-
-const STORAGE_KEY = 'happyrunners_admin_unlocked'
 
 /**
  * Lit le code depuis la configuration de build.
@@ -44,35 +47,4 @@ export function verifyAdminCode(input: string): boolean {
     diff |= input.charCodeAt(i) ^ expected.charCodeAt(i)
   }
   return diff === 0
-}
-
-/**
- * L'admin est-il déverrouillé pour cet onglet ?
- *
- * `sessionStorage` et non `localStorage` : le verrouillage disparaît à la
- * fermeture de l'onglet. Avec localStorage, un téléphone qui reste ouvert
- * garderait l'accès admin indéfiniment.
- */
-export function isAdminUnlocked(): boolean {
-  // Pas de code configuré → pas de verrou à déverrouiller. On renvoie false
-  // plutôt que de croire un sessionStorage résiduel : le code a été retiré
-  // de la configuration, l'accès doit être considéré comme fermé.
-  if (!isAdminLockEnabled()) return false
-
-  try {
-    return sessionStorage.getItem(STORAGE_KEY) === '1'
-  } catch {
-    // Mode privé strict, ou storage désactivé → considéré comme verrouillé
-    return false
-  }
-}
-
-export function setAdminUnlocked(value: boolean): void {
-  try {
-    if (value) sessionStorage.setItem(STORAGE_KEY, '1')
-    else sessionStorage.removeItem(STORAGE_KEY)
-  } catch {
-    // Sans storage, le verrouillage ne tient pas le temps de la session.
-    // Mieux vaut l'appeler que de laisser l'accès ouvert.
-  }
 }

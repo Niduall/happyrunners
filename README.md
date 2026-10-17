@@ -71,7 +71,7 @@ ses propres tracés.
 |---|---|
 | Où le définir | `.env` en local, Vercel → Settings → Environment Variables en prod |
 | Variable | `VITE_ADMIN_CODE` |
-| Durée | L'onglet courant — se referme à la fermeture, et à la déconnexion |
+| Durée | Le temps de rester sur la page de gestion des parcours. En la quittant, ou au changement d'utilisateur, le code est redemandé |
 | Code oublié | Changer la variable dans Vercel et redéployer. Aucune base à ouvrir |
 
 Si `VITE_ADMIN_CODE` est absente, aucun cadenas n'apparaît et tout reste

@@ -11,8 +11,8 @@ interface AdminCodeModalProps {
  * Demande le code administrateur pour déverrouiller la suppression et la
  * modification des parcours.
  *
- * L'état de déverrouillage vit dans useAuth (session de l'onglet) ; cette
- * modale ne fait que recueillir le code.
+ * L'état de déverrouillage vit dans la page de gestion (ParcoursList) et n'est
+ * mémorisé nulle part : cette modale ne fait que recueillir le code.
  */
 export function AdminCodeModal({ onUnlock, onCancel }: AdminCodeModalProps) {
   const [code, setCode] = useState('')
@@ -63,7 +63,7 @@ export function AdminCodeModal({ onUnlock, onCancel }: AdminCodeModalProps) {
 
         <p className="text-sm text-gray-600">
           Supprimer ou modifier un parcours demande le code. L'accès reste
-          ouvert jusqu'à la fermeture de cet onglet.
+          ouvert tant que tu restes sur cet écran.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

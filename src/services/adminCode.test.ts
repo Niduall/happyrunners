@@ -34,13 +34,6 @@ describe('adminCode', () => {
       expect(verifyAdminCode('')).toBe(false)
       expect(verifyAdminCode('nimporte-quoi')).toBe(false)
     })
-
-    it('ne déverrouille rien même en sessionStorage', async () => {
-      // Un verrou absent ne doit surtout pas laisser passer
-      sessionStorage.setItem('happyrunners_admin_unlocked', '1')
-      const { isAdminUnlocked } = await load()
-      expect(isAdminUnlocked()).toBe(false)
-    })
   })
 
   describe('code configuré', () => {
@@ -66,34 +59,14 @@ describe('adminCode', () => {
       expect(verifyAdminCode('')).toBe(false)
     })
 
-    it('mémorise le déverrouillage dans sessionStorage', async () => {
-      const { setAdminUnlocked, isAdminUnlocked } = await load()
-      expect(isAdminUnlocked()).toBe(false)
-      setAdminUnlocked(true)
-      expect(sessionStorage.getItem('happyrunners_admin_unlocked')).toBe('1')
-      expect(isAdminUnlocked()).toBe(true)
-    })
+    it('ne mémorise rien dans le navigateur', async () => {
+      // Le déverrouillage appartient à la page de gestion, pas au stockage :
+      // un verrou rangé ici survivrait à la personne qui l'a ouvert.
+      const { verifyAdminCode } = await load()
+      expect(verifyAdminCode('club-secret')).toBe(true)
 
-    it('permet de reverrouiller', async () => {
-      const { setAdminUnlocked, isAdminUnlocked } = await load()
-      setAdminUnlocked(true)
-      setAdminUnlocked(false)
-      expect(isAdminUnlocked()).toBe(false)
-      expect(sessionStorage.getItem('happyrunners_admin_unlocked')).toBeNull()
-    })
-
-    it('n’utilise PAS localStorage', async () => {
-      // Avec localStorage, un téléphone qui reste ouvert garderait l'accès
-      // admin après redémarrage : c'est le point de cette implémentation.
-      const { setAdminUnlocked } = await load()
-      setAdminUnlocked(true)
-      expect(localStorage.getItem('happyrunners_admin_unlocked')).toBeNull()
-    })
-
-    it('ignore une valeur inattendue en sessionStorage', async () => {
-      sessionStorage.setItem('happyrunners_admin_unlocked', 'oui')
-      const { isAdminUnlocked } = await load()
-      expect(isAdminUnlocked()).toBe(false)
+      expect(sessionStorage.length).toBe(0)
+      expect(localStorage.length).toBe(0)
     })
   })
 })

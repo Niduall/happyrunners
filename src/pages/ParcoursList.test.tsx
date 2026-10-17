@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -58,8 +58,16 @@ const renderPage = () =>
 
 beforeEach(() => {
   localStorage.clear()
+  sessionStorage.clear()
   vi.clearAllMocks()
   vi.restoreAllMocks()
+  // Le verrou admin dépend de VITE_ADMIN_CODE. Sans ce stub, ces tests
+  // passeraient ou échoueraient selon le .env du développeur.
+  //
+  // On le neutralise ici (pas de code configuré) : ces tests portent sur la
+  // confirmation de suppression. Le cadenas et son déverrouillage ont leurs
+  // propres tests dans ParcoursList.admin.test.tsx.
+  vi.stubEnv('VITE_ADMIN_CODE', '')
   seed()
   mockDeleteParcours.mockResolvedValue(undefined)
   mockGetTallies.mockResolvedValue([] as never)
@@ -190,4 +198,8 @@ describe('ParcoursList — suppression', () => {
     expect(screen.getAllByText('Bois de Haye').length).toBeGreaterThan(0)
     expect(screen.getByText('Bosserville')).toBeInTheDocument()
   })
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
 })

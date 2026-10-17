@@ -119,6 +119,23 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - Hors couverture → `getRunForecast` renvoie `null`, l'app affiche la météo du
   jour avec un badge explicite
 
+### Verrou admin (suppression / modification des parcours)
+- Défini par `VITE_ADMIN_CODE`. **Variable absente = aucun cadenas** : ne
+  jamais bloquer l'admin par surprise sur un déploiement non configuré.
+- L'**import GPX reste libre** pour tous. Seules la suppression et la
+  modification demandent le code.
+- ⚠️ Le déverrouillage est un **état local à `ParcoursList`** (`useState`).
+  **Ne pas le remettre dans `useAuth` ni dans `sessionStorage`** : c'était
+  l'implémentation précédente, et elle laissait l'accès ouvert à tout l'onglet,
+  y compris après un changement d'utilisateur. Le verrou doit mourir avec la
+  page.
+- `adminCode.ts` ne mémorise rien (volontaire) : il ne fait que lire et
+  comparer le code.
+- Le profil arrive de façon asynchrone : une première résolution d'identité
+  n'est pas un changement. Reverrouiller naïvement sur `[user?.id]` efface un
+  déverrouillage saisi pendant le chargement (course couverte par un test).
+- Conséquence assumée : un **rechargement de page redemande le code**.
+
 ## Environment Variables
 | Variable | Required | Description |
 |----------|----------|-------------|

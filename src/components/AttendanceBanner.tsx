@@ -32,22 +32,16 @@ export function AttendanceBanner({ myStatus, saving, weekLabel, onChange }: Atte
             <p className="text-xs text-gray-500 mt-0.5">Run du mercredi · {weekLabel}</p>
           </div>
 
+          {/* Rien n'est choisi : les deux boutons restent en contour.
+              Un bouton rempli alors que la question est sans réponse donne
+              l'illusion d'un choix déjà fait — défaut relevé en usage réel. */}
           <div className="flex gap-2" role="group" aria-label="Participation">
             <Button
-              variant={myStatus === 'going' ? 'primary' : answered ? 'secondary' : 'primary'}
+              variant={myStatus === 'going' ? 'primary' : 'outline'}
               size="sm"
               disabled={saving}
               onClick={() => onChange('going')}
               aria-pressed={myStatus === 'going'}
-              className={
-                myStatus === 'going'
-                  ? '' // le variant primary gère son survol
-                  : answered
-                    ? // secondary : survol gris, pas blanc — sinon le bouton
-                      // disparaît sur le fond teinté de la carte
-                      'border-gray-300 text-gray-700 hover:bg-gray-100'
-                    : 'shadow-sm'
-              }
             >
               <Smile className="w-4 h-4" />
               Je viens
@@ -58,12 +52,6 @@ export function AttendanceBanner({ myStatus, saving, weekLabel, onChange }: Atte
               disabled={saving}
               onClick={() => onChange('skip')}
               aria-pressed={myStatus === 'skip'}
-              className={
-                // Couleurs d'origine : le bouton garde l'apparence du
-                // variant outline, seul son survol change pour rester lisible
-                // sur le fond teinté de la carte.
-                'border-gray-300 text-gray-700 hover:bg-gray-100'
-              }
             >
               <Coffee className="w-4 h-4" />
               Pas aujourd'hui

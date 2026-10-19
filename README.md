@@ -116,8 +116,15 @@ collègues ; à revoir avant toute mise en ligne publique.
 ## Développement
 
 ```bash
-npm run dev
+npm run dev        # pointe vers la prod (.env)
+npm run dev:test   # pointe vers la base de test (.env.test)
 ```
+
+La base de test est un second projet Supabase, isolé. `.env.test` n'est pas
+versionné. Toute manipulation de test (application, `restore`, données) doit
+passer par `npm run dev:test` ou `backup.py --env .env.test` ; la prod est
+réservée aux utilisateurs. Seule lecture autorisée sur la prod :
+`python3 backup.py save`.
 
 ## Build production
 

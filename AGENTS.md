@@ -24,7 +24,8 @@ React 19 + TypeScript + Vite + Tailwind v4 + Leaflet + Supabase.
 
 ## Key Commands
 ```bash
-npm run dev        # Dev server
+npm run dev        # Dev server (prod, .env)
+npm run dev:test   # Dev server sur la base de test (.env.test)
 npm run build      # TypeScript check + Vite build
 npm run preview    # Preview production build
 npm test           # Unit + integration tests (Vitest)
@@ -143,6 +144,11 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 | `VITE_SUPABASE_URL` | Oui | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | Oui | Supabase anon key (**régénérable** — copier depuis le dashboard si "Invalid API key") |
 | ~~`VITE_OPENWEATHER_API_KEY`~~ | **Supprimé** | Open-Meteo n'a pas besoin de clé |
+
+**Base de test** : `.env.test` (non versionné) pointe vers un second projet
+Supabase isolé. `npm run dev:test` et `backup.py --env .env.test` l'utilisent.
+La prod est réservée aux utilisateurs ; la seule lecture autorisée dessus est
+`python3 backup.py save`.
 
 ## Database Schema
 

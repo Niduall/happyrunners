@@ -548,9 +548,13 @@ sauvegarde ou une restauration.
 
 ## 6. Ce qui n'est pas dans le dépôt
 
-**Bien protégé :** `.env` et `backups/` sont ignorés par git
-(`.gitignore`), et `git ls-files` confirme qu'aucun des deux n'est suivi. Seul
+**Bien protégé :** `.env`, `.env.test` et `backups/` sont ignorés par git
+(`.gitignore`), et `git ls-files` confirme qu'aucun n'est suivi. Seul
 `.env.example` l'est.
+
+**Base de test :** second projet Supabase (`lhotfhhatcxuhoazgtns`), utilisé par
+`npm run dev:test` et `backup.py --env .env.test`. Toute manipulation de test
+passe par là ; la prod ne reçoit que des lectures (`backup.py save`).
 
 **Volontairement public :**
 

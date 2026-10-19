@@ -11,43 +11,16 @@ PWA pour organiser les sorties course du mercredi midi entre collègues.
 
 ## Structure des fichiers
 
-```
-src/
-├── main.tsx                 # Point d'entrée React
-├── App.tsx                  # Router (2 routes: /, /parcours)
-├── index.css                # Tailwind + styles globaux
-├── types/
-│   ├── index.ts             # Types frontend (User, Parcours, Participation, Weather)
-│   └── supabase.ts          # Types DB (snake_case) : UserProfile, Participation, Parcours
-├── lib/
-│   ├── supabase.ts          # Client Supabase
-│   └── utils.ts             # Utilitaires (cn, etc.)
-├── services/
-│   ├── storage.ts           # cache utilisateur local
-│   ├── supabaseService.ts   # API Supabase (Parcours, Participations, UserProfiles)
-│   ├── weatherApi.ts        # Open-Meteo (16 jours, sans clé)
-│   ├── weatherCode.ts       # Codes WMO → emoji + couleurs
-│   ├── weekKey.ts           # Clé de semaine (mercredi cible) — bascule 14h
-│   └── gpxParser.ts         # Parser GPX (XML + JSON Strava)
-├── hooks/
-│   ├── useAuth.tsx          # AuthProvider (Context) + useAuth + hashPin
-│   ├── useParcours.ts       # CRUD parcours + polling 30s
-│   ├── useParcoursVotes.ts  # Votes hebdo multi-parcours + roster + polling 30s
-│   └── useWeather.ts        # Météo mercredi 12h30
-├── components/
-│   ├── Auth.tsx             # LoginForm + UserMenu
-│   ├── ParcoursVoteCard.tsx # Carte parcours + 2 boutons de vote + compteurs
-│   ├── ParticipantsTable.tsx# Tableau récapitulatif + avatars initiales
-│   ├── ParcoursCard.tsx     # Affichage parcours
-│   ├── WeatherCard.tsx      # Météo
-│   ├── MapView.tsx          # Leaflet
-│   └── ui/                  # Button, Card, Input
-├── pages/
-│   ├── Home.tsx             # Météo + parcours + vote
-│   └── ParcoursList.tsx     # Liste + création GPX
-└── test/
-    └── setup.ts             # Config Vitest + mock Supabase
-```
+Inventaire exhaustif, fichier par fichier : **`CARTOGRAPHIE.md` §2**.
+
+| Couche | Dossier | Rôle |
+|---|---|---|
+| Entrée / routage | `src/main.tsx`, `src/App.tsx` | monte l'app, 2 routes |
+| Pages | `src/pages/` | `Home`, `ParcoursList` |
+| Composants | `src/components/` | UI métier + `ui/` génériques |
+| Hooks | `src/hooks/` | état et polling |
+| Services | `src/services/` | Supabase, GPX, météo, semaine, PIN, code admin |
+| Types | `src/types/` | types applicatifs et lignes DB |
 
 ---
 
@@ -143,9 +116,10 @@ Reconnexion sur un autre appareil : on retrouve son `user_number` via
 | Hook | Intervalle | Contenu |
 |------|-----------|----------|
 | `useParcours` | 30s | `loadParcours()` |
+| `useAttendance` | 30s | présences de la semaine |
 | `useParcoursVotes` | 30s | votes de la semaine + roster + mes votes |
 
-Aucun composant ne fait sa propre écoute — tout passe par un hook unique.
+Aucun composant ne fait sa propre écoute — tout passe par un hook dédié.
 
 ---
 
@@ -166,7 +140,7 @@ Le reset est **automatique** : pas de cron, pas de purge. Les anciens votes rest
 en base (historique) mais ne sont plus affichés.
 
 ### Bascule à 14h tapantes
-`useTargetWednesday()` fournit une horloge partagée (tick 1 min) consommée par
+`useTargetWednesday()` fournit une horloge partagée (tick 30 s) consommée par
 `useAttendance`, `useParcoursVotes`, `useWeather` et `Home`. Sans ça, chaque hook
 figerait sa clé au montage et l'app afficherait le run d'hier toute la soirée.
 
@@ -179,8 +153,9 @@ automatiquement invalidé et les anciennes entrées purgées.
 Changer de parcours remplace le précédent (upsert sur cette contrainte).
 
 ### Présence
-`getWeekAttendances(weekKey)` joint `user_profiles` pour récupérer les noms.
-Un JOIN plutôt que des noms dupliqués dans chaque table.
+`getWeekAttendances(weekKey)` interroge `attendances`, puis `user_profiles`
+pour récupérer les noms : ce sont **deux requêtes**, pas un JOIN SQL. Les noms
+ne sont pas dupliqués dans chaque table.
 
 ### Tri
 `rankedParcoursIds` trie par nombre de votes "yes" décroissant. Le 1er avec ≥1 vote
@@ -249,8 +224,8 @@ npm test:watch    # watch mode
 | Fichier | Couvre |
 |---------|--------|
 | `src/services/storage.test.ts` | cache local, invalidation des ids non entiers |
-| `src/hooks/useAuth.test.ts` | `hashPin` (déterminisme, format, zéros en tête) |
-| `src/hooks/useAuth.integration.test.ts` | Flux complet : first_login, création, PIN, nouvel appareil, reconnexion, robustesse |
+| `src/services/pin.test.ts` | `hashPin` (déterminisme, format, zéros en tête) |
+| `src/hooks/useAuth.integration.test.tsx` | Flux complet : first_login, création, PIN, nouvel appareil, reconnexion, robustesse |
 
 Supabase est mocké globalement dans `src/test/setup.ts` — aucun appel réseau en test.
 

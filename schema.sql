@@ -4,10 +4,11 @@
 -- Source de vérité de la structure. Rejouable à l'identique sur une base vide.
 --
 --   supabase db reset          (CLI Supabase)
---   psql $VITE_SUPABASE_URL    (connexion directe)
+--   psql "<chaîne de connexion Postgres>"   (connexion directe)
 --   SQL Editor du dashboard    (coller le contenu)
 --
--- ⚠️ Après exécution, appliquer `backup.sh restore` pourPeupler la base.
+-- ⚠️ Après exécution, lancer `python3 backup.py restore <fichier>`
+--    pour peupler la base.
 --
 -- Ce fichier décrit la STRUCTURE, pas les données : aucun nom de collègue,
 -- aucun vote. Les données réelles vivent uniquement dans Supabase.

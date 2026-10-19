@@ -42,8 +42,9 @@ météo : Open-Meteo n'en demande pas.
 
 `schema.sql` est la **source de vérité** de la structure : tables, séquence
 `user_number`, contraintes, clés étrangères, index et politiques RLS. Il est
-rejouable tel quel sur une base vide, et `src/services/schema.test.ts` le
-verrouille (une dérive entre le fichier et la prod fait échouer les tests).
+rejouable tel quel sur une base vide. `src/services/schema.test.ts` vérifie que
+le **fichier** reste cohérent ; il ne prouve pas que la base en production lui
+correspond (voir le commentaire en tête de ce test).
 
 Pour reconstruire une base neuve : jouer `schema.sql`, puis
 `python3 backup.py restore <fichier>`.
@@ -105,7 +106,9 @@ npm run dev
 npm run build
 ```
 
-Le dossier `dist/` est prêt à déployer sur **Vercel**, **Netlify** ou **GitHub Pages** (gratuit).
+Le dossier `dist/` est prêt à déployer sur **Vercel** ou **Netlify**.
+GitHub Pages n'est pas pris en charge : le build n'a pas de `base` et la PWA est
+en `scope: '/'`.
 
 ## Déploiement PWA
 

@@ -458,8 +458,10 @@ reste de l'application.
 
 **Supprimés en tâche 2** : `src/main.ts`, `src/counter.ts`, `src/style.css`,
 `src/assets/*` (3 fichiers), `public/icons.svg`, `tailwind.config.js` et
-`fix_uuid.sql`. Le CSS produit a perdu 1,7 kB au passage (utilitaires `filter`
-et `transform`, générés uniquement par le template).
+`fix_uuid.sql`. Le CSS produit a perdu 1,7 kB au passage. Attention : Tailwind v4
+scanne **tout** le projet, y compris les `.md` — les utilitaires correspondants
+réapparaissent donc dès qu'un document contient leurs noms (à cadrer en
+tâche 12).
 
 ### F. Documentation fausse
 
@@ -467,20 +469,22 @@ et `transform`, générés uniquement par le template).
 |---|---|---|
 | ~~`README.md:17`, `ARCHITECTURE.md:5`, `AGENTS.md:21,42`~~ | React 18 | React **19.3.0** installé — **corrigé (tâche 1)** |
 | `useAttendance.ts:28` | « true si je viens **ou n'ai pas encore répondu** » | le code fait l'inverse : `showParcours: myStatus === 'going'` (`:151`) |
-| `supabaseService.ts:166` | « un JOIN évite de les dupliquer » | aucune JOIN : deux requêtes séparées |
+| ~~`supabaseService.ts:166`~~ | « un JOIN évite de les dupliquer » | aucune JOIN : deux requêtes séparées — **corrigé (tâche 3)** |
 | `storage.ts:74-76` | « ce cache évite un aller-retour réseau au démarrage » | `useAuth.tsx:96` appelle la base à chaque montage |
 | `weatherApi.ts:101-105` | « interprété… c'est ce qu'on veut » | faux hors du fuseau du navigateur (voir A5) |
 | `adminCode.ts:36` | « comparaison à temps constant » | retour immédiat sur la longueur, donc non constant |
-| `schema.sql:10` | « `backup.sh restore` pourPeupler » | le script est `backup.py` (et « pourPeupler » est collé) |
-| `AGENTS.md` | `ParcoursVoteCard` = « 2 boutons de vote » | il y en a **1** (`ParcoursVoteCard.tsx:82-92`) |
-| `AGENTS.md` | `Auth.tsx` = `LoginForm + UserMenu` | `UserMenu` est un fichier séparé |
-| `README.md:110` | `dist/` prêt pour **GitHub Pages** | faux : aucun `base` dans `vite.config.ts`, et la PWA est en `scope:'/'` → cassé sur un sous-chemin |
+| ~~`schema.sql:10`~~ | « `backup.sh restore` pourPeupler » | le script est `backup.py` (et « pourPeupler » est collé) — **corrigé (tâche 3)** |
+| ~~`AGENTS.md`~~ | `ParcoursVoteCard` = « 2 boutons de vote » | il y en a **1** (`ParcoursVoteCard.tsx:82-92`) — **corrigé (tâche 3)** |
+| ~~`AGENTS.md`~~ | `Auth.tsx` = `LoginForm + UserMenu` | `UserMenu` est un fichier séparé — **corrigé (tâche 3)** |
+| ~~`README.md:110`~~ | `dist/` prêt pour **GitHub Pages** | faux : aucun `base` dans `vite.config.ts`, et la PWA est en `scope:'/'` → cassé sur un sous-chemin — **corrigé (tâche 3)** |
 | ~~`README.md:36-37`, `AGENTS.md`~~ | `VITE_DEFAULT_LAT` / `VITE_DEFAULT_LON` | **jamais lus** : `grep VITE_DEFAULT src/` = 0 ; `weatherApi.ts:17-18` utilise des constantes en dur — **retirées des docs (tâche 1)** |
-| `ARCHITECTURE.md:33` | `useAuth.tsx` = `AuthProvider + useAuth + hashPin` | `hashPin` est dans `src/services/pin.ts` |
-| `ARCHITECTURE.md:38` | `Auth.tsx` = `LoginForm + UserMenu` | `Auth.tsx:63` n'exporte que `LoginForm` |
-| `ARCHITECTURE.md:252-253` | `src/hooks/useAuth.test.ts`, `useAuth.integration.test.ts` | ces chemins **n'existent pas** (le fichier réel est `useAuth.integration.test.tsx`) |
-| `schema.sql:7` | `psql $VITE_SUPABASE_URL` | cette variable est une URL **REST**, pas une chaîne de connexion Postgres |
-| `schema.sql:10` | `backup.sh restore` | le script est `backup.py` |
+| ~~`ARCHITECTURE.md:33`~~ | `useAuth.tsx` = `AuthProvider + useAuth + hashPin` | `hashPin` est dans `src/services/pin.ts` — **corrigé (tâche 3)** |
+| ~~`ARCHITECTURE.md:38`~~ | `Auth.tsx` = `LoginForm + UserMenu` | `Auth.tsx:63` n'exporte que `LoginForm` — **corrigé (tâche 3)** |
+| ~~`ARCHITECTURE.md:252-253`~~ | `src/hooks/useAuth.test.ts`, `useAuth.integration.test.ts` | ces chemins **n'existent pas** (le fichier réel est `useAuth.integration.test.tsx`) — **corrigé (tâche 3)** |
+| ~~`schema.sql:7`~~ | `psql $VITE_SUPABASE_URL` | cette variable est une URL **REST**, pas une chaîne de connexion Postgres — **corrigé (tâche 3)** |
+| ~~`schema.sql:10`~~ | `backup.sh restore` | le script est `backup.py` — **corrigé (tâche 3)** |
+| ~~`ARCHITECTURE.md:169`, `AGENTS.md:106`~~ | horloge « tick 1 min » | `TICK_MS = 30_000` → **30 s** — **corrigé (tâche 3)** |
+| ~~`README.md:47-48`~~ | `schema.test.ts` prouve que la prod correspond au fichier | il vérifie seulement la cohérence du **fichier** — **corrigé (tâche 3)** |
 
 ### G. Accessibilité
 
@@ -603,7 +607,7 @@ Légende : `à faire` · `en cours` · `fait`
 |---|---|---|---|
 | 1 | Dépendances et versions | `react`/`react-dom` non déclarés ; `workbox-window` inutile ; `vite-plugin-pwa` mal classé ; docs « React 18 » ; `VITE_DEFAULT_LAT/LON` fantômes | fait |
 | 2 | Fichiers morts et dangereux | `fix_uuid.sql`, `main.ts`, `counter.ts`, `style.css`, `src/assets/`, `tailwind.config.js`, `public/icons.svg` | fait |
-| 3 | Documentation fausse | `ARCHITECTURE.md` (hashPin, UserMenu, chemins de tests), `README.md` (GitHub Pages), `schema.sql` (backup.sh, psql), `AGENTS.md` (2 boutons) | à faire |
+| 3 | Documentation fausse | `ARCHITECTURE.md` (hashPin, UserMenu, chemins de tests), `README.md` (GitHub Pages), `schema.sql` (backup.sh, psql), `AGENTS.md` (2 boutons) | fait |
 | 4 | Sauvegarde `backup.py` | pagination du `save`, ordre de suppression, `--dry-run`, sauvegarde avant restauration, vérification des comptes, séquence | à faire |
 | 5 | Comptage des votes | A1, A2, C1 : une seule source de vérité, un seul total | à faire |
 | 6 | Règle « vote sans présence » | A3 : la faire tenir en base, ou l'assumer explicitement | à faire |

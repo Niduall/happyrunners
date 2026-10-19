@@ -58,8 +58,9 @@ npm run build      # 0 erreur TypeScript
 | `src/services/gpxParser.ts` | GPX (XML + JSON Strava) |
 | `src/services/weatherApi.ts` | Open-Meteo (16 jours, sans clé) |
 | `src/services/weatherCode.ts` | Codes WMO → emoji |
-| `src/components/Auth.tsx` | LoginForm + UserMenu |
-| `src/components/ParcoursVoteCard.tsx` | Carte parcours + 2 boutons de vote |
+| `src/components/Auth.tsx` | `LoginForm` |
+| `src/components/UserMenu.tsx` | menu du profil : nom, sécurité (PIN), déconnexion |
+| `src/components/ParcoursVoteCard.tsx` | Carte parcours + 1 bouton de vote |
 | `src/components/ParticipantsTable.tsx` | Tableau récapitulatif + avatars |
 
 ## Critical Implementation Details
@@ -103,7 +104,7 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - `getCurrentWeekKey()` = date du mercredi cible (`"2026-10-07"`)
 - Le run est le mercredi 12h30 ; **à 14h** l'app bascule sur le suivant
 - Bascule automatique (pas de cron), y compris si l'app reste ouverte
-- `useTargetWednesday()` fournit l'horloge partagée (tick 1 min) : à **consommer**
+- `useTargetWednesday()` fournit l'horloge partagée (tick 30 s) : à **consommer**
   dans tout hook qui a besoin de la clé de semaine, sinon le hook fige sa clé au
   montage et affiche le run d'hier
 - Cache météo lié à la semaine (`weather_cache_<weekKey>`) → invalidé à la bascule

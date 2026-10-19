@@ -163,7 +163,8 @@ export async function getWeekAttendances(weekKey: string): Promise<Attendee[]> {
   const rows = (data || []) as AttendanceWithNames[]
   if (rows.length === 0) return []
 
-  // Les noms vivent dans user_profiles : un JOIN évite de les dupliquer
+  // Les noms vivent dans user_profiles : une seconde requête évite de les
+  // dupliquer dans cette table
   const { data: profiles } = await supabase
     .from('user_profiles')
     .select('user_number,first_name,last_name')

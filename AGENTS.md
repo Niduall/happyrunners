@@ -33,7 +33,7 @@ npm test:watch     # Watch mode
 
 ## Workflow obligatoire avant livraison
 ```bash
-npm test           # 30 tests doivent passer
+npm test           # toute la suite doit passer
 npm run build      # 0 erreur TypeScript
 # puis : présenter les changements, attendre validation, puis push
 ```
@@ -179,16 +179,26 @@ python3 backup.py restore <fichier> # ⚠️ remplace le contenu des tables
 ```bash
 npm test
 ```
+Toute la suite doit passer. **Ne jamais figer un nombre de tests dans ce
+document** : le chiffre devient faux au prochain test ajouté. Cette section a
+déjà annoncé « 30 tests doivent passer » pendant des mois.
+
+Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour le reste) :
+
 | Fichier | Couvre |
 |---------|--------|
+| `src/services/weekKey.test.ts` | bascule 14h, passage d'année, bissextile |
+| `src/services/weatherApi.test.ts` | parsing Open-Meteo, couverture 16 j |
+| `src/services/weatherCode.test.ts` | mapping des 28 codes WMO, jour/nuit |
+| `src/services/pin.test.ts` | `hashPin` |
+| `src/hooks/useAuth.integration.test.tsx` | flux auth complet + partage d'état |
+| `src/hooks/useParcoursVotes.test.tsx` | votes hebdo, tri, pendingCount, optimisme |
+| `src/hooks/useParcoursVotes.attendance.test.tsx` | un vote sans présence ne compte pas |
+| `src/services/adminCode.test.ts` | verrou admin, ne mémorise rien |
+| `src/pages/ParcoursList.admin.test.tsx` | portée du déverrouillage (page + personne) |
+| `src/services/schema.test.ts` | `schema.sql` rejouable et à jour |
 | `src/services/storage.test.ts` | cache utilisateur local |
-| `src/hooks/useAuth.hash.test.tsx` | `hashPin` (6 tests) |
-| `src/hooks/useAuth.integration.test.tsx` | Flux auth complet + partage d'état (16 tests) |
-| `src/services/weekKey.test.ts` | Bascule 14h, passage d'année, bissextile (37 tests) |
-| `src/services/weatherApi.test.ts` | Parsing Open-Meteo, couverture 16 j (23 tests) |
-| `src/services/weatherCode.test.ts` | Mapping des 28 codes WMO, jour/nuit (15 tests) |
-| `src/hooks/useParcoursVotes.test.tsx` | Votes hebdo, tri, pendingCount, optimisme (10 tests) |
-| `src/test/setup.ts` | Mock Supabase global + cleanup |
+| `src/test/setup.ts` | mock Supabase global + cleanup |
 
 Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
 
@@ -213,6 +223,6 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
 8. **`npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues
-- 13 vulnérabilités npm (9 moderate, 1 high, 3 critical) — non traitées
-- Bundle 718 kB (>500 kB) — warning Vite, pas bloquant
+- Vulnérabilités npm présentes, non traitées — `npm audit` pour le détail et le compte à jour
+- Bundle au-dessus de 500 kB — warning Vite, pas bloquant — `npm run build` pour la taille exacte
 - Sécurité du PIN faible par conception (hash client simple, pas d'auth serveur) — acceptable pour un club de collègues, **pas** pour un usage réel

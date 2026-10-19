@@ -265,4 +265,4 @@ Supabase est mocké globalement dans `src/test/setup.ts` — aucun appel réseau
 4. **Pas de `window.location.href` dans les flux d'auth** — l'hydratation est correcte via le state machine
 5. **Vercel cache** — tester **uniquement en navigation privée** (Ctrl+Shift+N)
 6. **Types dupliqués** : `types/index.ts` (frontend camelCase) vs `types/supabase.ts` (DB snake_case)
-7. **13 vulnérabilités npm** (9 moderate, 1 high, 3 critical) — non traitées, à évaluer
+7. **Vulnérabilités npm** — non traitées, à évaluer (`npm audit` pour le détail et le compte à jour)

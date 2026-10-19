@@ -169,10 +169,17 @@ qui n'existait plus depuis la migration `user_number`.
 
 ### Sauvegarde
 ```bash
-python3 backup.py save              # exporte la prod (hors dépôt)
-python3 backup.py list              # backups disponibles
-python3 backup.py restore <fichier> # ⚠️ remplace le contenu des tables
+python3 backup.py save                  # exporte la prod (hors dépôt)
+python3 backup.py list                  # backups disponibles
+python3 backup.py restore <fichier>     # ⚠️ remplace le contenu des tables
+python3 backup.py restore <fichier> --dry-run
+python3 backup.py save --env .env.test  # cible la base de test
 ```
+
+`save` pagine par 1 000 lignes. `restore` valide le fichier, sauvegarde l'état
+courant, supprime dans l'ordre inverse et vérifie les comptes. Il sort en
+**code 2** tant que le `setval` de `user_number_seq` n'a pas été exécuté.
+Tests hors ligne : `python3 -m unittest test_backup.py -v`.
 
 ## Testing
 ```bash

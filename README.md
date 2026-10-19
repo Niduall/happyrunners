@@ -52,10 +52,29 @@ Pour reconstruire une base neuve : jouer `schema.sql`, puis
 ### Sauvegarde
 
 ```bash
-python3 backup.py save              # exporte la prod dans backups/<date>.json
-python3 backup.py list              # backups disponibles
-python3 backup.py restore <fichier> # ⚠️ REMPLACE le contenu des tables
+python3 backup.py save                  # exporte la prod dans backups/<date>.json
+python3 backup.py list                  # backups disponibles, sans réseau
+python3 backup.py restore <fichier>     # ⚠️ REMPLACE le contenu des tables
 ```
+
+Options utiles :
+
+```bash
+python3 backup.py save --env .env.test          # cible la base de test
+python3 backup.py restore <fichier> --dry-run   # affiche le plan, n'écrit rien
+python3 backup.py restore <fichier> --allow-empty
+```
+
+`save` pagine par 1 000 lignes : aucune table n'est tronquée. `restore` valide
+le fichier avant de supprimer quoi que ce soit (4 tables, comptes, clés
+étrangères), prend automatiquement une sauvegarde
+`happyrunners-pre-restore-<date>.json`, puis vérifie les comptes après
+réécriture.
+
+La séquence `user_number_seq` n'est pas accessible via l'API REST : à la fin,
+le script affiche la commande SQL à exécuter et **sort avec le code 2**
+(« RESTAURATION INCOMPLÈTE »). Tant qu'elle n'est pas passée, la prochaine
+inscription peut échouer.
 
 Les backups contiennent les noms et les votes des membres : ils sont ignorés
 par git (`backups/`) et ne doivent pas circuler.

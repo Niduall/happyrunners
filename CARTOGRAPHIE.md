@@ -201,7 +201,7 @@ dénivelé.
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
 | `schema.sql` | structure complète, rejouable : tables, index, RLS, purge des tables mortes | 202 |
-| `backup.py` | `save` / `list` / `restore` de la prod, via l'API REST | 192 |
+| `backup.py` | `save` / `list` / `restore` de la prod, via l'API REST | 449 |
 | `public/` | `favicon.svg`, 3 PNG (tous 309 octets : probablement des placeholders) | — |
 
 ### 2.10 Configuration
@@ -520,28 +520,29 @@ tâche 12).
 Aujourd'hui les tables sont minuscules (11 profils), donc rien de cassé. Les
 points ci-dessous sont des pièges **latents**, à corriger avant d'en dépendre.
 
-**I1. `save` ne pagine pas.** `GET /rest/v1/<table>?select=*` sans en-tête
-`Range` (`backup.py:86-87`). PostgREST plafonne par défaut à ~1000 lignes : au
-delà, la sauvegarde est **tronquée en silence**, et le compte affiché est celui
-des lignes reçues. Sans risque à 11 profils ; faux un jour — et c'est justement
-le jour où on en aura besoin.
+**I1 (corrigé, tâche 4). `save` pagine par 1 000 lignes** (`order=id.asc`,
+`limit`/`offset`) et relit le fichier pour vérifier les comptes. PostgREST
+plafonne à ~1000 lignes : plus de troncature silencieuse.
 
-**I2. `restore` détruit d'abord, sans transaction.** `api_delete_all()`
-(`:100-103`) vide chaque table avant de réinsérer. Comme `TABLES` commence par
-`user_profiles` (`:32`) et que les clés étrangères sont en `ON DELETE CASCADE`
-(`schema.sql:74,101`), vider `user_profiles` emporte **immédiatement**
-`attendances` et `participations`. Une interruption au milieu = perte totale,
-sans retour possible.
+**I2 (corrigé, tâche 4). `restore` valide puis sauvegarde avant de détruire.**
+Le fichier est refusé s'il manque une table, un `id`, un profil ou une
+référence. Une sauvegarde `pre-restore` est prise automatiquement, la
+suppression suit l'ordre inverse (plus de cascade), et les comptes sont
+revérifiés après réécriture. **Limite assumée** : PostgREST n'offre pas de
+transaction multi-requêtes ; une coupure réseau au milieu laisse une base
+partielle, que la sauvegarde préalable permet de rejouer.
 
-**I3. La séquence n'est pas avancée.** Le script réinsère les `user_number`
-d'origine mais ne repositionne pas `user_number_seq` : il se contente
-d'**imprimer** une commande à lancer à la main (`:164-168`). Oubliée →
-`duplicate key` à la prochaine inscription, ce qui est précisément le scénario
-que `AGENTS.md` décrit comme irréparable.
+**I3 (corrigé, tâche 4). La séquence reste hors de portée de l'API REST.**
+Le script calcule la valeur, affiche la commande `setval` exacte, puis sort
+avec le **code 2** : impossible de croire que la restauration est finie sans
+l'avoir exécutée. Oubliée, elle provoquerait un `duplicate key` à la prochaine
+inscription — c'est précisément le scénario que `AGENTS.md` décrit comme
+irréparable.
 
-**I4. `load_env` utilise `setdefault`** (`:58`) : une variable déjà présente
-dans le shell **prime** sur `.env`. Un `VITE_SUPABASE_URL` exporté par erreur
-fait pointer la sauvegarde — ou la restauration — vers une autre base.
+**I4 (corrigé, tâche 4). `.env` est prioritaire** sur le shell, avec un
+avertissement si une variable exportée est remplacée. Un
+`VITE_SUPABASE_URL` oublié dans le terminal ne peut plus détourner une
+sauvegarde ou une restauration.
 
 ---
 
@@ -608,7 +609,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 1 | Dépendances et versions | `react`/`react-dom` non déclarés ; `workbox-window` inutile ; `vite-plugin-pwa` mal classé ; docs « React 18 » ; `VITE_DEFAULT_LAT/LON` fantômes | fait |
 | 2 | Fichiers morts et dangereux | `fix_uuid.sql`, `main.ts`, `counter.ts`, `style.css`, `src/assets/`, `tailwind.config.js`, `public/icons.svg` | fait |
 | 3 | Documentation fausse | `ARCHITECTURE.md` (hashPin, UserMenu, chemins de tests), `README.md` (GitHub Pages), `schema.sql` (backup.sh, psql), `AGENTS.md` (2 boutons) | fait |
-| 4 | Sauvegarde `backup.py` | pagination du `save`, ordre de suppression, `--dry-run`, sauvegarde avant restauration, vérification des comptes, séquence | à faire |
+| 4 | Sauvegarde `backup.py` | pagination du `save`, ordre de suppression, `--dry-run`, sauvegarde avant restauration, vérification des comptes, séquence | fait |
 | 5 | Comptage des votes | A1, A2, C1 : une seule source de vérité, un seul total | à faire |
 | 6 | Règle « vote sans présence » | A3 : la faire tenir en base, ou l'assumer explicitement | à faire |
 | 7 | Résilience des erreurs | A6 (présence partielle), A7 (noms vides), C2 (`false` ambigu) | à faire |

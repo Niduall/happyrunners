@@ -18,7 +18,7 @@ Cette règle a été ajoutée parce que des modifications non testées ont été
 
 ## Project Overview
 PWA pour organiser les courses du mercredi midi entre collègues.
-React 18 + TypeScript + Vite + Tailwind v4 + Leaflet + Supabase.
+React 19 + TypeScript + Vite + Tailwind v4 + Leaflet + Supabase.
 
 **Voir `ARCHITECTURE.md` pour la cartographie complète** (machine à états, tables, flux, points d'attention).
 
@@ -39,7 +39,7 @@ npm run build      # 0 erreur TypeScript
 ```
 
 ## Architecture (résumé)
-- **SPA**: React 18 + React Router
+- **SPA**: React 19 + React Router
 - **PWA**: vite-plugin-pwa, autoUpdate
 - **Auth**: Prénom/Nom → `user_number` (entier attribué par la base, **jamais dérivé du nom**). PIN 4 chiffres hashé stocké en base (`user_profiles.pin_hash`), jamais en localStorage
 - **State**: Supabase = source de vérité. localStorage = cache utilisateur local
@@ -142,8 +142,6 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 | `VITE_SUPABASE_URL` | Oui | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | Oui | Supabase anon key (**régénérable** — copier depuis le dashboard si "Invalid API key") |
 | ~~`VITE_OPENWEATHER_API_KEY`~~ | **Supprimé** | Open-Meteo n'a pas besoin de clé |
-| `VITE_DEFAULT_LAT` | Default: 48.6833 | Latitude (Tomblaine) |
-| `VITE_DEFAULT_LON` | Default: 6.2167 | Longitude (Tomblaine) |
 
 ## Database Schema
 

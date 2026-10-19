@@ -14,7 +14,7 @@ Application PWA pour organiser les sorties running du mercredi midi avec les col
 
 ## Stack
 
-- React 18 + TypeScript + Vite
+- React 19 + TypeScript + Vite
 - Tailwind CSS v4
 - Leaflet + OpenStreetMap
 - Supabase (base seule — pas d'authentification serveur)
@@ -33,8 +33,6 @@ Copiez `.env.example` vers `.env` :
 ```env
 VITE_SUPABASE_URL=https://votre-projet.supabase.co
 VITE_SUPABASE_ANON_KEY=votre_cle_anon
-VITE_DEFAULT_LAT=48.6833   # Tomblaine
-VITE_DEFAULT_LON=6.2167
 ```
 
 La clé anon est **régénérable** depuis le dashboard Supabase. Aucune clé

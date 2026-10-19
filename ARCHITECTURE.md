@@ -2,7 +2,7 @@
 
 ## Vue d'ensemble
 PWA pour organiser les sorties course du mercredi midi entre collègues.
-- **Stack** : React 18 + TypeScript + Vite + Tailwind v4 + Leaflet + Supabase
+- **Stack** : React 19 + TypeScript + Vite + Tailwind v4 + Leaflet + Supabase
 - **Auth** : localStorage (Prénom/Nom) + PIN 4 chiffres cross-device via Supabase
 - **Sync** : Polling 30s (Supabase Realtime instable sur plan gratuit)
 - **Deploy** : Vercel (auto-deploy depuis GitHub `main`)

@@ -96,10 +96,6 @@ Toutes les lignes sont sous `running-app/`.
 | `src/main.tsx` | point d'entrée **réel** : monte `App` sous `StrictMode` + `AuthProvider` | 12 |
 | `src/App.tsx` | routeur : `/` → `Home`, `/parcours` → `ParcoursList` | 17 |
 | `index.html` | hôte, `lang="fr"`, monte `#root` | 19 |
-| `src/main.ts` | ⚠️ **mort** : template Vite, cible `#app` qui n'existe pas | 60 |
-| `src/counter.ts` | ⚠️ **mort** : template Vite | 9 |
-| `src/style.css` | ⚠️ **mort** : template Vite (l'app utilise `src/index.css`) | 296 |
-| `src/assets/` | ⚠️ **mort** : `hero.png`, `typescript.svg`, `vite.svg`, importés seulement par `main.ts` | — |
 
 ### 2.2 Pages
 
@@ -206,8 +202,7 @@ dénivelé.
 |---|---|---|
 | `schema.sql` | structure complète, rejouable : tables, index, RLS, purge des tables mortes | 202 |
 | `backup.py` | `save` / `list` / `restore` de la prod, via l'API REST | 192 |
-| `fix_uuid.sql` | ⚠️ **dangereux et orphelin** : `created_by` est un `integer` (`schema.sql:58`) mais le script filtre sur un motif **UUID** — exécuté, il mettrait **tous** les `created_by` à `NULL` (voir §5.E) | 6 |
-| `public/` | `favicon.svg`, `icons.svg`, 3 PNG (tous 309 octets : probablement des placeholders) | — |
+| `public/` | `favicon.svg`, 3 PNG (tous 309 octets : probablement des placeholders) | — |
 
 ### 2.10 Configuration
 
@@ -215,7 +210,6 @@ dénivelé.
 |---|---|---|
 | `vite.config.ts` | build + PWA + config Vitest | le manifeste PWA est écrit **ici**, pas dans `index.html` ; `includeAssets` cite `favicon.ico`, qui n'existe pas |
 | `tsconfig.json` | TypeScript | ⚠️ **`strict` absent** ⇒ mode non-strict ; `noUnusedLocals: false` |
-| `tailwind.config.js` | ⚠️ **ignoré** : Tailwind v4 lit `@theme` dans `src/index.css:1-12` | aucun `@config` ne le référence |
 | `postcss.config.js` | `@tailwindcss/postcss` + autoprefixer | `autoprefixer` est redondant avec v4, sans effet |
 | `.env` | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_ADMIN_CODE` | non versionné ✅ |
 
@@ -366,11 +360,11 @@ termine par `.maybeSingle()`. Deux « Julie Moudin » feraient échouer la
 reconnexion (et non renvoyer la première). Aujourd'hui la base n'a aucun
 doublon — c'est un piège, pas un incident.
 
-**A11. `fix_uuid.sql` détruirait `created_by`.** `created_by` est un `integer`
+**A11 (corrigé, tâche 2). `fix_uuid.sql` détruisait `created_by`.** `created_by` est un `integer`
 (`schema.sql:58`), mais le script fait
 `WHERE created_by::text NOT LIKE '________-____-____-____-____________'` :
 pour un entier comme `3`, la condition est vraie, donc **toutes** les lignes
-seraient mises à `NULL`. Le fichier n'est référencé nulle part. À supprimer.
+seraient mises à `NULL`. Le fichier n'était référencé nulle part : **supprimé**.
 
 ### B. Propreté des données (constaté en base le 19/10/2026)
 
@@ -458,12 +452,14 @@ reste de l'application.
 | prop `center` | `MapView.tsx:17-18,31-33` | branche morte |
 | prop `onClick` | `ui/Card.tsx:6,14,17` | jamais utilisée |
 | prop `loading` | `ui/Button.tsx:7,36-41` | jamais passée ⇒ spinner mort |
-| `src/assets/` | racine | `hero.png`, `typescript.svg`, `vite.svg` : importés **uniquement** par `main.ts` |
 | ~~`workbox-window`~~ | `package.json` | déclarée, importée nulle part — **retirée (tâche 1)** |
 | `vite-plugin-pwa` | `package.json` | outil de **build** classé en `dependencies` (alors que `vite` est en `devDependencies`) |
-| `tailwind.config.js` | racine | **ignoré** par Tailwind v4 (pas de `@config`) |
-| `fix_uuid.sql` | racine | dangereux et orphelin — voir A11 |
 | types jamais consommés | `Coordinates`, `Participation`, `ParticipationStatus`, `Attendance`, plus 8 types de retour exportés | — |
+
+**Supprimés en tâche 2** : `src/main.ts`, `src/counter.ts`, `src/style.css`,
+`src/assets/*` (3 fichiers), `public/icons.svg`, `tailwind.config.js` et
+`fix_uuid.sql`. Le CSS produit a perdu 1,7 kB au passage (utilitaires `filter`
+et `transform`, générés uniquement par le template).
 
 ### F. Documentation fausse
 
@@ -606,7 +602,7 @@ Légende : `à faire` · `en cours` · `fait`
 | # | Tâche | Ce que ça corrige | État |
 |---|---|---|---|
 | 1 | Dépendances et versions | `react`/`react-dom` non déclarés ; `workbox-window` inutile ; `vite-plugin-pwa` mal classé ; docs « React 18 » ; `VITE_DEFAULT_LAT/LON` fantômes | fait |
-| 2 | Fichiers morts et dangereux | `fix_uuid.sql`, `main.ts`, `counter.ts`, `style.css`, `src/assets/`, `tailwind.config.js`, `public/icons.svg` | à faire |
+| 2 | Fichiers morts et dangereux | `fix_uuid.sql`, `main.ts`, `counter.ts`, `style.css`, `src/assets/`, `tailwind.config.js`, `public/icons.svg` | fait |
 | 3 | Documentation fausse | `ARCHITECTURE.md` (hashPin, UserMenu, chemins de tests), `README.md` (GitHub Pages), `schema.sql` (backup.sh, psql), `AGENTS.md` (2 boutons) | à faire |
 | 4 | Sauvegarde `backup.py` | pagination du `save`, ordre de suppression, `--dry-run`, sauvegarde avant restauration, vérification des comptes, séquence | à faire |
 | 5 | Comptage des votes | A1, A2, C1 : une seule source de vérité, un seul total | à faire |

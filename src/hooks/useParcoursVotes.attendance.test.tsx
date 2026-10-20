@@ -246,4 +246,21 @@ describe('useParcoursVotes — un vote ne compte que si la personne vient', () =
     expect(absent.current.winners).toEqual([])
     void coming
   })
+
+  it('ne remet pas les votes à zéro si les présences échouent', async () => {
+    votes = [{ parcoursId: 'p1', userNumber: 2, status: 'yes' }]
+    mockAttendances.mockRejectedValue(new Error('réseau'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const { result } = renderVotes()
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    // Repli assumé : compter tout vaut mieux qu'afficher zéro alors que
+    // la requête de votes, elle, a bien réussi.
+    expect(result.current.tallies.p1?.yes).toBe(1)
+    expect(result.current.error).toBeNull()
+    expect(warn).toHaveBeenCalled()
+
+    warn.mockRestore()
+  })
 })

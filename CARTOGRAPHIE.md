@@ -300,13 +300,16 @@ L'import GPX reste ouvert à tous.
 
 ### A. Bugs à corriger
 
-**A1. Une panne de chargement des présences efface tous les votes.**
+**A1 (corrigé, tâche 5). Une panne de chargement des présences efface tous les votes.**
 `Home.tsx:70` passe toujours `goingUserNumbers`. Si `useAttendance` a échoué,
 `attendees` est vide (`useAttendance.ts:47-56`), la liste vide fait autorité et
 `useParcoursVotes.ts:91-113` filtre **tous** les votes. L'écran affiche zéro
 vote alors que la requête de votes a réussi.
+Correction : Home passe `undefined` tant que les présences ne sont pas
+disponibles ; le hook charge votes et présences indépendamment et, si les
+présences échouent, compte tous les votes (`going = null`) au lieu de zéro.
 
-**A2. Totaux divergents entre les deux écrans (vérifié).**
+**A2 (corrigé, tâche 5). Totaux divergents entre les deux écrans (vérifié).**
 `getWeekTallies` (`supabaseService.ts:242-255`) compte **tous** les votes, sans
 filtrer les présents. `ParcoursList.tsx:138` l'utilise pour afficher les
 compteurs, tandis que Home passe par le recomptage filtré de
@@ -315,6 +318,9 @@ confirmé en base) illustrerait la divergence : 1 sur la page de gestion, 0 sur
 Home. Latent aujourd'hui (ces compteurs ne portent que sur la semaine en cours,
 où il n'y a aucun vote), faux dès qu'un vote sans présence tombe dans la
 semaine courante.
+Correction : `getWeekTallies` filtre par les présents et délègue à
+`summarizeVotes`, la même fonction que Home. Le vote orphelin `#16` n'est plus
+compté nulle part (il reste en base, intact).
 
 **A3. Rien n'empêche en base un vote sans présence.** Aucune contrainte ni
 trigger ne lie `participations` à `attendances.status = 'going'`
@@ -379,8 +385,10 @@ seraient mises à `NULL`. Le fichier n'était référencé nulle part : **suppri
 
 ### C. Incohérences de logique
 
-**C1.** Deux algorithmes de comptage non équivalents (voir A2), aucune fonction
+**C1 (corrigé, tâche 5).** Deux algorithmes de comptage non équivalents (voir A2), aucune fonction
 partagée.
+Correction : un seul module, `src/services/voteTallies.ts` (`goingSet` +
+`summarizeVotes`), utilisé par le hook et par le service.
 
 **C2.** `verifyUserPin`, `setPin`, `clearPin`, `profileExists` renvoient `false`
 aussi bien pour un refus métier que pour une panne réseau
@@ -614,7 +622,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 2 | Fichiers morts et dangereux | `fix_uuid.sql`, `main.ts`, `counter.ts`, `style.css`, `src/assets/`, `tailwind.config.js`, `public/icons.svg` | fait |
 | 3 | Documentation fausse | `ARCHITECTURE.md` (hashPin, UserMenu, chemins de tests), `README.md` (GitHub Pages), `schema.sql` (backup.sh, psql), `AGENTS.md` (2 boutons) | fait |
 | 4 | Sauvegarde `backup.py` | pagination du `save`, ordre de suppression, `--dry-run`, sauvegarde avant restauration, vérification des comptes, séquence | fait |
-| 5 | Comptage des votes | A1, A2, C1 : une seule source de vérité, un seul total | à faire |
+| 5 | Comptage des votes | A1, A2, C1 : une seule source de vérité, un seul total | fait |
 | 6 | Règle « vote sans présence » | A3 : la faire tenir en base, ou l'assumer explicitement | à faire |
 | 7 | Résilience des erreurs | A6 (présence partielle), A7 (noms vides), C2 (`false` ambigu) | à faire |
 | 8 | Bascule du mercredi 14h | A4 : réponses obsolètes qui écrasent la nouvelle semaine | à faire |

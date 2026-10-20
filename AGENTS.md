@@ -53,6 +53,7 @@ npm run build      # 0 erreur TypeScript
 | `src/services/pin.ts` | `hashPin` (hash simple côté client) |
 | `src/hooks/useParcours.ts` | Parcours CRUD + 30s polling |
 | `src/hooks/useParcoursVotes.ts` | Votes hebdo multi-parcours + roster + 30s polling — **source unique** |
+| `src/services/voteTallies.ts` | Décompte unique des votes (présents seulement), partagé par le hook et `getWeekTallies` |
 | `src/hooks/useWeather.ts` | Météo mercredi 12h30 |
 | `src/services/supabaseService.ts` | API Supabase |
 | `src/services/storage.ts` | cache utilisateur local (invalide les ids non entiers) |
@@ -221,7 +222,7 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
 
 ## Common Pitfalls to Avoid
 1. **⛔ Ne jamais `git push` sans accord explicite de l'utilisateur**
-2. **Ne pas dupliquer la logique de vote** — un seul `useParcoursVotes`
+2. **Ne pas dupliquer la logique de vote** — un seul `useParcoursVotes`, et un seul décompte (`voteTallies.ts`)
 2b. **Toujours passer par `castWeekVote()`** — un vote sans `week_key` est invisible dans le tableau
 3. **`pendingUser` requis** pour `verifyUserPin` — sans lui retourne `false`
 4. **Ne pas écraser un `pin_hash` existant** lors d'une "création" de compte

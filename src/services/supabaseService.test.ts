@@ -5,7 +5,9 @@ import { supabase } from '../lib/supabase'
 /** Lignes renvoyées par PostgREST (snake_case, comme la vraie API) */
 const mockRows = vi.fn()
 const mockProfiles = vi.fn()
+const mockAttendanceRows = vi.fn()
 const mockError = vi.fn()
+const mockAttendanceError = vi.fn()
 
 /**
  * Chaque table a sa propre source de données. `from(table)` capture le nom
@@ -23,8 +25,16 @@ vi.mock('../lib/supabase', () => ({
       q.limit = () => q
       q.maybeSingle = () => Promise.resolve({ data: null, error: null })
       q.then = (resolve: (v: unknown) => unknown) => {
-        const data = table === 'user_profiles' ? mockProfiles() : mockRows()
-        return Promise.resolve({ data, error: mockError() }).then(resolve)
+        if (table === 'user_profiles') {
+          return Promise.resolve({ data: mockProfiles(), error: null }).then(resolve)
+        }
+        if (table === 'attendances') {
+          return Promise.resolve({
+            data: mockAttendanceRows(),
+            error: mockAttendanceError(),
+          }).then(resolve)
+        }
+        return Promise.resolve({ data: mockRows(), error: mockError() }).then(resolve)
       }
       return q
     },
@@ -33,6 +43,20 @@ vi.mock('../lib/supabase', () => ({
 
 void supabase
 
+beforeEach(() => {
+  mockRows.mockReset()
+  mockProfiles.mockReset()
+  mockAttendanceRows.mockReset()
+  mockError.mockReset()
+  mockAttendanceError.mockReset()
+
+  mockRows.mockReturnValue([])
+  mockProfiles.mockReturnValue([])
+  mockAttendanceRows.mockReturnValue([])
+  mockError.mockReturnValue(null)
+  mockAttendanceError.mockReturnValue(null)
+})
+
 const VOTE_ROWS = [
   { parcours_id: 'p1', user_number: 1, status: 'yes' },
   { parcours_id: 'p1', user_number: 2, status: 'no' },
@@ -40,14 +64,6 @@ const VOTE_ROWS = [
 ]
 
 describe('getWeekVotes — mapping snake_case → camelCase', () => {
-  beforeEach(() => {
-    mockRows.mockReset()
-    mockProfiles.mockReset()
-    mockError.mockReset()
-
-    mockError.mockReturnValue(null)
-  })
-
   it('convertit les noms de colonnes PostgREST en camelCase', async () => {
     mockRows.mockReturnValue(VOTE_ROWS)
 
@@ -73,17 +89,13 @@ describe('getWeekVotes — mapping snake_case → camelCase', () => {
   })
 })
 
-describe('getWeekTallies', () => {
-  beforeEach(() => {
-    mockRows.mockReset()
-    mockProfiles.mockReset()
-    mockError.mockReset()
-
-    mockError.mockReturnValue(null)
-  })
-
+describe('getWeekTallies — votes des présents uniquement', () => {
   it('compte les votes par parcours', async () => {
     mockRows.mockReturnValue(VOTE_ROWS)
+    mockAttendanceRows.mockReturnValue([
+      { user_number: 1, status: 'going' },
+      { user_number: 2, status: 'going' },
+    ])
 
     const tallies = await getWeekTallies('2026-10-07')
     const byId = new Map(tallies.map((t) => [t.parcoursId, t]))
@@ -92,22 +104,62 @@ describe('getWeekTallies', () => {
     expect(byId.get('p2')).toEqual({ parcoursId: 'p2', yes: 1, no: 0 })
   })
 
+  it('ignore le vote de quelqu’un qui ne vient pas', async () => {
+    mockRows.mockReturnValue([
+      { parcours_id: 'p1', user_number: 1, status: 'yes' },
+      { parcours_id: 'p1', user_number: 3, status: 'yes' },
+    ])
+    mockAttendanceRows.mockReturnValue([
+      { user_number: 1, status: 'going' },
+      { user_number: 3, status: 'skip' },
+    ])
+
+    expect(await getWeekTallies('2026-10-07')).toEqual([
+      { parcoursId: 'p1', yes: 1, no: 0 },
+    ])
+  })
+
+  it('ignore un vote sans aucune présence', async () => {
+    // Le vote orphelin observé en prod : un votant qui n'a jamais répondu.
+    mockRows.mockReturnValue([{ parcours_id: 'p1', user_number: 16, status: 'yes' }])
+    mockAttendanceRows.mockReturnValue([])
+
+    expect(await getWeekTallies('2026-10-07')).toEqual([])
+  })
+
   it('ignore les lignes sans user_number', async () => {
     mockRows.mockReturnValue([{ parcours_id: 'p1', user_number: null, status: 'yes' }])
+    mockAttendanceRows.mockReturnValue([{ user_number: 1, status: 'going' }])
+
     expect(await getWeekTallies('2026-10-07')).toEqual([])
+  })
+
+  it('compte tout si les présences sont indisponibles', async () => {
+    mockRows.mockReturnValue(VOTE_ROWS)
+    mockAttendanceError.mockReturnValue(new Error('réseau'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const tallies = await getWeekTallies('2026-10-07')
+    const byId = new Map(tallies.map((t) => [t.parcoursId, t]))
+
+    // Repli assumé : mieux vaut des compteurs non filtrés que zéro
+    expect(byId.get('p1')).toEqual({ parcoursId: 'p1', yes: 1, no: 1 })
+    expect(byId.get('p2')).toEqual({ parcoursId: 'p2', yes: 1, no: 0 })
+    expect(warn).toHaveBeenCalled()
+
+    warn.mockRestore()
+  })
+
+  it('propage une erreur de chargement des votes', async () => {
+    mockError.mockReturnValue(new Error('votes indisponibles'))
+
+    await expect(getWeekTallies('2026-10-07')).rejects.toThrow('votes indisponibles')
   })
 })
 
 describe('getWeekAttendances — les noms viennent du JOIN', () => {
-  beforeEach(() => {
-    mockRows.mockReset()
-    mockProfiles.mockReset()
-    mockError.mockReset()
-    mockError.mockReturnValue(null)
-  })
-
   it('rattache les noms de user_profiles', async () => {
-    mockRows.mockReturnValue([
+    mockAttendanceRows.mockReturnValue([
       { id: 'a', user_number: 1, status: 'going', created_at: '', updated_at: '' },
       { id: 'b', user_number: 2, status: 'skip', created_at: '', updated_at: '' },
     ])
@@ -129,13 +181,13 @@ describe('getWeekAttendances — les noms viennent du JOIN', () => {
   })
 
   it('retourne [] si personne n’a répondu', async () => {
-    mockRows.mockReturnValue([])
+    mockAttendanceRows.mockReturnValue([])
     mockProfiles.mockReturnValue([])
     expect(await getWeekAttendances('2026-10-07')).toEqual([])
   })
 
   it('gère un profil absent du JOIN (nom vide)', async () => {
-    mockRows.mockReturnValue([
+    mockAttendanceRows.mockReturnValue([
       { id: 'a', user_number: 99, status: 'going', created_at: '', updated_at: '' },
     ])
     mockProfiles.mockReturnValue([])

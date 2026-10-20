@@ -5,8 +5,8 @@ import {
   getWeekVotes,
   getWeekAttendances,
   type ParcoursTally,
-  type WeekVote,
 } from '../services/supabaseService'
+import { goingSet, summarizeVotes } from '../services/voteTallies'
 import { useTargetWednesday } from './useTargetWednesday'
 import { useAuth } from './useAuth'
 
@@ -62,7 +62,11 @@ export function useParcoursVotes(
 
   // Signature des présents : change dès que quelqu'un répond, ce qui
   // recalcule les compteurs sans attendre le polling.
-  const goingKey = (goingUserNumbers ?? []).join(',')
+  //
+  // `undefined` = présences inconnues (chargement ou panne), à distinguer
+  // d'une liste vide = personne ne vient. Sinon le hook ne réagirait pas
+  // au passage de l'un à l'autre.
+  const goingKey = goingUserNumbers === undefined ? 'unknown' : goingUserNumbers.join(',')
 
   const parcoursKey = parcoursIds.join(',')
   const ids = useMemo(() => (parcoursKey ? parcoursKey.split(',') : []), [parcoursKey])
@@ -71,10 +75,13 @@ export function useParcoursVotes(
     async (opts?: { keepError?: boolean }) => {
       if (!user?.id) return
       try {
-        const [voteList, attendanceList] = await Promise.all([
+        const [votesResult, attendancesResult] = await Promise.allSettled([
           getWeekVotes(weekKey),
           getWeekAttendances(weekKey),
         ])
+
+        // Les votes sont la donnée principale : sans eux, rien à afficher.
+        if (votesResult.status === 'rejected') throw votesResult.reason
 
         // ⚠️ Un vote ne compte que si la personne a dit « je viens ».
         // Deux cas réels de votes qui ne doivent pas peser :
@@ -88,29 +95,24 @@ export function useParcoursVotes(
         // ⚠️ Ne PAS fusionner les deux : une réponse « pas aujourd'hui »
         //    enregistrée en base serait ré-adding par la requête, et le
         //    vote continuerait d'être compté jusqu'au polling suivant.
-        const going =
-          goingUserNumbers !== undefined
-            ? new Set(goingUserNumbers)
-            : new Set(
-                attendanceList.filter((a) => a.status === 'going').map((a) => a.userNumber)
-              )
-
-        // Recompte en ne gardant que les votes des présents
-        const recomputed: Record<string, ParcoursTally> = {}
-        for (const v of voteList as WeekVote[]) {
-          if (!v.userNumber || !going.has(v.userNumber)) continue
-          const t = recomputed[v.parcoursId] ?? { parcoursId: v.parcoursId, yes: 0, no: 0 }
-          if (v.status === 'yes') t.yes += 1
-          else t.no += 1
-          recomputed[v.parcoursId] = t
+        let going: Set<number> | null
+        if (goingUserNumbers !== undefined) {
+          going = new Set(goingUserNumbers)
+        } else if (attendancesResult.status === 'fulfilled') {
+          going = goingSet(attendancesResult.value)
+        } else {
+          // Présences indisponibles : on compte tout plutôt que d'afficher
+          // zéro. Une panne de présences ne doit pas effacer des votes
+          // qui, eux, ont bien été chargés.
+          console.warn('[VOTES] Présences indisponibles : comptage non filtré')
+          going = null
         }
+
+        const { tallies: recomputed, choices: nextChoices } = summarizeVotes(
+          votesResult.value,
+          going
+        )
         setTallies(recomputed)
-
-        // Un seul choix par personne et par semaine, et seulement si venue
-        const nextChoices: Record<number, string> = {}
-        for (const v of voteList as WeekVote[]) {
-          if (v.userNumber && going.has(v.userNumber)) nextChoices[v.userNumber] = v.parcoursId
-        }
         setChoices(nextChoices)
         setMyChoice(nextChoices[user.id] ?? null)
 

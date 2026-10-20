@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { goingSet, summarizeVotes } from './voteTallies'
 import type {
   Parcours,
   ParcoursInsert,
@@ -239,20 +240,23 @@ export async function getWeekVotes(weekKey: string): Promise<WeekVote[]> {
   }))
 }
 
-/** Compteurs yes/no par parcours pour une semaine */
+/** Compteurs yes/no par parcours pour une semaine, présents uniquement */
 export async function getWeekTallies(weekKey: string): Promise<ParcoursTally[]> {
-  const votes = await getWeekVotes(weekKey)
-  const byParcours = new Map<string, ParcoursTally>()
+  const [votesResult, attendancesResult] = await Promise.allSettled([
+    getWeekVotes(weekKey),
+    getWeekAttendances(weekKey),
+  ])
 
-  for (const v of votes) {
-    if (!v.parcoursId || v.userNumber == null) continue
-    const tally = byParcours.get(v.parcoursId) ?? { parcoursId: v.parcoursId, yes: 0, no: 0 }
-    if (v.status === 'yes') tally.yes += 1
-    else tally.no += 1
-    byParcours.set(v.parcoursId, tally)
+  if (votesResult.status === 'rejected') throw votesResult.reason
+
+  // Présences indisponibles : on compte tout plutôt que de renvoyer zéro.
+  if (attendancesResult.status === 'rejected') {
+    console.warn('[TALLIES] Présences indisponibles : comptage non filtré')
   }
+  const going =
+    attendancesResult.status === 'fulfilled' ? goingSet(attendancesResult.value) : null
 
-  return [...byParcours.values()]
+  return Object.values(summarizeVotes(votesResult.value, going).tallies)
 }
 
 /** Le choix d'une personne pour un parcours donné cette semaine */

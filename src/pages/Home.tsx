@@ -41,6 +41,7 @@ export function Home() {
   const {
     myStatus,
     attendees,
+    loading: attendanceLoading,
     weekLabel,
     saving: attendanceSaving,
     error: attendanceError,
@@ -51,11 +52,16 @@ export function Home() {
   /**
    * Qui a dit « je viens ». Passe aux votes pour qu'un choix d'un absent
    * soit retiré du décompte immédiatement, sans attendre le polling.
+   *
+   * `undefined` = présences pas encore disponibles. On laisse alors le hook
+   * utiliser sa propre requête (puis compter tout en dernier recours), au
+   * lieu de faire autorité avec une liste vide qui effacerait les votes.
    */
-  const goingUserNumbers = useMemo(
-    () => attendees.filter((a) => a.status === 'going').map((a) => a.userNumber),
-    [attendees]
-  )
+  const goingUserNumbers = useMemo<number[] | undefined>(() => {
+    if (attendanceLoading) return undefined
+    if (attendanceError && attendees.length === 0) return undefined
+    return attendees.filter((a) => a.status === 'going').map((a) => a.userNumber)
+  }, [attendees, attendanceLoading, attendanceError])
 
   const {
     tallies,

@@ -118,6 +118,89 @@ CREATE INDEX IF NOT EXISTS idx_participations_parcours
   ON participations USING btree (parcours_id);
 
 -- ---------------------------------------------------------------------------
+-- Règle métier : un vote exige une présence « going »
+-- ---------------------------------------------------------------------------
+-- La règle était purement côté client : un vote pouvait exister sans présence
+-- (vote orphelin #16 / 2026-10-14). Elle tient maintenant en base.
+--
+-- ⚠️ Contrairement aux triggers touch_updated_at ci-dessous (commentés),
+--    ces triggers sont actifs en production.
+--
+-- `FOR SHARE` verrouille la présence le temps du vote. Sans lui, deux
+-- transactions concurrentes pourraient laisser un vote rattaché à une présence
+-- devenue « skip ».
+CREATE OR REPLACE FUNCTION require_going_attendance()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  PERFORM 1
+  FROM attendances
+  WHERE week_key = NEW.week_key
+    AND user_number = NEW.user_number
+    AND status = 'going'
+  FOR SHARE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION
+      'Un vote exige une présence « going » (semaine %, personne %)',
+      NEW.week_key, NEW.user_number
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS participations_require_going ON participations;
+CREATE TRIGGER participations_require_going
+  BEFORE INSERT OR UPDATE ON participations
+  FOR EACH ROW
+  EXECUTE FUNCTION require_going_attendance();
+
+CREATE OR REPLACE FUNCTION remove_vote_when_not_going()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+DECLARE
+  v_week_key text;
+  v_user_number integer;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    v_week_key := OLD.week_key;
+    v_user_number := OLD.user_number;
+  ELSE
+    v_week_key := NEW.week_key;
+    v_user_number := NEW.user_number;
+  END IF;
+
+  DELETE FROM participations
+  WHERE week_key = v_week_key
+    AND user_number = v_user_number;
+
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS attendances_remove_vote_when_not_going ON attendances;
+CREATE TRIGGER attendances_remove_vote_when_not_going
+  AFTER UPDATE OF status ON attendances
+  FOR EACH ROW
+  WHEN (NEW.status <> 'going')
+  EXECUTE FUNCTION remove_vote_when_not_going();
+
+DROP TRIGGER IF EXISTS attendances_remove_vote_on_delete ON attendances;
+CREATE TRIGGER attendances_remove_vote_on_delete
+  AFTER DELETE ON attendances
+  FOR EACH ROW
+  EXECUTE FUNCTION remove_vote_when_not_going();
+
+-- ---------------------------------------------------------------------------
 -- Optionnel : mise à jour automatique de updated_at
 -- ---------------------------------------------------------------------------
 -- ⚠️ La PROD n'a PAS ces triggers. Ils sont proposés ici parce que

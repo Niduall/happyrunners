@@ -144,6 +144,18 @@ class ValidationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "statut invalide"):
             backup.validate_dump(dump)
 
+    def test_vote_sans_presence_going(self):
+        dump = make_dump()
+        dump["attendances"][0]["status"] = "skip"
+        with self.assertRaisesRegex(ValueError, "sans présence « going »"):
+            backup.validate_dump(dump)
+
+    def test_vote_sans_aucune_presence(self):
+        dump = make_dump()
+        dump["attendances"] = []
+        with self.assertRaisesRegex(ValueError, "sans présence « going »"):
+            backup.validate_dump(dump)
+
 
 class SequenceTest(unittest.TestCase):
     def test_sql_setval(self):

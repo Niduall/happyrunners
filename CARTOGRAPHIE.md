@@ -322,10 +322,14 @@ Correction : `getWeekTallies` filtre par les présents et délègue à
 `summarizeVotes`, la même fonction que Home. Le vote orphelin `#16` n'est plus
 compté nulle part (il reste en base, intact).
 
-**A3. Rien n'empêche en base un vote sans présence.** Aucune contrainte ni
-trigger ne lie `participations` à `attendances.status = 'going'`
-(`schema.sql:98-117`). La règle est purement client — c'est exactement ce qui a
-produit le vote orphelin `#16`.
+**A3. Rien n'empêche en base un vote sans présence.** *(corrigé — tâche 6)*
+Aucune contrainte ni trigger ne liait `participations` à
+`attendances.status = 'going'` (`schema.sql`). La règle était purement client —
+c'est exactement ce qui a produit le vote orphelin `#16`. Désormais
+`participations_require_going` refuse un vote sans présence `going` (avec
+`FOR SHARE`), et `attendances_remove_vote_when_not_going` /
+`attendances_remove_vote_on_delete` retirent le vote quand la présence passe à
+`skip` ou disparaît.
 
 **A4. Réponses obsolètes autour de la bascule du mercredi 14h.** Aucun hook de
 données ne vérifie que la réponse concerne toujours la semaine demandée :
@@ -623,7 +627,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 3 | Documentation fausse | `ARCHITECTURE.md` (hashPin, UserMenu, chemins de tests), `README.md` (GitHub Pages), `schema.sql` (backup.sh, psql), `AGENTS.md` (2 boutons) | fait |
 | 4 | Sauvegarde `backup.py` | pagination du `save`, ordre de suppression, `--dry-run`, sauvegarde avant restauration, vérification des comptes, séquence | fait |
 | 5 | Comptage des votes | A1, A2, C1 : une seule source de vérité, un seul total | fait |
-| 6 | Règle « vote sans présence » | A3 : la faire tenir en base, ou l'assumer explicitement | à faire |
+| 6 | Règle « vote sans présence » | A3 : triggers `participations_require_going` + `attendances_remove_vote*`, orphelin #16 supprimé, `restore` refuse les dumps incohérents | en cours |
 | 7 | Résilience des erreurs | A6 (présence partielle), A7 (noms vides), C2 (`false` ambigu) | à faire |
 | 8 | Bascule du mercredi 14h | A4 : réponses obsolètes qui écrasent la nouvelle semaine | à faire |
 | 9 | Météo et fuseau horaire | A5 : `isoToEpoch` interprété dans le fuseau du navigateur | à faire |

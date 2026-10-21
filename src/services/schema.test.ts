@@ -68,6 +68,37 @@ describe('schema.sql — structure', () => {
     expect(schema).toMatch(/CHECK \(status IN \('yes', 'no'\)\)/)
   })
 
+  it('exige une présence « going » pour enregistrer un vote', () => {
+    // La règle ne doit pas rester côté client : c'est ce qui a produit le
+    // vote orphelin #16 / 2026-10-14.
+    expect(schema).toMatch(
+      /CREATE OR REPLACE FUNCTION require_going_attendance/
+    )
+    expect(schema).toMatch(/BEFORE INSERT OR UPDATE ON participations/)
+    expect(schema).toMatch(/status = 'going'/)
+    // FOR SHARE sérialise le vote et le passage à « skip ».
+    expect(schema).toMatch(/FOR SHARE/)
+    expect(schema).toMatch(
+      /DROP TRIGGER IF EXISTS participations_require_going ON participations/
+    )
+  })
+
+  it('retire le vote quand la présence passe à « skip » ou disparaît', () => {
+    expect(schema).toMatch(
+      /CREATE OR REPLACE FUNCTION remove_vote_when_not_going/
+    )
+    expect(schema).toMatch(
+      /AFTER UPDATE OF status ON attendances[\s\S]*WHEN \(NEW\.status <> 'going'\)/
+    )
+    expect(schema).toMatch(/AFTER DELETE ON attendances/)
+    expect(schema).toMatch(
+      /DROP TRIGGER IF EXISTS attendances_remove_vote_when_not_going/
+    )
+    expect(schema).toMatch(
+      /DROP TRIGGER IF EXISTS attendances_remove_vote_on_delete/
+    )
+  })
+
   it('autorise un profil sans PIN', () => {
     // NULL = pas de PIN. C'est ce qui permet à un profil d'exister
     // avant que la personne choisisse d'en ajouter un.

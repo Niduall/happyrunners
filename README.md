@@ -69,7 +69,8 @@ python3 backup.py restore <fichier> --allow-empty
 le fichier avant de supprimer quoi que ce soit (4 tables, comptes, clés
 étrangères), prend automatiquement une sauvegarde
 `happyrunners-pre-restore-<date>.json`, puis vérifie les comptes après
-réécriture.
+réécriture. Il refuse aussi un dump contenant un vote sans présence `going`
+(ancien vote orphelin) : la vérification a lieu avant toute suppression.
 
 La séquence `user_number_seq` n'est pas accessible via l'API REST : à la fin,
 le script affiche la commande SQL à exécuter et **sort avec le code 2**

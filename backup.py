@@ -285,6 +285,15 @@ def validate_dump(dump: dict, allow_empty: bool = False) -> dict[str, int]:
                 f"attendances : statut invalide {row.get('status')!r}"
             )
 
+    # Un vote n'est valide que si la présence correspondante est « going ».
+    # Indispensable depuis les triggers de la tâche 6 : un dump contenant
+    # l'ancien orphelin #16 serait refusé par la base au moment du restore.
+    going = {
+        (row["week_key"], row["user_number"])
+        for row in dump["attendances"]
+        if row.get("status") == "going"
+    }
+
     for row in dump["participations"]:
         if row.get("user_number") not in users:
             raise ValueError(
@@ -301,6 +310,11 @@ def validate_dump(dump: dict, allow_empty: bool = False) -> dict[str, int]:
         if row.get("status") not in ("yes", "no"):
             raise ValueError(
                 f"participations : statut invalide {row.get('status')!r}"
+            )
+        if (row["week_key"], row["user_number"]) not in going:
+            raise ValueError(
+                "participations : vote sans présence « going » "
+                f"(personne {row['user_number']}, semaine {row['week_key']})"
             )
 
     # Un fichier tronqué à l'écriture ou édité à la main se voit ici.

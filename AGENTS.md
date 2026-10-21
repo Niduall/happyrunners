@@ -170,6 +170,9 @@ qui n'existait plus depuis la migration `user_number`.
 - `participations.parcours_id` est en **`ON DELETE CASCADE`** : supprimer un
   parcours emporte ses votes. C'est ce que la confirmation annonce.
 - `onConflict` des votes = **`user_number,week_key`**, jamais `parcours_id`.
+- **Un vote exige une présence `going`**. Les triggers
+  `participations_require_going` et `attendances_remove_vote*` le garantissent
+  en base ; le client ne suffit pas (vote orphelin `#16`).
 - La séquence `user_number` est irremplaçable. La perdre casse la création.
 - `profiles` et `responses` sont des tables **mortes** (ancien identifiant
   dérivé du nom). `schema.sql` les supprime ; ne pas les recréer.
@@ -184,8 +187,10 @@ python3 backup.py save --env .env.test  # cible la base de test
 ```
 
 `save` pagine par 1 000 lignes. `restore` valide le fichier, sauvegarde l'état
-courant, supprime dans l'ordre inverse et vérifie les comptes. Il sort en
-**code 2** tant que le `setval` de `user_number_seq` n'a pas été exécuté.
+courant, supprime dans l'ordre inverse et vérifie les comptes. Il refuse aussi
+un dump contenant un vote sans présence `going` (ancien vote orphelin), avant
+toute suppression. Il sort en **code 2** tant que le `setval` de
+`user_number_seq` n'a pas été exécuté.
 Tests hors ligne : `python3 -m unittest test_backup.py -v`.
 
 ## Testing

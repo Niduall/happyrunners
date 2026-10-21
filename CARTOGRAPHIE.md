@@ -627,7 +627,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 3 | Documentation fausse | `ARCHITECTURE.md` (hashPin, UserMenu, chemins de tests), `README.md` (GitHub Pages), `schema.sql` (backup.sh, psql), `AGENTS.md` (2 boutons) | fait |
 | 4 | Sauvegarde `backup.py` | pagination du `save`, ordre de suppression, `--dry-run`, sauvegarde avant restauration, vérification des comptes, séquence | fait |
 | 5 | Comptage des votes | A1, A2, C1 : une seule source de vérité, un seul total | fait |
-| 6 | Règle « vote sans présence » | A3 : triggers `participations_require_going` + `attendances_remove_vote*`, orphelin #16 supprimé, `restore` refuse les dumps incohérents | en cours |
+| 6 | Règle « vote sans présence » | A3 : triggers `participations_require_going` + `attendances_remove_vote*`, orphelin #16 supprimé, `restore` refuse les dumps incohérents | fait |
 | 7 | Résilience des erreurs | A6 (présence partielle), A7 (noms vides), C2 (`false` ambigu) | à faire |
 | 8 | Bascule du mercredi 14h | A4 : réponses obsolètes qui écrasent la nouvelle semaine | à faire |
 | 9 | Météo et fuseau horaire | A5 : `isoToEpoch` interprété dans le fuseau du navigateur | à faire |

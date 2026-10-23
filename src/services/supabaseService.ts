@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase'
 import { goingSet, summarizeVotes } from './voteTallies'
 import type {
   Parcours,
+  ParcoursSummary,
   ParcoursInsert,
   ParticipationInsert,
   AttendanceInsert,
@@ -16,27 +17,47 @@ export type { AttendanceStatus }
 
 // ===== PARCOURS =====
 
-export async function getParcours(): Promise<Parcours[]> {
+/**
+ * Colonnes de la liste : tout sauf `points`.
+ * Les coordonnées représentent ~1,1 Mo pour 5 parcours et ne servent qu'à la
+ * carte dépliée ; les inclure dans le polling de 30 s était du gaspillage.
+ */
+const PARCOURS_SUMMARY_COLUMNS =
+  'id, name, description, distance_km, elevation_gain_m, created_by, created_at, updated_at'
+
+export async function getParcours(): Promise<ParcoursSummary[]> {
   const { data, error } = await supabase
     .from('parcours')
-    .select('*')
+    .select(PARCOURS_SUMMARY_COLUMNS)
     .order('created_at', { ascending: false })
 
   if (error) throw error
-  return data || []
+  return (data || []) as ParcoursSummary[]
 }
 
-export async function getNextParcours(): Promise<Parcours | null> {
+/** Charge uniquement le tracé d'un parcours, à la demande. */
+export async function getParcoursPoints(id: string): Promise<GPXPoint[]> {
+  const { data, error } = await supabase
+    .from('parcours')
+    .select('points')
+    .eq('id', id)
+    .single()
+
+  if (error) throw error
+  return ((data as { points?: GPXPoint[] } | null)?.points ?? [])
+}
+
+export async function getNextParcours(): Promise<ParcoursSummary | null> {
   // maybeSingle() : null si aucun parcours, pas d'erreur 406
   const { data, error } = await supabase
     .from('parcours')
-    .select('*')
+    .select(PARCOURS_SUMMARY_COLUMNS)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
 
   if (error) throw error
-  return data || null
+  return (data as ParcoursSummary | null) || null
 }
 
 export async function addParcours(parcours: ParcoursInsert): Promise<Parcours> {

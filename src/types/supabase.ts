@@ -18,6 +18,15 @@ export interface Parcours {
   updated_at: string
 }
 
+/**
+ * Parcours sans le tracé GPX.
+ *
+ * La liste est rechargée toutes les 30 s : elle ne doit pas transporter les
+ * coordonnées (1,1 Mo pour 5 parcours). Le tracé est chargé à la demande
+ * quand la carte est dépliée.
+ */
+export type ParcoursSummary = Omit<Parcours, 'points'>
+
 export interface ParcoursInsert {
   name: string
   description?: string

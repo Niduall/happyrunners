@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { getWeekVotes, getWeekTallies, getWeekAttendances } from './supabaseService'
+import {
+  getParcours,
+  getParcoursPoints,
+  getWeekVotes,
+  getWeekTallies,
+  getWeekAttendances,
+} from './supabaseService'
 import { supabase } from '../lib/supabase'
 
 /** Lignes renvoyées par PostgREST (snake_case, comme la vraie API) */
@@ -9,6 +15,7 @@ const mockProfilesError = vi.fn()
 const mockAttendanceRows = vi.fn()
 const mockError = vi.fn()
 const mockAttendanceError = vi.fn()
+const mockSelectColumns = vi.fn()
 
 /**
  * Chaque table a sa propre source de données. `from(table)` capture le nom
@@ -18,12 +25,16 @@ vi.mock('../lib/supabase', () => ({
   supabase: {
     from: (table: string) => {
       const q: Record<string, unknown> = {}
-      q.select = () => q
+      q.select = (columns?: string) => {
+        mockSelectColumns(columns)
+        return q
+      }
       q.eq = () => q
       q.not = () => q
       q.in = () => q
       q.order = () => q
       q.limit = () => q
+      q.single = () => q
       q.maybeSingle = () => Promise.resolve({ data: null, error: null })
       q.then = (resolve: (v: unknown) => unknown) => {
         if (table === 'user_profiles') {
@@ -51,6 +62,7 @@ beforeEach(() => {
   mockAttendanceRows.mockReset()
   mockError.mockReset()
   mockAttendanceError.mockReset()
+  mockSelectColumns.mockReset()
 
   mockRows.mockReturnValue([])
   mockProfiles.mockReturnValue([])
@@ -65,6 +77,36 @@ const VOTE_ROWS = [
   { parcours_id: 'p1', user_number: 2, status: 'no' },
   { parcours_id: 'p2', user_number: 1, status: 'yes' },
 ]
+
+describe('getParcours — le tracé n’est pas dans la liste', () => {
+  it('demande toutes les colonnes sauf points', async () => {
+    mockRows.mockReturnValue([
+      {
+        id: 'p1',
+        name: 'Bois de Haye',
+        distance_km: 4.2,
+        elevation_gain_m: 93,
+        created_by: null,
+        created_at: '',
+        updated_at: '',
+      },
+    ])
+
+    const list = await getParcours()
+
+    expect(mockSelectColumns).toHaveBeenCalledWith(expect.not.stringContaining('points'))
+    expect(list[0]).not.toHaveProperty('points')
+  })
+
+  it('ne charge que la colonne points pour un parcours donné', async () => {
+    mockRows.mockReturnValue({ points: [{ lat: 48.6, lng: 6.1 }] })
+
+    const points = await getParcoursPoints('p1')
+
+    expect(mockSelectColumns).toHaveBeenCalledWith('points')
+    expect(points).toEqual([{ lat: 48.6, lng: 6.1 }])
+  })
+})
 
 describe('getWeekVotes — mapping snake_case → camelCase', () => {
   it('convertit les noms de colonnes PostgREST en camelCase', async () => {

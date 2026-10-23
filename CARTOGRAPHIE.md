@@ -454,11 +454,16 @@ changement de la liste des présents (`:65,125,138-141`) : le commentaire
 
 ### D. Performance
 
-**D1. `getParcours` rapatrie 1,1 Mo de coordonnées à chaque cycle.**
+**D1. `getParcours` rapatrie 1,1 Mo de coordonnées à chaque cycle. — corrigé.**
 Mesuré : `parcours?select=*` = **1 135 kB brut / 131 kB gzip**, contre **830
 octets** sans la colonne `points`. Les points ne servent qu'à `MapView`
-(`ParcoursCard.tsx:128-131`) — donc à la carte dépliée, pas à la liste. Piste :
-charger `points` à la demande.
+(`ParcoursCard.tsx`) — donc à la carte dépliée, pas à la liste.
+
+Correction : `getParcours` ne sélectionne plus que les colonnes de résumé
+(`ParcoursSummary`, sans `points`) ; `getParcoursPoints(id)` charge le tracé
+d'un seul parcours au premier dépliage de la carte. Le composant garde les
+points en mémoire tant qu'il est monté, avec états de chargement, d'erreur et
+de tracé absent. `getNextParcours` suit la même règle.
 
 **D2. `getWeekAttendances` appelé deux fois par cycle, un résultat jeté**
 (`useAttendance.ts:76-78` et `useParcoursVotes.ts:74-77,91-96`).
@@ -665,7 +670,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 7 | Résilience des erreurs | A6 (présence partielle), A7 (noms vides), C2 (`false` ambigu) | fait |
 | 8 | Bascule du mercredi 14h | A4 : réponses obsolètes qui écrasent la nouvelle semaine | fait |
 | 9 | Météo et fuseau horaire | A5 : `isoToEpoch` interprété dans le fuseau du navigateur | fait |
-| 10 | Tracé GPX à la demande | D1 : 131 kB gzip de coordonnées à chaque cycle, pour rien | à faire |
+| 10 | Tracé GPX à la demande | D1 : 131 kB gzip de coordonnées à chaque cycle, pour rien | fait |
 | 11 | Requêtes redondantes | D2, D3, D4 : `getWeekAttendances` en double, rechargements trop larges | à faire |
 | 12 | `strict` + linter | H : ce qui laisse passer imports morts et props fantômes | à faire |
 | 13 | Code mort restant, logs, tests GPX | §5.E, D5 : `storage.ts`, props mortes, 52 `console.*`, parser non testé | à faire |

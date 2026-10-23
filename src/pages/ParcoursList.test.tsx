@@ -8,6 +8,7 @@ import { getParcours, deleteParcours, getWeekTallies } from '../services/supabas
 
 vi.mock('../services/supabaseService', () => ({
   getParcours: vi.fn(),
+  getParcoursPoints: vi.fn(),
   getNextParcours: vi.fn(),
   addParcours: vi.fn(),
   deleteParcours: vi.fn(),

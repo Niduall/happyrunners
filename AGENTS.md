@@ -96,6 +96,9 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 ### GPX Parsing
 - Formats : XML GPX, JSON Strava `{ "points": [...] }`, flat array, segments, track.segments
 - Retourne `{ distance_km, elevation_gain_m, points[] }`
+- La liste (`getParcours`) ne charge **jamais** `points` (1,1 Mo pour 5
+  parcours). Utiliser `getParcoursPoints(id)` quand la carte est dépliée, et
+  garder le résultat dans l'état du composant.
 
 ### Polling
 - `useParcours.ts` : `setInterval(loadParcours, 30000)`

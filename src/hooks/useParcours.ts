@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getParcours, addParcours, deleteParcours } from '../services/supabaseService'
-import type { Parcours, ParcoursInsert } from '../types/supabase'
+import type { Parcours, ParcoursSummary, ParcoursInsert } from '../types/supabase'
 import { parseGPX } from '../services/gpxParser'
 import { useAuth } from './useAuth'
 
@@ -8,8 +8,8 @@ const POLL_INTERVAL_MS = 30000
 
 export function useParcours() {
   const { user } = useAuth()
-  const [parcoursList, setParcoursList] = useState<Parcours[]>([])
-  const [nextParcours, setNextParcours] = useState<Parcours | null>(null)
+  const [parcoursList, setParcoursList] = useState<ParcoursSummary[]>([])
+  const [nextParcours, setNextParcours] = useState<ParcoursSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)

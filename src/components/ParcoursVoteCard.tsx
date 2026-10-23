@@ -1,10 +1,10 @@
 import { Check, Trophy, MapPin, Scale } from 'lucide-react'
-import type { Parcours } from '../types/supabase'
+import type { ParcoursSummary } from '../types/supabase'
 import { Button } from './ui/Button'
 import { Card, CardContent } from './ui/Card'
 
 interface ParcoursVoteCardProps {
-  parcours: Parcours
+  parcours: ParcoursSummary
   isMyChoice: boolean
   yesCount: number
   isWinner: boolean

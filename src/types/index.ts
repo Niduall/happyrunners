@@ -14,7 +14,13 @@ export interface GPXPoint {
  * Parcours — ré-exporté depuis les types DB pour éviter deux définitions
  * divergentes (l'app entière lit ce qui vient de Supabase).
  */
-export type { Parcours, ParcoursInsert, Attendance, AttendanceStatus } from './supabase'
+export type {
+  Parcours,
+  ParcoursSummary,
+  ParcoursInsert,
+  Attendance,
+  AttendanceStatus,
+} from './supabase'
 import type { Parcours } from './supabase'
 
 export interface WeatherData {

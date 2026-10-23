@@ -12,7 +12,7 @@ import { addParcours, deleteParcours, getWeekTallies } from '../services/supabas
 import { useParcours } from '../hooks/useParcours'
 import { useAuth } from '../hooks/useAuth'
 import { useTargetWednesday } from '../hooks/useTargetWednesday'
-import type { Parcours } from '../types/supabase'
+import type { ParcoursSummary } from '../types/supabase'
 
 export function ParcoursList() {
   const navigate = useNavigate()
@@ -25,7 +25,7 @@ export function ParcoursList() {
   const [parsedParcours, setParsedParcours] = useState<any>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   // Parcours en attente de confirmation de suppression
-  const [pendingDelete, setPendingDelete] = useState<Parcours | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<ParcoursSummary | null>(null)
   // Nombre de votes par parcours, pour annoncer ce qui sera perdu
   const [voteCounts, setVoteCounts] = useState<Record<string, number>>({})
   // Demande du code administrateur

@@ -4,16 +4,18 @@ import { Button } from './ui/Button'
 import { Card, CardHeader, CardContent, CardFooter } from './ui/Card'
 import { MapView } from './MapView'
 import { parseGPX } from '../services/gpxParser'
-import type { Parcours } from '../types'
+import { getParcoursPoints } from '../services/supabaseService'
+import type { GPXPoint, Parcours, ParcoursSummary } from '../types'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
 interface ParcoursCardProps {
-  parcours: Parcours
+  parcours: ParcoursSummary
   isNext?: boolean
-  onEdit?: (parcours: Parcours) => void
+  /** Reçoit le parcours complet après un import GPX, ou le résumé depuis le bouton Modifier. */
+  onEdit?: (parcours: Parcours | ParcoursSummary) => void
   onDelete?: (id: string) => void
-  onView?: (parcours: Parcours) => void
+  onView?: (parcours: ParcoursSummary) => void
   showActions?: boolean
   /** true → modification et suppression accessibles */
   adminUnlocked?: boolean
@@ -32,7 +34,34 @@ export function ParcoursCard({
   onRequestAdmin,
 }: ParcoursCardProps) {
   const [showMap, setShowMap] = useState(false)
+  const [points, setPoints] = useState<GPXPoint[] | null>(null)
+  const [loadingPoints, setLoadingPoints] = useState(false)
+  const [pointsError, setPointsError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+
+  const loadPoints = useCallback(async () => {
+    setLoadingPoints(true)
+    setPointsError(null)
+    try {
+      const loaded = await getParcoursPoints(parcours.id)
+      setPoints(loaded)
+    } catch (err) {
+      console.error('Erreur chargement du tracé:', err)
+      setPointsError('Impossible de charger le tracé')
+    } finally {
+      setLoadingPoints(false)
+    }
+  }, [parcours.id])
+
+  const toggleMap = useCallback(() => {
+    if (showMap) {
+      setShowMap(false)
+      return
+    }
+    setShowMap(true)
+    // Le tracé n'est pas dans la liste : on le charge au premier dépliage.
+    if (points === null && !loadingPoints) void loadPoints()
+  }, [showMap, points, loadingPoints, loadPoints])
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -91,7 +120,7 @@ export function ParcoursCard({
 
           {showActions && (
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="sm" onClick={() => setShowMap(!showMap)} aria-label={showMap ? 'Masquer la carte' : 'Voir la carte'}>
+              <Button variant="ghost" size="sm" onClick={toggleMap} aria-label={showMap ? 'Masquer la carte' : 'Voir la carte'}>
                 <Eye className="w-4 h-4" />
               </Button>
 
@@ -125,11 +154,28 @@ export function ParcoursCard({
         </div>
       </CardHeader>
 
-      {showMap && parcours.points.length > 0 && (
+      {showMap && (
         <CardContent className="pb-2">
-          <div className="relative h-64 rounded-lg overflow-hidden">
-            <MapView points={parcours.points} height={256} interactive={false} />
-          </div>
+          {pointsError ? (
+            <div className="h-64 rounded-lg bg-red-50 border border-red-200 flex flex-col items-center justify-center gap-2 px-4 text-center">
+              <p className="text-sm text-red-700">{pointsError}</p>
+              <Button variant="outline" size="sm" onClick={() => void loadPoints()}>
+                Réessayer
+              </Button>
+            </div>
+          ) : points === null ? (
+            <div className="h-64 rounded-lg bg-gray-100 flex items-center justify-center text-sm text-gray-500">
+              Chargement du tracé…
+            </div>
+          ) : points.length > 0 ? (
+            <div className="relative h-64 rounded-lg overflow-hidden">
+              <MapView points={points} height={256} interactive={false} />
+            </div>
+          ) : (
+            <div className="h-64 rounded-lg bg-gray-100 flex items-center justify-center text-sm text-gray-500">
+              Aucun tracé disponible
+            </div>
+          )}
         </CardContent>
       )}
 

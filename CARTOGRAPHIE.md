@@ -344,14 +344,24 @@ navigateur**, alors que la requête demande `timezone=Europe/Paris` (`:73`). Le
 commentaire affirme que c'est voulu : c'est faux hors de France.
 `weekKey.ts:53-55` reconnaît d'ailleurs ce risque pour la clé de semaine.
 
-**A6. Erreur partiellement fausse sur la présence.** Si `setAttendance` réussit
-mais `deleteWeekVote` échoue (`useAttendance.ts:110-122`), l'UI revient en
-arrière et affiche une erreur alors que la présence **est** enregistrée. Le
-rechargement suivant corrige l'affichage, pas la confusion.
+**A6 (corrigé, tâche 7). Erreur partiellement fausse sur la présence.** Si
+`setAttendance` réussit mais `deleteWeekVote` échoue (`useAttendance.ts:110-122`),
+l'UI revient en arrière et affiche une erreur alors que la présence **est**
+enregistrée. Le rechargement suivant corrige l'affichage, pas la confusion.
 
-**A7. Les noms des participants peuvent disparaître en silence.**
+Correction : la suppression du vote est un **filet de sécurité best-effort**.
+Si `setAttendance` réussit et que `deleteWeekVote` échoue, la présence reste
+affichée, aucune erreur n'est montrée et l'échec est seulement journalisé
+(`console.warn`). Le trigger DB garantit de toute façon qu'un vote sans présence
+`going` ne compte pas.
+
+**A7 (corrigé, tâche 7). Les noms des participants peuvent disparaître en silence.**
 `getWeekAttendances` ignore l'erreur de la seconde requête (`:167-170`) et
 renvoie des noms vides (`:179-184`), sans remonter d'erreur.
+
+Correction : l'erreur de la requête `user_profiles` est journalisée et les
+noms manquants deviennent `Membre #N`. Les présences restent affichées ; la
+panne est visible au lieu d'être silencieuse.
 
 **A8. Dénivelé faussé si le premier point a une altitude non nulle.**
 `gpxParser.ts:245-252` part de 0 : un départ à 150 m ajoute +150 m au D+.
@@ -394,10 +404,15 @@ partagée.
 Correction : un seul module, `src/services/voteTallies.ts` (`goingSet` +
 `summarizeVotes`), utilisé par le hook et par le service.
 
-**C2.** `verifyUserPin`, `setPin`, `clearPin`, `profileExists` renvoient `false`
+**C2 (corrigé, tâche 7).** `verifyUserPin`, `setPin`, `clearPin`, `profileExists` renvoient `false`
 aussi bien pour un refus métier que pour une panne réseau
 (`useAuth.tsx:188-191,212-215,268-271,288-291`) : l'interface ne peut pas
 distinguer les deux.
+
+Correction : contrat documenté et appliqué — `false` = refus métier, une panne
+**lève**. `Auth` et `SecurityModal` affichent un message distinct
+(« Impossible de… ») et conservent la saisie ; `profileExists` ne propose plus
+une création de profil sur une simple panne.
 
 **C3.** Trois vocabulaires pour la même notion à la frontière UI ↔ service :
 `presence` / `attendance`, `Attendee.status` → `PresenceRow.attendance`
@@ -628,7 +643,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 4 | Sauvegarde `backup.py` | pagination du `save`, ordre de suppression, `--dry-run`, sauvegarde avant restauration, vérification des comptes, séquence | fait |
 | 5 | Comptage des votes | A1, A2, C1 : une seule source de vérité, un seul total | fait |
 | 6 | Règle « vote sans présence » | A3 : triggers `participations_require_going` + `attendances_remove_vote*`, orphelin #16 supprimé, `restore` refuse les dumps incohérents | fait |
-| 7 | Résilience des erreurs | A6 (présence partielle), A7 (noms vides), C2 (`false` ambigu) | à faire |
+| 7 | Résilience des erreurs | A6 (présence partielle), A7 (noms vides), C2 (`false` ambigu) | fait |
 | 8 | Bascule du mercredi 14h | A4 : réponses obsolètes qui écrasent la nouvelle semaine | à faire |
 | 9 | Météo et fuseau horaire | A5 : `isoToEpoch` interprété dans le fuseau du navigateur | à faire |
 | 10 | Tracé GPX à la demande | D1 : 131 kB gzip de coordonnées à chaque cycle, pour rien | à faire |

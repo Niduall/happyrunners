@@ -118,6 +118,9 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 ### Météo — Open-Meteo
 - **Aucune clé API** (contrairement à OpenWeather). Ne pas en réintroduire une.
 - 16 jours de prévision, 384 heures horaires, `timezone=Europe/Paris`
+- Les heures renvoyées sont **murales Europe/Paris**, sans suffixe : les parser
+  avec `isoToEpoch` (deux passes pour l'heure d'été/hiver), jamais avec
+  `new Date(iso)` seul. Afficher lever/coucher avec `timeZone: 'Europe/Paris'`.
 - Vent **déjà en km/h** : ne pas multiplier par 3.6 (bug OpenWeather)
 - `precipitation_probability` est en **pourcent** → normaliser en 0..1
 - Tolérance de sélection : ±90 min autour de 12h30
@@ -246,6 +249,9 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
     de semaine pour tout hook lié à la semaine ; une réponse obsolète n'écrit ni
     état ni cache. La météo est vidée au changement de `cacheKey` pour laisser
     voir l'erreur du nouveau fetch.
+7f. **Heures météo en Europe/Paris** — `isoToEpoch` interprète les dates
+    Open-Meteo dans ce fuseau, pas dans celui du navigateur ; lever/coucher
+    affichés avec `timeZone: WEATHER_TIMEZONE`.
 8. **`npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

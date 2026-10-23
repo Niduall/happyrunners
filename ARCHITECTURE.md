@@ -179,6 +179,10 @@ https://api.open-meteo.com/v1/forecast
   &timezone=Europe/Paris&forecast_days=16
 ```
 
+Les heures renvoyées sont des heures murales `Europe/Paris` **sans suffixe** :
+elles doivent être parsées dans ce fuseau (`isoToEpoch`), pas dans celui du
+navigateur.
+
 | Avantage sur OpenWeather | Avant | Après |
 |--------------------------|-------|-------|
 | Couverture | 5 jours | **16 jours** |

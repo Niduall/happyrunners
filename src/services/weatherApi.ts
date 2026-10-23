@@ -14,6 +14,9 @@ import { getCurrentWeekKey } from './weekKey'
  */
 const OPEN_METEO_URL = 'https://api.open-meteo.com/v1/forecast'
 
+/** Fuseau de la requête et des heures renvoyées par Open-Meteo. */
+export const WEATHER_TIMEZONE = 'Europe/Paris'
+
 export const DEFAULT_LAT = 48.6833
 export const DEFAULT_LON = 6.2167
 
@@ -70,7 +73,7 @@ export async function fetchWeather(
     hourly: HOURLY_FIELDS.join(','),
     daily: DAILY_FIELDS.join(','),
     current: CURRENT_FIELDS.join(','),
-    timezone: 'Europe/Paris',
+    timezone: WEATHER_TIMEZONE,
     forecast_days: String(FORECAST_HORIZON_DAYS),
   })
 
@@ -91,17 +94,90 @@ export async function fetchWeather(
   }
 }
 
-/** Timestamp Unix de 12h30 le jour du run cible */
-export function getRunTimestamp(from: Date = new Date()): number {
-  const [y, m, d] = getCurrentWeekKey(from).split('-').map(Number)
-  return Math.floor(new Date(y, m - 1, d, RUN_HOUR, RUN_MINUTES, 0, 0).getTime() / 1000)
+const PARIS_CLOCK = new Intl.DateTimeFormat('en-US', {
+  timeZone: WEATHER_TIMEZONE,
+  hourCycle: 'h23',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+})
+
+interface WallClock {
+  year: number
+  month: number
+  day: number
+  hour: number
+  minute: number
+  second: number
 }
 
-/** Convertit une date ISO locale ("2026-10-07T12:00") en timestamp Unix */
-function isoToEpoch(iso: string): number {
-  // "2026-10-07T12:00" sans fuseau → interpreted as local time par le navigateur.
-  // C'est ce qu'on veut : les horaires sont déjà en Europe/Paris.
-  return Math.floor(new Date(iso).getTime() / 1000)
+/** Heure murale à Paris pour un instant donné. */
+function parisWallClock(date: Date): WallClock {
+  const parts = PARIS_CLOCK.formatToParts(date)
+  const value = (type: Intl.DateTimeFormatPartTypes): number => {
+    const part = parts.find((p) => p.type === type)
+    if (!part) throw new Error(`Fuseau ${WEATHER_TIMEZONE} : ${type} manquant`)
+    return Number(part.value)
+  }
+  return {
+    year: value('year'),
+    month: value('month'),
+    day: value('day'),
+    hour: value('hour'),
+    minute: value('minute'),
+    second: value('second'),
+  }
+}
+
+/** Décalage entre l'heure murale de Paris et UTC, en millisecondes. */
+function parisOffsetMs(date: Date): number {
+  const p = parisWallClock(date)
+  const timeMs = Math.floor(date.getTime() / 1000) * 1000
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - timeMs
+}
+
+/**
+ * Convertit une date/heure murale de Paris en timestamp Unix.
+ * Deux passes : le décalage peut changer au passage à l'heure d'été/hiver.
+ */
+function parisWallTimeToEpoch(
+  year: number,
+  month: number,
+  day: number,
+  hour = 0,
+  minute = 0,
+  second = 0
+): number {
+  const utcGuess = Date.UTC(year, month - 1, day, hour, minute, second)
+  const firstOffset = parisOffsetMs(new Date(utcGuess))
+  let epochMs = utcGuess - firstOffset
+  const secondOffset = parisOffsetMs(new Date(epochMs))
+  if (secondOffset !== firstOffset) epochMs = utcGuess - secondOffset
+  return Math.floor(epochMs / 1000)
+}
+
+const ISO_LOCAL_RE = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?$/
+
+/**
+ * Convertit une date ISO locale Open-Meteo ("2026-10-07T12:00" ou
+ * "2026-10-07") en timestamp Unix, dans le fuseau de la requête.
+ * ⚠️ Ne pas utiliser `new Date(iso)` : il interpréterait l'heure dans le
+ * fuseau du navigateur.
+ */
+export function isoToEpoch(iso: string): number {
+  const match = ISO_LOCAL_RE.exec(iso)
+  if (!match) throw new Error(`Date météo invalide : ${iso}`)
+  const [, year, month, day, hour = '0', minute = '0', second = '0'] = match
+  return parisWallTimeToEpoch(+year, +month, +day, +hour, +minute, +second)
+}
+
+/** Timestamp Unix de 12h30 heure de Paris, le jour du run cible */
+export function getRunTimestamp(from: Date = new Date()): number {
+  const [y, m, d] = getCurrentWeekKey(from).split('-').map(Number)
+  return parisWallTimeToEpoch(y, m, d, RUN_HOUR, RUN_MINUTES)
 }
 
 export function transformOpenMeteoResponse(json: any): WeatherForecast {
@@ -208,9 +284,9 @@ export function getRunForecast(
 }
 
 function startOfDay(epochSeconds: number): number {
-  const d = new Date(epochSeconds * 1000)
-  d.setHours(0, 0, 0, 0)
-  return Math.floor(d.getTime() / 1000)
+  // Jour civil à Paris : `setHours(0, 0, 0, 0)` dépendrait du navigateur.
+  const { year, month, day } = parisWallClock(new Date(epochSeconds * 1000))
+  return parisWallTimeToEpoch(year, month, day)
 }
 
 /** Nombre de jours entre aujourd'hui et le jour du run */

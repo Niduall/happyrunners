@@ -4,6 +4,7 @@ import {
   getRunTimestamp,
   daysUntilRun,
   transformOpenMeteoResponse,
+  isoToEpoch,
   FORECAST_HORIZON_DAYS,
 } from './weatherApi'
 import type { WeatherForecast, WeatherData } from '../types'
@@ -110,10 +111,14 @@ describe('transformOpenMeteoResponse', () => {
     expect(result.hourly[0].weatherCode).toBe(0)
   })
 
-  it('parse les heures ISO en timestamp Unix', () => {
-    // 2026-10-06T10:00 en heure locale
-    const expected = Math.floor(new Date(2026, 9, 6, 10, 0, 0).getTime() / 1000)
-    expect(result.current.dt).toBe(expected)
+  it('parse les heures ISO comme heure de Paris, pas du navigateur', () => {
+    // 2026-10-06T10:00 Paris (UTC+2) = 08:00 UTC
+    expect(result.current.dt).toBe(Date.UTC(2026, 9, 6, 8, 0) / 1000)
+  })
+
+  it('convertit les dates quotidiennes en minuit heure de Paris', () => {
+    // 2026-10-02 00:00 Paris (UTC+2) = 2026-10-01 22:00 UTC
+    expect(result.daily[0].dt).toBe(Date.UTC(2026, 9, 1, 22, 0) / 1000)
   })
 
   it('récupère lever/coucher pour la météo courante', () => {
@@ -122,21 +127,56 @@ describe('transformOpenMeteoResponse', () => {
   })
 })
 
+describe('isoToEpoch — fuseau Europe/Paris', () => {
+  it('applique l’heure d’été (UTC+2)', () => {
+    // 7 octobre 2026 12:00 Paris = 10:00 UTC
+    expect(isoToEpoch('2026-10-07T12:00')).toBe(Date.UTC(2026, 9, 7, 10, 0) / 1000)
+  })
+
+  it('applique l’heure d’hiver (UTC+1)', () => {
+    // 14 janvier 2026 12:00 Paris = 11:00 UTC
+    expect(isoToEpoch('2026-01-14T12:00')).toBe(Date.UTC(2026, 0, 14, 11, 0) / 1000)
+  })
+
+  it('traite une date seule comme minuit à Paris', () => {
+    // 7 octobre 2026 00:00 Paris = 6 octobre 22:00 UTC
+    expect(isoToEpoch('2026-10-07')).toBe(Date.UTC(2026, 9, 6, 22, 0) / 1000)
+  })
+
+  it('gère le passage à l’heure d’été', () => {
+    // 29 mars 2026 : 01:30 CET = 00:30 UTC, puis 03:30 CEST = 01:30 UTC
+    expect(isoToEpoch('2026-03-29T01:30')).toBe(Date.UTC(2026, 2, 29, 0, 30) / 1000)
+    expect(isoToEpoch('2026-03-29T03:30')).toBe(Date.UTC(2026, 2, 29, 1, 30) / 1000)
+  })
+
+  it('gère le retour à l’heure d’hiver', () => {
+    // 25 octobre 2026 : 01:30 CEST = 23:30 UTC la veille, 03:30 CET = 02:30 UTC
+    expect(isoToEpoch('2026-10-25T01:30')).toBe(Date.UTC(2026, 9, 24, 23, 30) / 1000)
+    expect(isoToEpoch('2026-10-25T03:30')).toBe(Date.UTC(2026, 9, 25, 2, 30) / 1000)
+  })
+
+  it('refuse un format inattendu', () => {
+    expect(() => isoToEpoch('07/10/2026 12:00')).toThrow(/invalide/)
+  })
+})
+
 describe('getRunTimestamp', () => {
-  it('vise 12h30 le mercredi du cycle', () => {
-    const ts = getRunTimestamp(at(2026, 10, 6))
-    const d = new Date(ts * 1000)
-    expect(d.getDate()).toBe(7)
-    expect(d.getHours()).toBe(12)
-    expect(d.getMinutes()).toBe(30)
+  it('vise 12h30 heure de Paris le mercredi du cycle', () => {
+    // 7 octobre 2026 12:30 Paris = 10:30 UTC
+    expect(getRunTimestamp(at(2026, 10, 6))).toBe(Date.UTC(2026, 9, 7, 10, 30) / 1000)
   })
 
   it('mercredi avant 14h → aujourd’hui', () => {
-    expect(new Date(getRunTimestamp(at(2026, 10, 7, 9)) * 1000).getDate()).toBe(7)
+    expect(getRunTimestamp(at(2026, 10, 7, 9))).toBe(Date.UTC(2026, 9, 7, 10, 30) / 1000)
   })
 
   it('mercredi après 14h → mercredi suivant', () => {
-    expect(new Date(getRunTimestamp(at(2026, 10, 7, 15)) * 1000).getDate()).toBe(14)
+    expect(getRunTimestamp(at(2026, 10, 7, 15))).toBe(Date.UTC(2026, 9, 14, 10, 30) / 1000)
+  })
+
+  it('applique l’heure d’hiver', () => {
+    // 14 janvier 2026 12:30 Paris = 11:30 UTC
+    expect(getRunTimestamp(at(2026, 1, 13, 10))).toBe(Date.UTC(2026, 0, 14, 11, 30) / 1000)
   })
 })
 
@@ -227,7 +267,8 @@ describe('getRunForecast — avec 16 jours de couverture', () => {
   it('reprend lever/coucher du jour du run', () => {
     const from = at(2026, 10, 6)
     const target = getRunTimestamp(from)
-    const dayStart = Math.floor(new Date(2026, 9, 7, 0, 0, 0).getTime() / 1000)
+    // Minuit heure de Paris, comme les dates quotidiennes d'Open-Meteo
+    const dayStart = isoToEpoch('2026-10-07')
 
     const daily = [
       {

@@ -347,11 +347,21 @@ une réponse tardive ne peut ni écrire son cache ni purger celui de la nouvelle
 semaine ; l'ancienne météo est vidée au changement de cache pour que l'erreur
 du nouveau chargement soit visible. Tests : `src/hooks/staleResponses.test.tsx`.
 
-**A5. Météo décalée hors du fuseau Europe/Paris.** `isoToEpoch`
-(`weatherApi.ts:101-105`) interprète les heures Open-Meteo dans le fuseau **du
-navigateur**, alors que la requête demande `timezone=Europe/Paris` (`:73`). Le
-commentaire affirme que c'est voulu : c'est faux hors de France.
-`weekKey.ts:53-55` reconnaît d'ailleurs ce risque pour la clé de semaine.
+**A5 (corrigé, tâche 9). Météo décalée hors du fuseau Europe/Paris.**
+`isoToEpoch` interprétait les heures Open-Meteo dans le fuseau **du
+navigateur**, alors que la requête demande `timezone=Europe/Paris`. Le
+commentaire affirmait que c'était voulu : c'est faux hors de France.
+
+Correction : `isoToEpoch` interprète désormais les dates ISO comme des heures
+murales de `Europe/Paris` (deux passes pour l'heure d'été/hiver), y compris les
+dates seules des prévisions quotidiennes (minuit à Paris). `getRunTimestamp` et
+`startOfDay` utilisent le même fuseau, donc la sélection du créneau de 12h30 et
+du lever/coucher du jour du run ne dépend plus du navigateur. `WeatherCard`
+affiche lever/coucher avec `timeZone: Europe/Paris`. Tests :
+`weatherApi.test.ts` (timestamps UTC fixes, indépendants du fuseau de la
+machine) et `WeatherCard.timezone.test.tsx` (navigateur en `America/New_York`).
+La clé de semaine (`weekKey.ts`) reste calculée dans le fuseau du navigateur :
+c'est un point distinct, déjà signalé.
 
 **A6 (corrigé, tâche 7). Erreur partiellement fausse sur la présence.** Si
 `setAttendance` réussit mais `deleteWeekVote` échoue (`useAttendance.ts:110-122`),
@@ -507,7 +517,7 @@ tâche 12).
 | `useAttendance.ts:28` | « true si je viens **ou n'ai pas encore répondu** » | le code fait l'inverse : `showParcours: myStatus === 'going'` (`:151`) |
 | ~~`supabaseService.ts:166`~~ | « un JOIN évite de les dupliquer » | aucune JOIN : deux requêtes séparées — **corrigé (tâche 3)** |
 | `storage.ts:74-76` | « ce cache évite un aller-retour réseau au démarrage » | `useAuth.tsx:96` appelle la base à chaque montage |
-| `weatherApi.ts:101-105` | « interprété… c'est ce qu'on veut » | faux hors du fuseau du navigateur (voir A5) |
+| ~~`weatherApi.ts:101-105`~~ | « interprété… c'est ce qu'on veut » | faux hors du fuseau du navigateur — **corrigé (tâche 9)** : parsé en Europe/Paris |
 | `adminCode.ts:36` | « comparaison à temps constant » | retour immédiat sur la longueur, donc non constant |
 | ~~`schema.sql:10`~~ | « `backup.sh restore` pourPeupler » | le script est `backup.py` (et « pourPeupler » est collé) — **corrigé (tâche 3)** |
 | ~~`AGENTS.md`~~ | `ParcoursVoteCard` = « 2 boutons de vote » | il y en a **1** (`ParcoursVoteCard.tsx:82-92`) — **corrigé (tâche 3)** |
@@ -654,7 +664,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 6 | Règle « vote sans présence » | A3 : triggers `participations_require_going` + `attendances_remove_vote*`, orphelin #16 supprimé, `restore` refuse les dumps incohérents | fait |
 | 7 | Résilience des erreurs | A6 (présence partielle), A7 (noms vides), C2 (`false` ambigu) | fait |
 | 8 | Bascule du mercredi 14h | A4 : réponses obsolètes qui écrasent la nouvelle semaine | fait |
-| 9 | Météo et fuseau horaire | A5 : `isoToEpoch` interprété dans le fuseau du navigateur | à faire |
+| 9 | Météo et fuseau horaire | A5 : `isoToEpoch` interprété dans le fuseau du navigateur | fait |
 | 10 | Tracé GPX à la demande | D1 : 131 kB gzip de coordonnées à chaque cycle, pour rien | à faire |
 | 11 | Requêtes redondantes | D2, D3, D4 : `getWeekAttendances` en double, rechargements trop larges | à faire |
 | 12 | `strict` + linter | H : ce qui laisse passer imports morts et props fantômes | à faire |

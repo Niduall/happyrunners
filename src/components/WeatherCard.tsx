@@ -1,6 +1,6 @@
 import { Wind, Droplets, Sunrise, Sunset, Wind as WindIcon, CloudRain } from 'lucide-react'
 import type { WeatherData } from '../types'
-import { formatWindDirection } from '../services/weatherApi'
+import { formatWindDirection, WEATHER_TIMEZONE } from '../services/weatherApi'
 import { getWeatherCodeInfo } from '../services/weatherCode'
 import { Card, CardContent } from './ui/Card'
 
@@ -119,6 +119,7 @@ export function WeatherCard({ weather, compact = false, title = 'Météo' }: Wea
                   ? new Date(weather.sunrise * 1000).toLocaleTimeString('fr-FR', {
                       hour: '2-digit',
                       minute: '2-digit',
+                      timeZone: WEATHER_TIMEZONE,
                     })
                   : '--'}
               </p>
@@ -134,6 +135,7 @@ export function WeatherCard({ weather, compact = false, title = 'Météo' }: Wea
                   ? new Date(weather.sunset * 1000).toLocaleTimeString('fr-FR', {
                       hour: '2-digit',
                       minute: '2-digit',
+                      timeZone: WEATHER_TIMEZONE,
                     })
                   : '--'}
               </p>

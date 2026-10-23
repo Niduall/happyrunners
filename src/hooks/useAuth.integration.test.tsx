@@ -566,6 +566,81 @@ describe('useAuth — user_number stable', () => {
     })
   })
 
+  describe('erreurs infrastructure', () => {
+    it('profileExists propage une panne au lieu de retourner false', async () => {
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      mockFind.mockRejectedValue(new Error('network down'))
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      await expect(result.current.profileExists('Paul', 'Martin')).rejects.toThrow('network down')
+
+      error.mockRestore()
+    })
+
+    it('verifyUserPin propage une panne au lieu de faire croire à un mauvais PIN', async () => {
+      mockFind.mockResolvedValue(profile({ user_number: 3, pin_hash: hashPin('1234') }) as never)
+      mockGetProfile.mockResolvedValue(
+        profile({ user_number: 3, pin_hash: hashPin('1234') }) as never
+      )
+
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => {
+        await result.current.createUserProfile('Paul', 'Martin')
+      })
+      expect(result.current.needsPin).toBe(true)
+
+      mockGetProfile.mockRejectedValue(new Error('network down'))
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      await expect(result.current.verifyUserPin('1234')).rejects.toThrow('network down')
+
+      error.mockRestore()
+    })
+
+    it('setPin propage une panne d’écriture', async () => {
+      seedLocalUser(1)
+      mockGetProfile.mockResolvedValue(profile({ user_number: 1, pin_hash: null }) as never)
+
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+      expect(result.current.isAuthenticated).toBe(true)
+
+      mockUpdate.mockRejectedValue(new Error('network down'))
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      await expect(result.current.setPin('1234')).rejects.toThrow('network down')
+
+      error.mockRestore()
+    })
+
+    it('clearPin propage une panne d’écriture', async () => {
+      seedLocalUser(1)
+      mockGetProfile.mockResolvedValue(
+        profile({ user_number: 1, pin_hash: hashPin('1111') }) as never
+      )
+
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+      expect(result.current.needsPin).toBe(true)
+
+      await act(async () => {
+        await result.current.verifyUserPin('1111')
+      })
+      expect(result.current.isAuthenticated).toBe(true)
+
+      mockUpdate.mockRejectedValue(new Error('network down'))
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      await expect(result.current.clearPin('1111')).rejects.toThrow('network down')
+
+      error.mockRestore()
+    })
+  })
+
   describe('retour à l’écran d’identité', () => {
     it('resetToIdentity revient à first_login et efface le pendingUser', async () => {
       mockFind.mockResolvedValue(profile({ user_number: 3, pin_hash: hashPin('1234') }) as never)

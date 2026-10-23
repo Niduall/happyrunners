@@ -109,11 +109,19 @@ export function useAttendance(): AttendanceState {
 
       try {
         await setAttendance({ weekKey, userNumber: user.id, status })
+        setError(null)
 
         // "Pas aujourd'hui" retire aussi le choix de parcours : quelqu'un
         // qui ne vient pas ne doit pas peser sur le vote d'un parcours.
+        // Le trigger DB le fait déjà ; cet appel est un filet de sécurité.
         if (status === 'skip') {
-          await deleteWeekVote(user.id, weekKey)
+          try {
+            await deleteWeekVote(user.id, weekKey)
+          } catch (err) {
+            // La présence est enregistrée : ne pas revenir en arrière ni
+            // afficher une erreur. Le vote reste filtré par la présence.
+            console.warn('[ATTENDANCE] Vote non retiré par le client:', err)
+          }
         }
       } catch (err) {
         console.error('[ATTENDANCE] Erreur:', err)

@@ -127,6 +127,24 @@ describe('LoginForm — écran identité', () => {
     expect(screen.queryByLabelText(/PIN à 4 chiffres/)).not.toBeInTheDocument()
     expect(mockCreate).not.toHaveBeenCalled()
   })
+
+  it('affiche une erreur réseau au lieu de proposer une création', async () => {
+    const user = userEvent.setup()
+    mockFind.mockRejectedValue(new Error('network down'))
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    renderForm()
+    await waitFor(() => expect(screen.getByLabelText('Prénom')).toBeInTheDocument())
+    await fillIdentity(user)
+    await user.click(screen.getByRole('button', { name: /Continuer/ }))
+
+    expect(await screen.findByText('Impossible de te connecter. Réessaie.')).toBeInTheDocument()
+    // Surtout pas l'écran de création : le profil existe peut-être déjà
+    expect(screen.queryByLabelText('Confirmer le PIN')).not.toBeInTheDocument()
+    expect(mockCreate).not.toHaveBeenCalled()
+
+    error.mockRestore()
+  })
 })
 
 describe('LoginForm — écran de création', () => {
@@ -307,6 +325,24 @@ describe('LoginForm — écran PIN (vérification)', () => {
 
     expect(await screen.findByText('PIN incorrect')).toBeInTheDocument()
     expect(screen.getByLabelText('PIN à 4 chiffres')).toHaveValue('')
+  })
+
+  it('affiche une erreur réseau distincte d’un mauvais PIN', async () => {
+    const user = userEvent.setup()
+    await goToPinScreen(user)
+
+    mockGetProfile.mockRejectedValue(new Error('network down'))
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await user.type(screen.getByLabelText('PIN à 4 chiffres'), '1234')
+    await user.click(screen.getByRole('button', { name: /Se connecter/ }))
+
+    expect(await screen.findByText('Impossible de vérifier le PIN. Réessaie.')).toBeInTheDocument()
+    expect(screen.queryByText('PIN incorrect')).not.toBeInTheDocument()
+    // La saisie est conservée pour réessayer
+    expect(screen.getByLabelText('PIN à 4 chiffres')).toHaveValue('1234')
+
+    error.mockRestore()
   })
 
   it('ne garde que les chiffres et 4 maximum', async () => {

@@ -233,6 +233,69 @@ describe('SecurityModal — profil AVEC PIN', () => {
   })
 })
 
+describe('SecurityModal — erreurs réseau', () => {
+  it('affiche un message distinct si l’activation échoue', async () => {
+    const { user } = await openModal(null)
+
+    await user.type(await screen.findByLabelText('PIN à 4 chiffres'), '1234')
+    await user.type(screen.getByLabelText('Confirmer le PIN'), '1234')
+
+    mockUpdate.mockRejectedValue(new Error('network down'))
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await user.click(screen.getByRole('button', { name: /Activer le PIN/ }))
+
+    expect(
+      await screen.findByText('Impossible de contacter le serveur. Réessaie.')
+    ).toBeInTheDocument()
+    // Pas de fausse confirmation, et la saisie est conservée pour réessayer
+    expect(screen.queryByText('PIN activé')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('PIN à 4 chiffres')).toHaveValue('1234')
+
+    error.mockRestore()
+  })
+
+  it('affiche un message distinct si le changement échoue', async () => {
+    const { user } = await openModal('1111')
+
+    await user.type(await screen.findByLabelText('PIN actuel'), '1111')
+    await user.type(screen.getByLabelText('Nouveau PIN'), '5678')
+    await user.type(screen.getByLabelText('Confirmer le nouveau PIN'), '5678')
+
+    mockUpdate.mockRejectedValue(new Error('network down'))
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await user.click(screen.getByRole('button', { name: /Changer le PIN/ }))
+
+    expect(
+      await screen.findByText('Impossible de contacter le serveur. Réessaie.')
+    ).toBeInTheDocument()
+    expect(screen.queryByText('PIN modifié')).not.toBeInTheDocument()
+
+    error.mockRestore()
+  })
+
+  it('affiche un message distinct si la suppression échoue', async () => {
+    const { user } = await openModal('1111')
+
+    await screen.findByLabelText('PIN actuel')
+    await user.click(screen.getByRole('button', { name: /^Retirer le PIN$/ }))
+    await user.type(screen.getByLabelText('PIN actuel pour confirmer'), '1111')
+
+    mockUpdate.mockRejectedValue(new Error('network down'))
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await user.click(screen.getByRole('button', { name: /Retirer le PIN/ }))
+
+    expect(
+      await screen.findByText('Impossible de contacter le serveur. Réessaie.')
+    ).toBeInTheDocument()
+    expect(screen.queryByText('PIN retiré')).not.toBeInTheDocument()
+
+    error.mockRestore()
+  })
+})
+
 describe('SecurityModal — fermeture', () => {
   it('le bouton du bas ferme', async () => {
     const { user, onClose } = await openModal(null)

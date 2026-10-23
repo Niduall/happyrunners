@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 /** Lignes renvoyées par PostgREST (snake_case, comme la vraie API) */
 const mockRows = vi.fn()
 const mockProfiles = vi.fn()
+const mockProfilesError = vi.fn()
 const mockAttendanceRows = vi.fn()
 const mockError = vi.fn()
 const mockAttendanceError = vi.fn()
@@ -26,7 +27,7 @@ vi.mock('../lib/supabase', () => ({
       q.maybeSingle = () => Promise.resolve({ data: null, error: null })
       q.then = (resolve: (v: unknown) => unknown) => {
         if (table === 'user_profiles') {
-          return Promise.resolve({ data: mockProfiles(), error: null }).then(resolve)
+          return Promise.resolve({ data: mockProfiles(), error: mockProfilesError() }).then(resolve)
         }
         if (table === 'attendances') {
           return Promise.resolve({
@@ -46,12 +47,14 @@ void supabase
 beforeEach(() => {
   mockRows.mockReset()
   mockProfiles.mockReset()
+  mockProfilesError.mockReset()
   mockAttendanceRows.mockReset()
   mockError.mockReset()
   mockAttendanceError.mockReset()
 
   mockRows.mockReturnValue([])
   mockProfiles.mockReturnValue([])
+  mockProfilesError.mockReturnValue(null)
   mockAttendanceRows.mockReturnValue([])
   mockError.mockReturnValue(null)
   mockAttendanceError.mockReturnValue(null)
@@ -186,14 +189,36 @@ describe('getWeekAttendances — les noms viennent du JOIN', () => {
     expect(await getWeekAttendances('2026-10-07')).toEqual([])
   })
 
-  it('gère un profil absent du JOIN (nom vide)', async () => {
+  it('affiche un nom de repli si le profil manque', async () => {
     mockAttendanceRows.mockReturnValue([
       { id: 'a', user_number: 99, status: 'going', created_at: '', updated_at: '' },
     ])
     mockProfiles.mockReturnValue([])
 
     const attendees = await getWeekAttendances('2026-10-07')
-    expect(attendees[0].firstName).toBe('')
-    expect(attendees[0].userNumber).toBe(99)
+    expect(attendees[0]).toMatchObject({
+      userNumber: 99,
+      firstName: 'Membre',
+      lastName: '#99',
+      status: 'going',
+    })
+  })
+
+  it('garde les statuts et replie les noms si user_profiles échoue', async () => {
+    mockAttendanceRows.mockReturnValue([
+      { id: 'a', user_number: 1, status: 'going', created_at: '', updated_at: '' },
+    ])
+    mockProfilesError.mockReturnValue(new Error('profils indisponibles'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const attendees = await getWeekAttendances('2026-10-07')
+
+    // La panne des noms ne doit pas faire perdre les présences
+    expect(attendees).toEqual([
+      { userNumber: 1, firstName: 'Membre', lastName: '#1', status: 'going' },
+    ])
+    expect(warn).toHaveBeenCalled()
+
+    warn.mockRestore()
   })
 })

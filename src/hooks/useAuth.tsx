@@ -31,13 +31,25 @@ export interface AuthState {
   /**
    * Un profil existe-t-il déjà pour ce nom ?
    * Permet d'afficher l'écran de création (avec PIN) AVANT d'écrire en base.
+   *
+   * Contrat des méthodes booléennes (`profileExists`, `verifyUserPin`,
+   * `setPin`, `clearPin`) : `false` = refus métier (nom inconnu, PIN
+   * incorrect…), jamais une panne. Une erreur réseau/base est levée pour
+   * que l'interface affiche un message distinct.
    */
   profileExists: (firstName: string, lastName: string) => Promise<boolean>
+  /** Vérifie le PIN. `false` = PIN incorrect ; une panne lève une exception. */
   verifyUserPin: (pin: string) => Promise<boolean>
   updateName: (firstName: string, lastName: string) => Promise<boolean>
-  /** Ajoute un PIN, ou le change si `currentPin` est fourni */
+  /**
+   * Ajoute un PIN, ou le change si `currentPin` est fourni.
+   * `false` = refus métier (ancien PIN incorrect…) ; une panne lève.
+   */
   setPin: (newPin: string, currentPin?: string) => Promise<boolean>
-  /** Retire le PIN (nécessite le PIN actuel) */
+  /**
+   * Retire le PIN (nécessite le PIN actuel).
+   * `false` = refus métier ; une panne lève une exception.
+   */
   clearPin: (currentPin: string) => Promise<boolean>
   /** Le verrou admin est-il configuré ? (sinon aucun cadenas affiché) */
   adminLockEnabled: boolean
@@ -187,7 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return !!existing
       } catch (err) {
         console.error('[AUTH] Erreur recherche profil:', err)
-        return false
+        throw err
       }
     },
     []
@@ -211,7 +223,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return false
       } catch (err) {
         console.error('[AUTH] Erreur vérification PIN:', err)
-        return false
+        throw err
       }
     },
     [pendingUser, connect]
@@ -267,7 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return true
       } catch (err) {
         console.error('[AUTH] Erreur changement de PIN:', err)
-        return false
+        throw err
       }
     },
     [user]
@@ -287,7 +299,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return true
       } catch (err) {
         console.error('[AUTH] Erreur suppression du PIN:', err)
-        return false
+        throw err
       }
     },
     [user]

@@ -166,10 +166,16 @@ export async function getWeekAttendances(weekKey: string): Promise<Attendee[]> {
 
   // Les noms vivent dans user_profiles : une seconde requête évite de les
   // dupliquer dans cette table
-  const { data: profiles } = await supabase
+  const { data: profiles, error: profilesError } = await supabase
     .from('user_profiles')
     .select('user_number,first_name,last_name')
     .in('user_number', rows.map((r) => r.user_number))
+
+  if (profilesError) {
+    // Les statuts restent valides : on dégrade les noms plutôt que de perdre
+    // toute la liste. Le repli « Membre #N » rend l'échec visible.
+    console.warn('[ATTENDANCE] Noms indisponibles, repli sur les numéros:', profilesError)
+  }
 
   const names = new Map(
     ((profiles || []) as { user_number: number; first_name: string; last_name: string }[]).map((p) => [
@@ -180,8 +186,8 @@ export async function getWeekAttendances(weekKey: string): Promise<Attendee[]> {
 
   return rows.map((row) => ({
     userNumber: row.user_number,
-    firstName: names.get(row.user_number)?.firstName ?? '',
-    lastName: names.get(row.user_number)?.lastName ?? '',
+    firstName: names.get(row.user_number)?.firstName || 'Membre',
+    lastName: names.get(row.user_number)?.lastName || `#${row.user_number}`,
     status: row.status as AttendanceStatus,
   }))
 }

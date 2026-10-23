@@ -176,6 +176,10 @@ export function LoginForm() {
           setError('PIN incorrect')
           setPin('')
         }
+      } catch (err) {
+        // Panne réseau/base : ne pas faire croire à un mauvais PIN.
+        console.error('[AUTH] Erreur vérification PIN:', err)
+        setError('Impossible de vérifier le PIN. Réessaie.')
       } finally {
         setSubmitting(false)
       }

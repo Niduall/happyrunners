@@ -108,8 +108,34 @@ describe('useAttendance — « pas aujourd’hui » retire le choix de parcours'
     expect(mockDeleteVote).toHaveBeenCalledTimes(1)
   })
 
-  it('annule l’optimisme si la suppression échoue', async () => {
+  it('garde la présence si la suppression du vote échoue', async () => {
+    // La présence est la source de vérité ; le trigger DB retire le vote.
+    // Un échec du filet de sécurité client ne doit pas annuler la réponse.
     mockDeleteVote.mockRejectedValue(new Error('network down'))
+    mockAttendances.mockResolvedValue([attendee(ALICE, 'going')])
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const { result } = renderAttendance()
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.myStatus).toBe('going')
+
+    await act(async () => {
+      await result.current.setMyStatus('skip')
+    })
+
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'skip', userNumber: ALICE })
+    )
+    // La réponse reste enregistrée : pas de retour arrière ni d'erreur
+    expect(result.current.myStatus).toBe('skip')
+    expect(result.current.error).toBeNull()
+    expect(warn).toHaveBeenCalled()
+
+    warn.mockRestore()
+  })
+
+  it('revient à l’état précédent si la présence n’a pas pu être enregistrée', async () => {
+    mockSet.mockRejectedValue(new Error('network down'))
     mockAttendances.mockResolvedValue([attendee(ALICE, 'going')])
 
     const { result } = renderAttendance()
@@ -120,7 +146,10 @@ describe('useAttendance — « pas aujourd’hui » retire le choix de parcours'
       await result.current.setMyStatus('skip')
     })
 
+    expect(result.current.myStatus).toBe('going')
     expect(result.current.error).toBeTruthy()
+    // Sans présence enregistrée, inutile de toucher au vote
+    expect(mockDeleteVote).not.toHaveBeenCalled()
   })
 
   it('ne propose un parcours qu’après « je viens »', async () => {

@@ -125,6 +125,10 @@ export function SecurityModal({ onClose }: SecurityModalProps) {
           setError('Impossible d’activer le PIN')
         }
       }
+    } catch (err) {
+      // Panne réseau/base : message distinct d'un refus métier.
+      console.error('[SECURITY] Erreur:', err)
+      setError('Impossible de contacter le serveur. Réessaie.')
     } finally {
       setSaving(false)
     }

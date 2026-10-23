@@ -125,6 +125,29 @@ describe('useParcours — polling silencieux', () => {
     expect(result.current.loading).toBe(false)
   })
 
+  it('garde les mêmes références quand le polling renvoie les mêmes données', async () => {
+    // Chaque requête crée de nouveaux objets, comme le ferait Supabase.
+    mockGetParcours.mockImplementation(() =>
+      Promise.resolve(SAMPLE.map((p) => ({ ...p })) as never)
+    )
+
+    const { result } = renderHook(() => useParcours(), { wrapper })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    await waitFor(() => expect(result.current.parcoursList).toHaveLength(2))
+
+    const list = result.current.parcoursList
+    const next = result.current.nextParcours
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
+
+    expect(result.current.parcoursList).toBe(list)
+    expect(result.current.nextParcours).toBe(next)
+  })
+
   it('n’affiche pas le spinner non plus en cas d’erreur de poll', async () => {
     const { result } = renderHook(() => useParcours(), { wrapper })
     await act(async () => {

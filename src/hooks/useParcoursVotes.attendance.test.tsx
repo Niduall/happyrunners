@@ -263,4 +263,37 @@ describe('useParcoursVotes — un vote ne compte que si la personne vient', () =
 
     warn.mockRestore()
   })
+
+  it('ne charge pas les présences quand la liste des présents est fournie', async () => {
+    attendance = [attendee(ALICE, 'going')]
+    votes = [{ parcoursId: 'p1', userNumber: ALICE, status: 'yes' }]
+
+    const { result } = renderHook(() => useParcoursVotes(PARCOURS, {}, [ALICE]), {
+      wrapper,
+    })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(mockAttendances).not.toHaveBeenCalled()
+    expect(result.current.tallies.p1?.yes).toBe(1)
+  })
+
+  it('ne recharge que les votes après un choix', async () => {
+    attendance = [attendee(ALICE, 'going')]
+    votes = []
+
+    const { result } = renderVotes()
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    mockVotes.mockClear()
+    mockAttendances.mockClear()
+
+    await act(async () => {
+      await result.current.toggleChoice('p1')
+    })
+
+    // Seule `participations` a changé : une requête de votes suffit.
+    expect(mockVotes).toHaveBeenCalledTimes(1)
+    expect(mockAttendances).not.toHaveBeenCalled()
+    expect(result.current.myChoice).toBe('p1')
+  })
 })

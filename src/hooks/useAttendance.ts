@@ -11,6 +11,19 @@ import { useAuth } from './useAuth'
 
 const POLL_INTERVAL_MS = 30000
 
+/** Mêmes réponses, dans le même ordre — évite un re-rendu au polling. */
+function sameAttendees(a: Attendee[], b: Attendee[]): boolean {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  return a.every(
+    (attendee, index) =>
+      attendee.userNumber === b[index].userNumber &&
+      attendee.firstName === b[index].firstName &&
+      attendee.lastName === b[index].lastName &&
+      attendee.status === b[index].status
+  )
+}
+
 export type { Attendee }
 
 export interface AttendanceState {
@@ -58,7 +71,7 @@ export function useAttendance(): AttendanceState {
       try {
         const list = await getWeekAttendances(requestedWeekKey)
         if (isStale()) return
-        setAttendees(list)
+        setAttendees((prev) => (sameAttendees(prev, list) ? prev : list))
         setMyStatusState(list.find((a) => a.userNumber === user.id)?.status ?? null)
         if (!opts?.keepError) setError(null)
       } catch (err) {
@@ -123,19 +136,24 @@ export function useAttendance(): AttendanceState {
       setSaving(true)
 
       try {
-        await setAttendance({ weekKey: actionWeekKey, userNumber: user.id, status })
+        // La présence et la suppression du vote sont indépendantes : on les
+        // lance ensemble. Le trigger DB retire aussi le vote, mais ce filet
+        // client évite d'attendre le prochain polling si le trigger manque.
+        const [attendanceResult, voteResult] = await Promise.allSettled([
+          setAttendance({ weekKey: actionWeekKey, userNumber: user.id, status }),
+          status === 'skip'
+            ? deleteWeekVote(user.id, actionWeekKey)
+            : Promise.resolve(),
+        ])
 
-        // "Pas aujourd'hui" retire aussi le choix de parcours : quelqu'un
-        // qui ne vient pas ne doit pas peser sur le vote d'un parcours.
-        // Le trigger DB le fait déjà ; cet appel est un filet de sécurité.
-        if (status === 'skip') {
-          try {
-            await deleteWeekVote(user.id, actionWeekKey)
-          } catch (err) {
-            // La présence est enregistrée : ne pas revenir en arrière ni
-            // afficher une erreur. Le vote reste filtré par la présence.
-            console.warn('[ATTENDANCE] Vote non retiré par le client:', err)
-          }
+        if (attendanceResult.status === 'rejected') {
+          throw attendanceResult.reason
+        }
+
+        if (status === 'skip' && voteResult.status === 'rejected') {
+          // La présence est enregistrée : ne pas revenir en arrière ni
+          // afficher une erreur. Le vote reste filtré par la présence.
+          console.warn('[ATTENDANCE] Vote non retiré par le client:', voteResult.reason)
         }
 
         // L'action a été lancée avant la bascule : elle concerne l'ancienne

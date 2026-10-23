@@ -5,6 +5,7 @@ import {
   getWeekVotes,
   getWeekAttendances,
   type ParcoursTally,
+  type WeekVote,
 } from '../services/supabaseService'
 import { goingSet, summarizeVotes } from '../services/voteTallies'
 import { useTargetWednesday } from './useTargetWednesday'
@@ -36,6 +37,37 @@ export interface WeekVoteState {
 
 const cellKey = (parcoursId: string, userNumber: number) => `${parcoursId}|${userNumber}`
 
+/** Mêmes compteurs — évite de remplacer l'objet au polling. */
+function sameTallies(
+  a: Record<string, ParcoursTally>,
+  b: Record<string, ParcoursTally>
+): boolean {
+  if (a === b) return true
+  const aKeys = Object.keys(a)
+  const bKeys = Object.keys(b)
+  if (aKeys.length !== bKeys.length) return false
+  return aKeys.every((key) => {
+    const x = a[key]
+    const y = b[key]
+    return (
+      x != null &&
+      y != null &&
+      x.parcoursId === y.parcoursId &&
+      x.yes === y.yes &&
+      x.no === y.no
+    )
+  })
+}
+
+/** Mêmes choix (user_number → parcours) — évite de remplacer l'objet au polling. */
+function sameChoices(a: Record<number, string>, b: Record<number, string>): boolean {
+  if (a === b) return true
+  const aKeys = Object.keys(a)
+  const bKeys = Object.keys(b)
+  if (aKeys.length !== bKeys.length) return false
+  return aKeys.every((key) => a[Number(key)] === b[Number(key)])
+}
+
 export function useParcoursVotes(
   parcoursIds: string[],
   /** Noms des parcours — sert au tri alphabétique stable en cas d'égalité */
@@ -58,6 +90,9 @@ export function useParcoursVotes(
   const [error, setError] = useState<string | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const requestIdRef = useRef(0)
+  // Dernière liste de présents connue, pour recharger les votes seuls après
+  // une action sans refetcher les présences.
+  const goingRef = useRef<Set<number> | null>(null)
 
   const { weekKey, weekLabel } = useTargetWednesday()
   // Voir useAttendance : une réponse de l'ancienne semaine ne doit jamais
@@ -76,8 +111,23 @@ export function useParcoursVotes(
   const parcoursKey = parcoursIds.join(',')
   const ids = useMemo(() => (parcoursKey ? parcoursKey.split(',') : []), [parcoursKey])
 
-  const loadAll = useCallback(
-    async (opts?: { keepError?: boolean }) => {
+  const applyVotes = useCallback(
+    (votes: WeekVote[], going: Set<number> | null) => {
+      if (!user?.id) return
+
+      const { tallies: recomputed, choices: nextChoices } = summarizeVotes(votes, going)
+      setTallies((prev) => (sameTallies(prev, recomputed) ? prev : recomputed))
+      setChoices((prev) => (sameChoices(prev, nextChoices) ? prev : nextChoices))
+      setMyChoice((prev) => {
+        const next = nextChoices[user.id] ?? null
+        return prev === next ? prev : next
+      })
+    },
+    [user?.id]
+  )
+
+  const fetchVotes = useCallback(
+    async (opts?: { keepError?: boolean; forceAttendances?: boolean }) => {
       if (!user?.id) return
 
       const requestId = ++requestIdRef.current
@@ -86,9 +136,16 @@ export function useParcoursVotes(
         requestId !== requestIdRef.current || requestedWeekKey !== weekKeyRef.current
 
       try {
+        // La liste des présents est déjà fournie par Home : inutile de
+        // refetcher les présences à chaque cycle. Sans elle, on les charge
+        // (premier passage, polling de repli, ou récupération après panne).
+        const needAttendances =
+          goingUserNumbers === undefined &&
+          (opts?.forceAttendances === true || goingRef.current === null)
+
         const [votesResult, attendancesResult] = await Promise.allSettled([
           getWeekVotes(requestedWeekKey),
-          getWeekAttendances(requestedWeekKey),
+          needAttendances ? getWeekAttendances(requestedWeekKey) : Promise.resolve(null),
         ])
         if (isStale()) return
 
@@ -102,7 +159,8 @@ export function useParcoursVotes(
         //  - elle a voté sans jamais répondre à la présence
         //
         // La prop est l'état d'affichage : elle fait autorité quand elle est
-        // fournie. Sans elle, on se rabat sur la requête.
+        // fournie. Sans elle, on se rabat sur la requête, ou sur la dernière
+        // liste connue pour un rechargement de votes seuls.
         //
         // ⚠️ Ne PAS fusionner les deux : une réponse « pas aujourd'hui »
         //    enregistrée en base serait ré-adding par la requête, et le
@@ -110,23 +168,24 @@ export function useParcoursVotes(
         let going: Set<number> | null
         if (goingUserNumbers !== undefined) {
           going = new Set(goingUserNumbers)
-        } else if (attendancesResult.status === 'fulfilled') {
-          going = goingSet(attendancesResult.value)
+          goingRef.current = going
+        } else if (needAttendances) {
+          if (attendancesResult.status === 'fulfilled' && attendancesResult.value) {
+            going = goingSet(attendancesResult.value)
+            goingRef.current = going
+          } else {
+            // Présences indisponibles : on compte tout plutôt que d'afficher
+            // zéro. Une panne de présences ne doit pas effacer des votes
+            // qui, eux, ont bien été chargés.
+            console.warn('[VOTES] Présences indisponibles : comptage non filtré')
+            going = null
+            goingRef.current = null
+          }
         } else {
-          // Présences indisponibles : on compte tout plutôt que d'afficher
-          // zéro. Une panne de présences ne doit pas effacer des votes
-          // qui, eux, ont bien été chargés.
-          console.warn('[VOTES] Présences indisponibles : comptage non filtré')
-          going = null
+          going = goingRef.current
         }
 
-        const { tallies: recomputed, choices: nextChoices } = summarizeVotes(
-          votesResult.value,
-          going
-        )
-        setTallies(recomputed)
-        setChoices(nextChoices)
-        setMyChoice(nextChoices[user.id] ?? null)
+        applyVotes(votesResult.value, going)
 
         if (!opts?.keepError) setError(null)
       } catch (err) {
@@ -137,12 +196,28 @@ export function useParcoursVotes(
         if (!isStale()) setLoading(false)
       }
     },
-    [user?.id, weekKey, goingKey]
+    [user?.id, weekKey, goingKey, applyVotes]
+  )
+
+  const loadAll = useCallback(
+    (opts?: { keepError?: boolean }) => fetchVotes({ ...opts, forceAttendances: true }),
+    [fetchVotes]
+  )
+
+  /**
+   * Après un vote, seule la table `participations` a changé. On recharge les
+   * votes sans refetcher les présences, sauf si on n'a encore aucune liste
+   * de présents (repli).
+   */
+  const loadVotesOnly = useCallback(
+    (opts?: { keepError?: boolean }) => fetchVotes({ ...opts, forceAttendances: false }),
+    [fetchVotes]
   )
 
   useEffect(() => {
     if (authLoading) return
     if (!user?.id) {
+      goingRef.current = null
       setTallies({})
       setMyChoice(null)
       setChoices({})
@@ -150,6 +225,7 @@ export function useParcoursVotes(
       return
     }
 
+    goingRef.current = null
     setLoading(true)
     setTallies({})
     setMyChoice(null)
@@ -220,23 +296,32 @@ export function useParcoursVotes(
             userNumber: user.id,
             weekKey: actionWeekKey,
           })
+          // Un vote accepté implique que la personne est présente (le
+          // trigger DB le garantit). Sans liste de présents fournie, on
+          // l'ajoute au repli pour que le rechargement des votes ne
+          // l'écarte pas.
+          if (goingUserNumbers === undefined && goingRef.current) {
+            goingRef.current = new Set(goingRef.current).add(user.id)
+          }
         }
 
         // Action lancée avant la bascule : le rechargement de l'ancienne
         // semaine écraserait l'affichage de la nouvelle.
         if (actionWeekKey !== weekKeyRef.current) return
-        // Recharge pour refléter l'état réel (l'upsert a pu remplacer un vote)
-        await loadAll({ keepError: true })
+        // Recharge pour refléter l'état réel (l'upsert a pu remplacer un
+        // vote). Seule `participations` a changé : on ne refetch pas les
+        // présences.
+        await loadVotesOnly({ keepError: true })
       } catch (err) {
         console.error('[VOTES] Erreur vote:', err)
         if (actionWeekKey !== weekKeyRef.current) return
         setError(err instanceof Error ? err.message : 'Erreur lors du vote')
-        await loadAll({ keepError: true })
+        await loadVotesOnly({ keepError: true })
       } finally {
         setSavingParcoursId(null)
       }
     },
-    [user, myChoice, weekKey, loadAll, goingUserNumbers]
+    [user, myChoice, weekKey, loadVotesOnly, goingUserNumbers]
   )
 
   const choiceOf = useCallback(

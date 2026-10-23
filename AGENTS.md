@@ -105,6 +105,12 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - `useParcours.ts` : `setInterval(loadParcours, 30000)`
 - `useParcoursVotes.ts` : `setInterval(loadAll, 30000)`
 - Aucun composant ne doit implémenter sa propre écoute
+- `useParcoursVotes` ne refetch `getWeekAttendances` que si la liste des
+  présents n'est pas fournie par Home. Après un vote, recharger les votes
+  seuls (`loadVotesOnly`), pas les présences.
+- Ne pas remplacer une référence inchangée au polling : comparer les données
+  avant `setState` (listes, compteurs, choix). Sinon Home se re-rend toutes
+  les 30 s pour rien.
 
 ### Cycle : mercredi 14h → mercredi 14h
 - `getCurrentWeekKey()` = date du mercredi cible (`"2026-10-07"`)

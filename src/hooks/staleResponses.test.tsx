@@ -288,47 +288,37 @@ describe('useParcoursVotes — réponses obsolètes autour de la bascule', () =>
 
   it('garde le décompte le plus récent quand la liste des présents change', async () => {
     const voteReads: Deferred<WeekVote[]>[] = []
-    const attendanceReads: Deferred<Attendee[]>[] = []
     mockVotes.mockImplementation(() => {
       const d = deferred<WeekVote[]>()
       voteReads.push(d)
       return d.promise as never
     })
-    mockAttendances.mockImplementation(() => {
-      const d = deferred<Attendee[]>()
-      attendanceReads.push(d)
-      return d.promise as never
-    })
+    mockAttendances.mockResolvedValue([])
 
     const { result, rerender } = renderHook(
       ({ going }: { going: number[] }) => useParcoursVotes(['p1'], {}, going),
       { wrapper, initialProps: { going: [ALICE] } }
     )
-    await waitFor(() => {
-      expect(voteReads).toHaveLength(1)
-      expect(attendanceReads).toHaveLength(1)
-    })
+    await waitFor(() => expect(voteReads).toHaveLength(1))
+    // La liste des présents est fournie : aucune requête de présences.
+    expect(mockAttendances).not.toHaveBeenCalled()
 
     // La présence change : un second chargement démarre avant que le premier
     // n'ait répondu.
     rerender({ going: [] })
-    await waitFor(() => {
-      expect(voteReads).toHaveLength(2)
-      expect(attendanceReads).toHaveLength(2)
-    })
+    await waitFor(() => expect(voteReads).toHaveLength(2))
+    expect(mockAttendances).not.toHaveBeenCalled()
 
     await act(async () => {
-      attendanceReads[1].resolve([])
       voteReads[1].resolve([])
-      await Promise.all([voteReads[1].promise, attendanceReads[1].promise])
+      await voteReads[1].promise
     })
     await waitFor(() => expect(result.current.tallies.p1).toBeUndefined())
 
     // Le premier chargement répond en retard avec un vote qui ne vaut plus
     await act(async () => {
-      attendanceReads[0].resolve([attendee(ALICE, 'going')])
       voteReads[0].resolve([{ parcoursId: 'p1', userNumber: ALICE, status: 'yes' }])
-      await Promise.all([voteReads[0].promise, attendanceReads[0].promise])
+      await voteReads[0].promise
     })
 
     expect(result.current.tallies.p1).toBeUndefined()

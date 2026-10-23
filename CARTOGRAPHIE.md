@@ -467,17 +467,23 @@ de tracé absent. `getNextParcours` suit la même règle. Le même chargement es
 réutilisé dans `ParcoursVoteCard` (tâche 10b), où une seule carte peut être
 ouverte à la fois.
 
-**D2. `getWeekAttendances` appelé deux fois par cycle, un résultat jeté**
-(`useAttendance.ts:76-78` et `useParcoursVotes.ts:74-77,91-96`).
+**D2. `getWeekAttendances` appelé deux fois par cycle, un résultat jeté. — corrigé.**
+`useParcoursVotes` ne charge les présences que si `goingUserNumbers` est
+`undefined` (repli). Quand Home fournit la liste des présents, le cycle ne
+fait plus qu'une requête de présences, celle de `useAttendance`.
 
-**D3. Rechargements trop larges après une action** : `toggleChoice` recharge
-votes **et** présences (`useParcoursVotes.ts:209`) alors que seule
-`participations` a changé ; `setAttendance` puis `deleteWeekVote` sont
-séquentiels alors qu'ils sont indépendants (`useAttendance.ts:111-117`).
+**D3. Rechargements trop larges après une action. — corrigé.**
+Après un vote, `toggleChoice` appelle `loadVotesOnly` : une requête
+`getWeekVotes`, pas `getWeekAttendances`, en réutilisant la dernière liste de
+présents connue. Dans `setAttendance`, la présence et la suppression du vote
+sont lancées dans le même `Promise.allSettled` ; la présence reste la source
+de vérité et le retrait du vote reste best-effort.
 
 **D4. Nouvelle référence d'objet à chaque polling**, donc re-rendu de Home
-toutes les 30 s même quand rien ne change : `useAttendance.ts:48`,
-`useParcours.ts:23-24`, `useParcoursVotes.ts:107,114`.
+toutes les 30 s même quand rien ne change. — corrigé.
+Les hooks comparent les données avant de remplacer l'état (`sameAttendees`,
+`sameParcoursList`/`sameParcours`, `sameTallies`/`sameChoices`). Un polling
+sans changement ne remplace plus les références et ne re-rend plus Home.
 
 **D5. Bundle 738 kB** (warning Vite). 52 `console.*` en production, dont **27
 dans `gpxParser.ts`** (jusqu'à 500 caractères de GPX loggés,
@@ -674,7 +680,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 9 | Météo et fuseau horaire | A5 : `isoToEpoch` interprété dans le fuseau du navigateur | fait |
 | 10 | Tracé GPX à la demande | D1 : 131 kB gzip de coordonnées à chaque cycle, pour rien | fait |
 | 10b | Aperçu du tracé dans le vote | Suite de D1 : bouton « Voir le tracé » dans `ParcoursVoteCard`, une carte à la fois | fait |
-| 11 | Requêtes redondantes | D2, D3, D4 : `getWeekAttendances` en double, rechargements trop larges | à faire |
+| 11 | Requêtes redondantes | D2, D3, D4 : `getWeekAttendances` en double, rechargements trop larges, références instables | fait |
 | 12 | `strict` + linter | H : ce qui laisse passer imports morts et props fantômes | à faire |
 | 13 | Code mort restant, logs, tests GPX | §5.E, D5 : `storage.ts`, props mortes, 52 `console.*`, parser non testé | à faire |
 | 14 | Bouton « Modifier » / ré-import GPX | `onEdit` jamais fourni : deux actions sans effet | à faire |

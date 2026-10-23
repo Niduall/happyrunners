@@ -48,6 +48,16 @@ const attendee = (
 
 const renderAttendance = () => renderHook(() => useAttendance(), { wrapper })
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 describe('useAttendance — « pas aujourd’hui » retire le choix de parcours', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -148,8 +158,38 @@ describe('useAttendance — « pas aujourd’hui » retire le choix de parcours'
 
     expect(result.current.myStatus).toBe('going')
     expect(result.current.error).toBeTruthy()
-    // Sans présence enregistrée, inutile de toucher au vote
-    expect(mockDeleteVote).not.toHaveBeenCalled()
+    // La suppression du vote part en parallèle : elle est best-effort et ne
+    // bloque pas le retour arrière de la présence.
+    expect(mockDeleteVote).toHaveBeenCalledTimes(1)
+  })
+
+  it('lance la présence et la suppression du vote en parallèle', async () => {
+    const attendanceWrite = deferred<void>()
+    const voteDelete = deferred<void>()
+    mockSet.mockReturnValue(attendanceWrite.promise)
+    mockDeleteVote.mockReturnValue(voteDelete.promise)
+
+    const { result } = renderAttendance()
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    let save!: Promise<void>
+    await act(async () => {
+      save = result.current.setMyStatus('skip')
+      await Promise.resolve()
+    })
+
+    // Les deux requêtes sont parties sans attendre la première.
+    expect(mockSet).toHaveBeenCalledTimes(1)
+    expect(mockDeleteVote).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      voteDelete.resolve()
+      attendanceWrite.resolve()
+      await save
+    })
+
+    expect(result.current.myStatus).toBe('skip')
+    expect(result.current.error).toBeNull()
   })
 
   it('ne propose un parcours qu’après « je viens »', async () => {
@@ -217,6 +257,28 @@ describe('useAttendance — « pas aujourd’hui » retire le choix de parcours'
     // Toujours 1 seule ligne pour cette personne
     expect(result.current.attendees.filter((a) => a.userNumber === ALICE)).toHaveLength(1)
     expect(result.current.myStatus).toBe('skip')
+  })
+
+  it('garde la même référence quand le polling renvoie les mêmes présences', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    mockAttendances.mockImplementation(() =>
+      Promise.resolve([attendee(ALICE, 'going')])
+    )
+
+    const { result, unmount } = renderAttendance()
+    try {
+      await waitFor(() => expect(result.current.loading).toBe(false))
+      const attendees = result.current.attendees
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000)
+      })
+
+      expect(result.current.attendees).toBe(attendees)
+    } finally {
+      unmount()
+      vi.useRealTimers()
+    }
   })
 
   it('refuse une réponse sans être connecté', async () => {

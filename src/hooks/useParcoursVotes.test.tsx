@@ -385,4 +385,38 @@ describe('useParcoursVotes — un choix unique par semaine', () => {
       expect(result.current.winners).toEqual(['p1'])
     })
   })
+
+  it('garde les mêmes références quand le polling renvoie les mêmes votes', async () => {
+    store = [{ parcoursId: 'p1', userNumber: ALICE, status: 'yes' }]
+    everyoneComing()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    mockVotes.mockImplementation(() => Promise.resolve(store.map((v) => ({ ...v }))))
+    mockAttendances.mockImplementation(() =>
+      Promise.resolve(
+        [...attendance.entries()].map(([userNumber, status]) => ({
+          userNumber,
+          firstName: 'Test',
+          lastName: 'User',
+          status,
+        }))
+      )
+    )
+
+    const { result, unmount } = renderHook(() => useParcoursVotes(PARCOURS), { wrapper })
+    try {
+      await waitFor(() => expect(result.current.loading).toBe(false))
+      const tallies = result.current.tallies
+      const choiceOf = result.current.choiceOf
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000)
+      })
+
+      expect(result.current.tallies).toBe(tallies)
+      expect(result.current.choiceOf).toBe(choiceOf)
+    } finally {
+      unmount()
+      vi.useRealTimers()
+    }
+  })
 })

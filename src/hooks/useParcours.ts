@@ -6,6 +6,28 @@ import { useAuth } from './useAuth'
 
 const POLL_INTERVAL_MS = 30000
 
+/** Même parcours (mêmes valeurs) — évite de remplacer la liste au polling. */
+function sameParcours(a: ParcoursSummary | null, b: ParcoursSummary | null): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return (
+    a.id === b.id &&
+    a.name === b.name &&
+    a.description === b.description &&
+    a.distance_km === b.distance_km &&
+    a.elevation_gain_m === b.elevation_gain_m &&
+    a.created_by === b.created_by &&
+    a.created_at === b.created_at &&
+    a.updated_at === b.updated_at
+  )
+}
+
+function sameParcoursList(a: ParcoursSummary[], b: ParcoursSummary[]): boolean {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  return a.every((parcours, index) => sameParcours(parcours, b[index]))
+}
+
 export function useParcours() {
   const { user } = useAuth()
   const [parcoursList, setParcoursList] = useState<ParcoursSummary[]>([])
@@ -27,8 +49,11 @@ export function useParcours() {
     try {
       const data = await getParcours()
       if (isStale()) return
-      setParcoursList(data)
-      setNextParcours(data[0] || null)
+      setParcoursList((prev) => (sameParcoursList(prev, data) ? prev : data))
+      setNextParcours((prev) => {
+        const next = data[0] || null
+        return sameParcours(prev, next) ? prev : next
+      })
       setError(null)
     } catch (err) {
       if (isStale()) return

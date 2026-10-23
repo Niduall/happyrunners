@@ -331,12 +331,21 @@ c'est exactement ce qui a produit le vote orphelin `#16`. Désormais
 `attendances_remove_vote_on_delete` retirent le vote quand la présence passe à
 `skip` ou disparaît.
 
-**A4. Réponses obsolètes autour de la bascule du mercredi 14h.** Aucun hook de
-données ne vérifie que la réponse concerne toujours la semaine demandée :
-`useAttendance.ts:47-49`, `useParcoursVotes.ts:74-115`, `useParcours.ts:22-24`,
-`useWeather.ts:66-71`. Seul `useAuth` a un garde `cancelled`
-(`useAuth.tsx:92-97`). Une requête pour l'ancienne semaine qui résout après la
-nouvelle écrase l'affichage.
+**A4 (corrigé, tâche 8). Réponses obsolètes autour de la bascule du mercredi
+14h.** Aucun hook de données ne vérifiait que la réponse concernait toujours la
+semaine demandée : `useAttendance.ts`, `useParcoursVotes.ts`, `useParcours.ts`,
+`useWeather.ts`. Une requête pour l'ancienne semaine qui résout après la
+nouvelle écrasait l'affichage.
+
+Correction : chaque chargement porte un identifiant de requête et, pour les
+hooks liés à la semaine, la clé demandée. La réponse (succès, erreur ou
+`finally`) est ignorée si une requête plus récente est partie ou si la semaine
+a changé. Les actions (`setMyStatus`, `toggleChoice`) capturent leur semaine et
+ne réécrivent plus l'interface ni ne relancent un chargement après la bascule.
+`useParcours` n'a que l'identifiant de requête (pas de semaine). Côté météo,
+une réponse tardive ne peut ni écrire son cache ni purger celui de la nouvelle
+semaine ; l'ancienne météo est vidée au changement de cache pour que l'erreur
+du nouveau chargement soit visible. Tests : `src/hooks/staleResponses.test.tsx`.
 
 **A5. Météo décalée hors du fuseau Europe/Paris.** `isoToEpoch`
 (`weatherApi.ts:101-105`) interprète les heures Open-Meteo dans le fuseau **du
@@ -644,7 +653,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 5 | Comptage des votes | A1, A2, C1 : une seule source de vérité, un seul total | fait |
 | 6 | Règle « vote sans présence » | A3 : triggers `participations_require_going` + `attendances_remove_vote*`, orphelin #16 supprimé, `restore` refuse les dumps incohérents | fait |
 | 7 | Résilience des erreurs | A6 (présence partielle), A7 (noms vides), C2 (`false` ambigu) | fait |
-| 8 | Bascule du mercredi 14h | A4 : réponses obsolètes qui écrasent la nouvelle semaine | à faire |
+| 8 | Bascule du mercredi 14h | A4 : réponses obsolètes qui écrasent la nouvelle semaine | fait |
 | 9 | Météo et fuseau horaire | A5 : `isoToEpoch` interprété dans le fuseau du navigateur | à faire |
 | 10 | Tracé GPX à la demande | D1 : 131 kB gzip de coordonnées à chaque cycle, pour rien | à faire |
 | 11 | Requêtes redondantes | D2, D3, D4 : `getWeekAttendances` en double, rechargements trop larges | à faire |

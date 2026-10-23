@@ -13,20 +13,28 @@ export function useParcours() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const requestIdRef = useRef(0)
 
   const loadParcours = useCallback(async (opts?: { silent?: boolean }) => {
+    // Deux chargements peuvent se chevaucher (polling + rechargement après
+    // suppression) : seule la réponse la plus récente doit écrire l'état.
+    const requestId = ++requestIdRef.current
+    const isStale = () => requestId !== requestIdRef.current
+
     // ⚠️ Les rafraîchissements de fond (polling) doivent être SILENCIEUX :
     // setLoading(true) afficherait le spinner toutes les 30 s.
     if (!opts?.silent) setLoading(true)
     try {
       const data = await getParcours()
+      if (isStale()) return
       setParcoursList(data)
       setNextParcours(data[0] || null)
       setError(null)
     } catch (err) {
+      if (isStale()) return
       setError(err instanceof Error ? err.message : 'Erreur chargement parcours')
     } finally {
-      setLoading(false)
+      if (!isStale()) setLoading(false)
     }
   }, [])
 

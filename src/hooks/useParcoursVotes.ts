@@ -57,8 +57,13 @@ export function useParcoursVotes(
   const [savingParcoursId, setSavingParcoursId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const requestIdRef = useRef(0)
 
   const { weekKey, weekLabel } = useTargetWednesday()
+  // Voir useAttendance : une réponse de l'ancienne semaine ne doit jamais
+  // écraser l'affichage de la nouvelle.
+  const weekKeyRef = useRef(weekKey)
+  weekKeyRef.current = weekKey
 
   // Signature des présents : change dès que quelqu'un répond, ce qui
   // recalcule les compteurs sans attendre le polling.
@@ -74,11 +79,18 @@ export function useParcoursVotes(
   const loadAll = useCallback(
     async (opts?: { keepError?: boolean }) => {
       if (!user?.id) return
+
+      const requestId = ++requestIdRef.current
+      const requestedWeekKey = weekKey
+      const isStale = () =>
+        requestId !== requestIdRef.current || requestedWeekKey !== weekKeyRef.current
+
       try {
         const [votesResult, attendancesResult] = await Promise.allSettled([
-          getWeekVotes(weekKey),
-          getWeekAttendances(weekKey),
+          getWeekVotes(requestedWeekKey),
+          getWeekAttendances(requestedWeekKey),
         ])
+        if (isStale()) return
 
         // Les votes sont la donnée principale : sans eux, rien à afficher.
         if (votesResult.status === 'rejected') throw votesResult.reason
@@ -118,10 +130,11 @@ export function useParcoursVotes(
 
         if (!opts?.keepError) setError(null)
       } catch (err) {
+        if (isStale()) return
         console.error('[VOTES] Erreur chargement:', err)
         setError(err instanceof Error ? err.message : 'Erreur chargement des votes')
       } finally {
-        setLoading(false)
+        if (!isStale()) setLoading(false)
       }
     },
     [user?.id, weekKey, goingKey]
@@ -175,6 +188,7 @@ export function useParcoursVotes(
 
       const previousChoice = myChoice
       const isRemoving = previousChoice === parcoursId
+      const actionWeekKey = weekKey
 
       setSavingParcoursId(parcoursId)
       // Optimiste : l'upsert remplace le choix précédent, donc on décrémente
@@ -199,18 +213,23 @@ export function useParcoursVotes(
 
       try {
         if (isRemoving) {
-          await deleteWeekVote(user.id, weekKey)
+          await deleteWeekVote(user.id, actionWeekKey)
         } else {
           await castWeekVote({
             parcoursId,
             userNumber: user.id,
-            weekKey,
+            weekKey: actionWeekKey,
           })
         }
+
+        // Action lancée avant la bascule : le rechargement de l'ancienne
+        // semaine écraserait l'affichage de la nouvelle.
+        if (actionWeekKey !== weekKeyRef.current) return
         // Recharge pour refléter l'état réel (l'upsert a pu remplacer un vote)
         await loadAll({ keepError: true })
       } catch (err) {
         console.error('[VOTES] Erreur vote:', err)
+        if (actionWeekKey !== weekKeyRef.current) return
         setError(err instanceof Error ? err.message : 'Erreur lors du vote')
         await loadAll({ keepError: true })
       } finally {

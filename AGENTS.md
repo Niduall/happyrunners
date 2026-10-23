@@ -110,6 +110,10 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   dans tout hook qui a besoin de la clé de semaine, sinon le hook fige sa clé au
   montage et affiche le run d'hier
 - Cache météo lié à la semaine (`weather_cache_<weekKey>`) → invalidé à la bascule
+- Toute réponse réseau liée à la semaine (présences, votes, météo) est ignorée
+  si une requête plus récente est partie ou si la clé de semaine a changé
+  pendant la requête. Une action lancée avant 14h ne réécrit pas l'interface
+  de la nouvelle semaine.
 
 ### Météo — Open-Meteo
 - **Aucune clé API** (contrairement à OpenWeather). Ne pas en réintroduire une.
@@ -238,6 +242,10 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
 7b. **Consommer `useTargetWednesday()`** plutôt que `getCurrentWeekKey()` figé au montage
 7c. **Météo : vent déjà en km/h** — ne pas reconvertir (Open-Meteo ≠ OpenWeather)
 7d. **`useTargetWednesday()` obligatoire** dans tout hook qui lit la semaine
+7e. **Double garde sur les réponses asynchrones** — identifiant de requête + clé
+    de semaine pour tout hook lié à la semaine ; une réponse obsolète n'écrit ni
+    état ni cache. La météo est vidée au changement de `cacheKey` pour laisser
+    voir l'erreur du nouveau fetch.
 8. **`npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

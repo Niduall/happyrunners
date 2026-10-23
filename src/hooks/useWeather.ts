@@ -22,11 +22,16 @@ export function useWeather(lat?: number, lon?: number) {
   /** Timestamp du dernier fetch réussi — pour afficher la fraîcheur */
   const [fetchedAt, setFetchedAt] = useState<number | null>(null)
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const requestIdRef = useRef(0)
 
   // Le cache est lié à la semaine cible : quand celle-ci change (bascule de
   // 14h le mercredi), le cache devient invalide automatiquement.
   const { weekKey } = useTargetWednesday()
   const cacheKey = `${CACHE_PREFIX}_${weekKey}`
+  // Même garde que les autres hooks : une réponse de l'ancienne semaine ne
+  // doit ni s'afficher ni toucher au cache de la nouvelle.
+  const weekKeyRef = useRef(weekKey)
+  weekKeyRef.current = weekKey
 
   /**
    * Lit le cache s'il est encore valide.
@@ -59,16 +64,24 @@ export function useWeather(lat?: number, lon?: number) {
    */
   const doFetch = useCallback(
     async (opts?: { silent?: boolean }) => {
+      const requestId = ++requestIdRef.current
+      const requestedWeekKey = weekKey
+      const isStale = () =>
+        requestId !== requestIdRef.current || requestedWeekKey !== weekKeyRef.current
+
       if (!opts?.silent) setLoading(true)
       setError(null)
 
       try {
         const data = await fetchWeather(lat, lon)
+        if (isStale()) return
         setWeather(data)
         const now = Date.now()
         setFetchedAt(now)
-        const entry: CacheEntry = { data, timestamp: now, weekKey }
+        const entry: CacheEntry = { data, timestamp: now, weekKey: requestedWeekKey }
         localStorage.setItem(cacheKey, JSON.stringify(entry))
+        // Ne purger qu'avec la clé encore courante : une réponse tardive de
+        // l'ancienne semaine supprimerait le cache de la nouvelle.
         purgeOtherCaches(cacheKey)
         console.log('[METEO] fetch ok', {
           silencieux: !!opts?.silent,
@@ -76,10 +89,13 @@ export function useWeather(lat?: number, lon?: number) {
           daily: data.daily.length,
         })
       } catch (err) {
+        if (isStale()) return
         console.error('[METEO] fetch echoue', err)
         setError(err instanceof Error ? err.message : 'Erreur inconnue')
       } finally {
-        if (!opts?.silent) setLoading(false)
+        // Même une requête silencieuse doit retirer le spinner : si elle a
+        // remplacé une requête non silencieuse, c'est elle la plus récente.
+        if (!isStale()) setLoading(false)
       }
     },
     [lat, lon, cacheKey, weekKey]
@@ -87,6 +103,12 @@ export function useWeather(lat?: number, lon?: number) {
 
   // Premier chargement : cache d'abord, réseau seulement si nécessaire
   useEffect(() => {
+    // Nouvelle semaine : la météo précédente ne doit pas rester affichée si
+    // le nouveau chargement échoue (le bandeau d'erreur est masqué tant que
+    // `weather` est non nul).
+    setWeather(null)
+    setFetchedAt(null)
+
     const restored = restoreFromCache()
     console.log('[METEO] montage', {
       weekKey,

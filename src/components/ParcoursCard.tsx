@@ -4,8 +4,8 @@ import { Button } from './ui/Button'
 import { Card, CardHeader, CardContent, CardFooter } from './ui/Card'
 import { MapView } from './MapView'
 import { parseGPX } from '../services/gpxParser'
-import { getParcoursPoints } from '../services/supabaseService'
-import type { GPXPoint, Parcours, ParcoursSummary } from '../types'
+import { useParcoursPoints } from '../hooks/useParcoursPoints'
+import type { Parcours, ParcoursSummary } from '../types'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -34,24 +34,9 @@ export function ParcoursCard({
   onRequestAdmin,
 }: ParcoursCardProps) {
   const [showMap, setShowMap] = useState(false)
-  const [points, setPoints] = useState<GPXPoint[] | null>(null)
-  const [loadingPoints, setLoadingPoints] = useState(false)
-  const [pointsError, setPointsError] = useState<string | null>(null)
+  const { points, loading: loadingPoints, error: pointsError, load: loadPoints } =
+    useParcoursPoints(parcours.id)
   const [uploading, setUploading] = useState(false)
-
-  const loadPoints = useCallback(async () => {
-    setLoadingPoints(true)
-    setPointsError(null)
-    try {
-      const loaded = await getParcoursPoints(parcours.id)
-      setPoints(loaded)
-    } catch (err) {
-      console.error('Erreur chargement du tracé:', err)
-      setPointsError('Impossible de charger le tracé')
-    } finally {
-      setLoadingPoints(false)
-    }
-  }, [parcours.id])
 
   const toggleMap = useCallback(() => {
     if (showMap) {
@@ -60,8 +45,8 @@ export function ParcoursCard({
     }
     setShowMap(true)
     // Le tracé n'est pas dans la liste : on le charge au premier dépliage.
-    if (points === null && !loadingPoints) void loadPoints()
-  }, [showMap, points, loadingPoints, loadPoints])
+    void loadPoints()
+  }, [showMap, loadPoints])
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -163,7 +148,7 @@ export function ParcoursCard({
                 Réessayer
               </Button>
             </div>
-          ) : points === null ? (
+          ) : loadingPoints || points === null ? (
             <div className="h-64 rounded-lg bg-gray-100 flex items-center justify-center text-sm text-gray-500">
               Chargement du tracé…
             </div>

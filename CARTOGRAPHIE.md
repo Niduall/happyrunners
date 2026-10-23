@@ -463,7 +463,9 @@ Correction : `getParcours` ne sélectionne plus que les colonnes de résumé
 (`ParcoursSummary`, sans `points`) ; `getParcoursPoints(id)` charge le tracé
 d'un seul parcours au premier dépliage de la carte. Le composant garde les
 points en mémoire tant qu'il est monté, avec états de chargement, d'erreur et
-de tracé absent. `getNextParcours` suit la même règle.
+de tracé absent. `getNextParcours` suit la même règle. Le même chargement est
+réutilisé dans `ParcoursVoteCard` (tâche 10b), où une seule carte peut être
+ouverte à la fois.
 
 **D2. `getWeekAttendances` appelé deux fois par cycle, un résultat jeté**
 (`useAttendance.ts:76-78` et `useParcoursVotes.ts:74-77,91-96`).
@@ -671,6 +673,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 8 | Bascule du mercredi 14h | A4 : réponses obsolètes qui écrasent la nouvelle semaine | fait |
 | 9 | Météo et fuseau horaire | A5 : `isoToEpoch` interprété dans le fuseau du navigateur | fait |
 | 10 | Tracé GPX à la demande | D1 : 131 kB gzip de coordonnées à chaque cycle, pour rien | fait |
+| 10b | Aperçu du tracé dans le vote | Suite de D1 : bouton « Voir le tracé » dans `ParcoursVoteCard`, une carte à la fois | fait |
 | 11 | Requêtes redondantes | D2, D3, D4 : `getWeekAttendances` en double, rechargements trop larges | à faire |
 | 12 | `strict` + linter | H : ce qui laisse passer imports morts et props fantômes | à faire |
 | 13 | Code mort restant, logs, tests GPX | §5.E, D5 : `storage.ts`, props mortes, 52 `console.*`, parser non testé | à faire |

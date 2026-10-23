@@ -11,10 +11,12 @@ vi.mock('../services/weatherApi', () => ({
   fetchWeather: vi.fn(),
   getRunForecast: vi.fn(() => null),
   daysUntilRun: vi.fn(() => 2),
+  formatWindDirection: vi.fn(() => 'O'),
 }))
 
 vi.mock('../services/supabaseService', () => ({
   getParcours: vi.fn().mockResolvedValue([]),
+  getParcoursPoints: vi.fn().mockResolvedValue([]),
   getWeekTallies: vi.fn().mockResolvedValue([]),
   getWeekVotes: vi.fn().mockResolvedValue([]),
   getWeekAttendances: vi.fn().mockResolvedValue([]),

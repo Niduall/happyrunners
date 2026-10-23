@@ -1,7 +1,10 @@
-import { Check, Trophy, MapPin, Scale } from 'lucide-react'
+import { useEffect } from 'react'
+import { Check, Trophy, MapPin, Scale, Eye } from 'lucide-react'
 import type { ParcoursSummary } from '../types/supabase'
 import { Button } from './ui/Button'
 import { Card, CardContent } from './ui/Card'
+import { MapView } from './MapView'
+import { useParcoursPoints } from '../hooks/useParcoursPoints'
 
 interface ParcoursVoteCardProps {
   parcours: ParcoursSummary
@@ -15,9 +18,14 @@ interface ParcoursVoteCardProps {
   /**
    * Vote verrouillé : la présence n'est pas encore confirmée.
    * Les parcours restent visibles et les compteurs lisibles, mais aucun
-   * bouton n'est affiché — on n'affiche pas une action qui rejette un clic.
+   * bouton de vote n'est affiché — on n'affiche pas une action qui rejette
+   * un clic. Le tracé reste consultable.
    */
   voteLocked?: boolean
+  /** Carte du tracé ouverte (contrôlée par le parent). */
+  mapOpen?: boolean
+  /** Ouvre/ferme la carte ; absent → pas de bouton. */
+  onToggleMap?: () => void
 }
 
 export function ParcoursVoteCard({
@@ -29,7 +37,15 @@ export function ParcoursVoteCard({
   saving,
   onToggle,
   voteLocked = false,
+  mapOpen = false,
+  onToggleMap,
 }: ParcoursVoteCardProps) {
+  const { points, loading, error, load } = useParcoursPoints(parcours.id)
+
+  useEffect(() => {
+    if (mapOpen) void load()
+  }, [mapOpen, load])
+
   return (
     <Card
       className={
@@ -75,7 +91,7 @@ export function ParcoursVoteCard({
             </p>
           </div>
 
-          {/* Pas de bouton du tout tant que la présence n'est pas confirmée :
+          {/* Pas de bouton de vote tant que la présence n'est pas confirmée :
               le parcours reste visible et lisible, mais on n'affiche pas
               d'action qui rejette un clic. */}
           {!voteLocked ? (
@@ -97,6 +113,46 @@ export function ParcoursVoteCard({
             </span>
           ) : null}
         </div>
+
+        {onToggleMap && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onToggleMap}
+            aria-expanded={mapOpen}
+            aria-controls={`parcours-map-${parcours.id}`}
+            className="-ml-2 mt-1"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            {mapOpen ? 'Masquer le tracé' : 'Voir le tracé'}
+          </Button>
+        )}
+
+        {mapOpen && (
+          <div id={`parcours-map-${parcours.id}`} className="mt-2">
+            {error ? (
+              <div className="h-60 rounded-lg bg-red-50 border border-red-200 flex flex-col items-center justify-center gap-2 px-4 text-center">
+                <p className="text-sm text-red-700">{error}</p>
+                <Button variant="outline" size="sm" onClick={() => void load()}>
+                  Réessayer
+                </Button>
+              </div>
+            ) : loading || points === null ? (
+              <div className="h-60 rounded-lg bg-gray-100 flex items-center justify-center text-sm text-gray-500">
+                Chargement du tracé…
+              </div>
+            ) : points.length > 0 ? (
+              <div className="relative h-60 rounded-lg overflow-hidden">
+                <MapView points={points} height={240} interactive={false} />
+              </div>
+            ) : (
+              <div className="h-60 rounded-lg bg-gray-100 flex items-center justify-center text-sm text-gray-500">
+                Aucun tracé disponible
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

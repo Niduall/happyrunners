@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { MapPin, Calendar, RefreshCw, ChevronRight, AlertCircle, Plus, Trophy } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { WeatherCard } from '../components/WeatherCard'
@@ -31,6 +31,8 @@ export function Home() {
 
   // Horloge partagée : bascule sur le run suivant à 14h le mercredi
   const { weekKey, date: targetWednesday } = useTargetWednesday()
+  // Une seule carte de tracé ouverte à la fois.
+  const [openMapId, setOpenMapId] = useState<string | null>(null)
   const parcoursIds = useMemo(() => parcoursList.map((p) => p.id), [parcoursList])
   const parcoursNames = useMemo(() => {
     const names: Record<string, string> = {}
@@ -331,6 +333,12 @@ export function Home() {
                         saving={savingParcoursId === parcours!.id}
                         voteLocked={!showParcours}
                         onToggle={() => void toggleChoice(parcours!.id)}
+                        mapOpen={openMapId === parcours!.id}
+                        onToggleMap={() =>
+                          setOpenMapId((current) =>
+                            current === parcours!.id ? null : parcours!.id
+                          )
+                        }
                       />
                     ))}
                   </div>

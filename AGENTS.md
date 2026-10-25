@@ -1,4 +1,4 @@
-# AGENTS.md - Running Club App
+# AGENTS.md - HappyRunners
 
 ## ⛔ RÈGLE ABSOLUE — NE JAMAIS PUSHER SANS ACCORD
 
@@ -45,7 +45,7 @@ npm run build      # 0 erreur TypeScript
 
 ## Architecture (résumé)
 - **SPA**: React 19 + React Router
-- **PWA**: vite-plugin-pwa, autoUpdate
+- **PWA**: vite-plugin-pwa, autoUpdate ; manifeste dans `src/config/pwaManifest.ts` (nom, `lang: fr`, couleur de marque, icônes PNG testées)
 - **Auth**: Prénom/Nom → `user_number` (entier attribué par la base, **jamais dérivé du nom**). PIN 4 chiffres hashé stocké en base (`user_profiles.pin_hash`), jamais en localStorage
 - **State**: Supabase = source de vérité. localStorage = cache utilisateur local
 - **Polling**: 30s pour parcours + participations

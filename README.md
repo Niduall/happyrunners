@@ -1,4 +1,4 @@
-# Running Club 🏃‍♂️
+# HappyRunners 🏃‍♂️
 
 Application PWA pour organiser les sorties running du mercredi midi avec les collègues.
 

@@ -205,26 +205,26 @@ vides/invalides, conversion des coordonnées, distance, dénivelé (dont A8),
 |---|---|---|
 | `schema.sql` | structure complète, rejouable : tables, index, RLS, purge des tables mortes | 202 |
 | `backup.py` | `save` / `list` / `restore` de la prod, via l'API REST | 449 |
-| `public/` | `favicon.svg`, 3 PNG (tous 309 octets : probablement des placeholders) | — |
+| `public/` | `favicon.svg`, 4 PNG (192, 512, maskable 512, Apple 180) aux bonnes dimensions | — |
 
 ### 2.10 Configuration
 
 | Fichier | Responsabilité | À savoir |
 |---|---|---|
-| `vite.config.ts` | build + PWA + config Vitest | le manifeste PWA est écrit **ici**, pas dans `index.html` ; `includeAssets` cite `favicon.ico`, qui n'existe pas |
+| `vite.config.ts` | build + PWA + config Vitest | le manifeste vient de `src/config/pwaManifest.ts` (testé) ; `includeAssets` cite `favicon.svg` et l'icône Apple |
 | `tsconfig.json` | TypeScript | ⚠️ **`strict` absent** ⇒ mode non-strict ; `noUnusedLocals: false` |
 | `postcss.config.js` | `@tailwindcss/postcss` + autoprefixer | `autoprefixer` est redondant avec v4, sans effet |
 | `.env` | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_ADMIN_CODE` | non versionné ✅ |
 
-#### Le manifeste PWA ne correspond pas à l'application
+#### Le manifeste PWA correspond à l'application — corrigé (tâche 15)
 
 | Réglage | Valeur servie | Réalité de l'app |
 |---|---|---|
-| `name` / `short_name` | `Running Club` / `Running` | l'interface affiche **HappyRunners** |
-| `lang` | `en` (défaut, absent de `vite.config.ts`) | toute l'interface est en français |
-| `theme_color` | `#16a34a` (vert) | couleur de marque = `#593A5A` (violet, `src/index.css:4`) |
-| icônes | 3 PNG de **309 octets** | placeholders, probablement illisibles à l'installation |
-| `includeAssets` | `favicon.ico` | absent de `public/` (il y a `favicon.svg`) |
+| `name` / `short_name` | `HappyRunners` / `HappyRunners` | conforme à l'interface |
+| `lang` | `fr` (explicite) | conforme |
+| `theme_color` | `#593A5A` | couleur de marque (`src/index.css:4`) |
+| icônes | PNG 192, 512 et maskable 512, plus Apple 180 | vrais PNG, dessin dans la zone sûre maskable |
+| `includeAssets` | `favicon.svg`, `apple-touch-icon.png` | présents dans `public/` |
 
 ---
 
@@ -657,7 +657,7 @@ utilisateur curieux peut lire ou modifier les votes des autres, et lire
 ## 7. Checklist après un changement
 
 ```bash
-npm test          # 288 tests, ~30 s (ignorer l'erreur removeEventListener du teardown)
+npm test          # toute la suite, ~30 s
 npm run build     # tsc + vite build
 npm run dev       # puis vérifier à l'écran, en navigation privée
 ```
@@ -701,8 +701,8 @@ Légende : `à faire` · `en cours` · `fait`
 | 11 | Requêtes redondantes | D2, D3, D4 : `getWeekAttendances` en double, rechargements trop larges, références instables | fait |
 | 12 | `strict` + linter | H : `strict`, `noUnused*`, ESLint ; formateur/CI non retenus, 5 warnings `any` renvoyés en tâche 13 | fait |
 | 13 | Code mort restant, logs, tests GPX | §5.E, D5, A8 : `storage.ts` réduit, 3 exports et 4 props mortes retirés, logs nettoyés, `gpxparser` remplacé, tests GPX | fait |
-| 14 | Bouton « Modifier » / ré-import GPX | `onEdit` jamais fourni : deux actions sans effet | à faire |
-| 15 | Manifeste PWA | nom, langue, couleur, icônes de 309 octets | à faire |
+| 14 | Bouton « Modifier » / ré-import GPX | `onEdit` jamais fourni : deux actions sans effet | fait |
+| 15 | Manifeste PWA | nom, langue, couleur, icônes de 309 octets | fait |
 | 16 | Accessibilité | §5.G : labels, `role="dialog"`, Échap, `role="alert"`, `scope` | à faire |
 | 17 | Base : `updated_at`, index, unicité | A9, A10, D6 | à faire |
 | 18 | Données : PIN de `#14`, casse des noms | §5.B | à faire |

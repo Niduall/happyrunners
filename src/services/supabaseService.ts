@@ -47,35 +47,10 @@ export async function getParcoursPoints(id: string): Promise<GPXPoint[]> {
   return ((data as { points?: GPXPoint[] } | null)?.points ?? [])
 }
 
-export async function getNextParcours(): Promise<ParcoursSummary | null> {
-  // maybeSingle() : null si aucun parcours, pas d'erreur 406
-  const { data, error } = await supabase
-    .from('parcours')
-    .select(PARCOURS_SUMMARY_COLUMNS)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error) throw error
-  return (data as ParcoursSummary | null) || null
-}
-
 export async function addParcours(parcours: ParcoursInsert): Promise<Parcours> {
   const { data, error } = await supabase
     .from('parcours')
     .insert(parcours)
-    .select()
-    .single()
-
-  if (error) throw error
-  return data
-}
-
-export async function updateParcours(id: string, updates: Partial<ParcoursInsert>): Promise<Parcours> {
-  const { data, error } = await supabase
-    .from('parcours')
-    .update(updates)
-    .eq('id', id)
     .select()
     .single()
 
@@ -284,24 +259,6 @@ export async function getWeekTallies(weekKey: string): Promise<ParcoursTally[]> 
     attendancesResult.status === 'fulfilled' ? goingSet(attendancesResult.value) : null
 
   return Object.values(summarizeVotes(votesResult.value, going).tallies)
-}
-
-/** Le choix d'une personne pour un parcours donné cette semaine */
-export async function getMyWeekVote(
-  parcoursId: string,
-  userNumber: number,
-  weekKey: string
-): Promise<'yes' | 'no' | null> {
-  const { data, error } = await supabase
-    .from('participations')
-    .select('status')
-    .eq('parcours_id', parcoursId)
-    .eq('user_number', userNumber)
-    .eq('week_key', weekKey)
-    .maybeSingle()
-
-  if (error) throw error
-  return (data?.status as 'yes' | 'no' | undefined) ?? null
 }
 
 /**

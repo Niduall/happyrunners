@@ -143,10 +143,10 @@ Toutes les lignes sont sous `running-app/`.
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/services/supabaseService.ts` | toutes les requêtes Supabase | 317 |
-| `src/services/gpxParser.ts` | parse GPX XML et JSON Strava, distance, dénivelé, simplification | 302 |
-| `src/services/weatherApi.ts` | client Open-Meteo + sélection de la prévision du mercredi 12h30 | 231 |
-| `src/services/storage.ts` | cache localStorage — **presque entièrement mort** (voir §5.E) | 183 |
+| `src/services/supabaseService.ts` | toutes les requêtes Supabase | 306 |
+| `src/services/gpxParser.ts` | parse GPX XML (DOMParser natif) et JSON Strava, distance, dénivelé, simplification | 265 |
+| `src/services/weatherApi.ts` | client Open-Meteo + sélection de la prévision du mercredi 12h30 | 343 |
+| `src/services/storage.ts` | cache localStorage de l'utilisateur (id entier uniquement) | 46 |
 | `src/services/weekKey.ts` | règle du cycle hebdomadaire et formatage | 87 |
 | `src/services/weatherCode.ts` | codes WMO → emoji / libellé / classes Tailwind | 85 |
 | `src/services/adminCode.ts` | lecture et comparaison du code admin, sans mémorisation | 50 |
@@ -157,7 +157,7 @@ Toutes les lignes sont sous `running-app/`.
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
 | `src/types/supabase.ts` | types des lignes DB en snake_case | 96 |
-| `src/types/index.ts` | types applicatifs + ré-exports DB | 69 |
+| `src/types/index.ts` | types applicatifs + ré-exports DB | 54 |
 | `src/lib/supabase.ts` | instancie le client Supabase | 15 |
 | `src/lib/utils.ts` | `cn()` = `clsx`, **sans fusion Tailwind** | 4 |
 | `src/test/setup.ts` | mock global Vitest + nettoyage | 40 |
@@ -183,6 +183,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/hooks/useWeather.test.tsx` | cache et rafraîchissement |
 | `src/hooks/useAttendance.test.tsx` | présence hebdo |
 | `src/services/storage.test.ts` | cache utilisateur local |
+| `src/services/gpxParser.test.ts` | parser GPX XML/JSON, distance, dénivelé, simplification, bounds |
 | `src/services/weatherCode.test.ts` | mapping des 28 codes WMO |
 | `src/services/adminCode.test.ts` | verrou admin, ne mémorise rien |
 | `src/hooks/useTargetWednesday.test.ts` | horloge de semaine |
@@ -192,9 +193,11 @@ Toutes les lignes sont sous `running-app/`.
 | `src/services/pin.test.ts` | `hashPin` |
 | `src/pages/Home.weather.test.tsx` | météo sur la page d'accueil |
 
-Le parser GPX (`gpxParser.ts`, 302 lignes) n'a **aucun test direct** : c'est la
-plus grosse zone non couverte, alors qu'il traite deux formats et calcule le
-dénivelé.
+Le parser GPX (`gpxParser.ts`, 265 lignes) est couvert par
+`gpxParser.test.ts` : XML (trace, route, waypoints), JSON Strava, entrées
+vides/invalides, conversion des coordonnées, distance, dénivelé (dont A8),
+`simplifyPoints` et `getBounds`. Le XML est lu avec le `DOMParser` natif :
+`gpxparser` (et son jsdom 15) a été retiré en tâche 13.
 
 ### 2.9 Base de données et scripts
 
@@ -239,7 +242,7 @@ Table de référence pour éviter de corriger une règle à un seul endroit.
 | **Un vote ne compte que si la personne vient** | `useParcoursVotes.ts:91-113` (client) | ⚠️ **pas en base**, et **contredit** par `getWeekTallies` (§5.C1) |
 | « Pas aujourd'hui » retire aussi le choix de parcours | `useAttendance` (suppression du vote) | ✅ client |
 | Statuts de présence `going`/`skip` | `types/supabase.ts:52` + `schema.sql:75` | ✅ |
-| Statut de vote `yes`/`no` | écrit en clair à 6 endroits (`types/supabase.ts:38,48`, `types/index.ts:49`, `supabaseService.ts:215,237,262,272,292`) | ⚠️ pas de type partagé ; `'no'` n'est **jamais écrit** par l'app |
+| Statut de vote `yes`/`no` | écrit en clair à 5 endroits (`types/supabase.ts:47,57`, `supabaseService.ts:219,241,281`) | ⚠️ pas de type partagé ; `'no'` n'est **jamais écrit** par l'app |
 | Code admin | `src/services/adminCode.ts` + `VITE_ADMIN_CODE` | ✅ mais présent **en clair** dans le bundle (§6) |
 | Verrou admin = une page, une personne | `ParcoursList.tsx` (`useState`) | ✅ et verrouillé par 11 tests |
 | PIN 4 chiffres | `src/services/pin.ts` + `user_profiles.pin_hash` | ⚠️ obfuscation, pas un vrai hash |
@@ -382,15 +385,18 @@ Correction : l'erreur de la requête `user_profiles` est journalisée et les
 noms manquants deviennent `Membre #N`. Les présences restent affichées ; la
 panne est visible au lieu d'être silencieuse.
 
-**A8. Dénivelé faussé si le premier point a une altitude non nulle.**
-`gpxParser.ts:245-252` part de 0 : un départ à 150 m ajoute +150 m au D+.
+**A8. Dénivelé faussé si une altitude manque. — corrigé (tâche 13).**
+L'ancien calcul partait de `ele ?? 0` : une altitude absente (surtout au premier
+point) était comptée comme 0 et inventait une montée. Le D+ ne cumule plus
+désormais qu'entre deux altitudes connues ; test de non-régression dans
+`gpxParser.test.ts` (« ne compte pas une altitude manquante comme 0 »).
 
 **A9. `updated_at` n'est jamais écrit.** Le trigger est commenté
 (`schema.sql:127-137`) et le code ne compense pas : ni `addParcours`
-(`supabaseService.ts:41-50`), ni `updateParcours` (`:52-58`), ni les upserts de
-présence et de vote ne touchent la colonne. Seul `updateUserProfile` le fait
-(`:109`). Les colonnes `updated_at` de `parcours`, `attendances` et
-`participations` mentent donc : elles valent l'heure d'insertion.
+(`supabaseService.ts:50-58`), ni les upserts de présence et de vote ne
+touchent la colonne. Seul `updateUserProfile` le fait (`:106`). Les colonnes
+`updated_at` de `parcours`, `attendances` et `participations` mentent donc :
+elles valent l'heure d'insertion.
 
 **A10. Pas d'unicité sur le nom.** Aucune contrainte ni index sur
 `(first_name, last_name)` (`schema.sql:27-41`), alors que `findProfileByName`
@@ -439,9 +445,9 @@ une création de profil sur une simple panne.
 (`Home.tsx:341`).
 
 **C4.** Conversion snake_case ↔ camelCase refaite à la main dans chaque
-fonction (`supabaseService.ts:179-184,233-238`, `useAuth.tsx:57-63`). Deux types
-`Participation` différents (`types/supabase.ts:34-42` vs `types/index.ts:51-59`)
-et `GPXPoint` dupliqué (`types/index.ts:6-11`, `types/supabase.ts:1-6`).
+fonction (`supabaseService.ts:179-184,233-238`, `useAuth.tsx:57-63`). Le type
+`Participation` dupliqué a été retiré (tâche 13) ; `GPXPoint` reste défini à la
+fois dans `types/index.ts` et `types/supabase.ts`.
 
 **C5.** `useTargetWednesday` instancié **cinq fois** (`Home.tsx:33`,
 `useAttendance.ts:41`, `useParcoursVotes.ts:61`, `useWeather.ts:28`,
@@ -463,9 +469,8 @@ Correction : `getParcours` ne sélectionne plus que les colonnes de résumé
 (`ParcoursSummary`, sans `points`) ; `getParcoursPoints(id)` charge le tracé
 d'un seul parcours au premier dépliage de la carte. Le composant garde les
 points en mémoire tant qu'il est monté, avec états de chargement, d'erreur et
-de tracé absent. `getNextParcours` suit la même règle. Le même chargement est
-réutilisé dans `ParcoursVoteCard` (tâche 10b), où une seule carte peut être
-ouverte à la fois.
+de tracé absent. Le même chargement est réutilisé dans `ParcoursVoteCard`
+(tâche 10b), où une seule carte peut être ouverte à la fois.
 
 **D2. `getWeekAttendances` appelé deux fois par cycle, un résultat jeté. — corrigé.**
 `useParcoursVotes` ne charge les présences que si `goingUserNumbers` est
@@ -485,9 +490,13 @@ Les hooks comparent les données avant de remplacer l'état (`sameAttendees`,
 `sameParcoursList`/`sameParcours`, `sameTallies`/`sameChoices`). Un polling
 sans changement ne remplace plus les références et ne re-rend plus Home.
 
-**D5. Bundle 738 kB** (warning Vite). 52 `console.*` en production, dont **27
-dans `gpxParser.ts`** (jusqu'à 500 caractères de GPX loggés,
-`gpxParser.ts:15-18,24-28,57-61,89-98`).
+**D5. Bundle et logs. — partiellement corrigé (tâche 13).**
+27 `console.*` de debug (dont le contenu GPX sur 500 caractères) et 3 logs de
+test ont été retirés ; il reste 34 `console.*`, uniquement des erreurs/warns
+utiles, sans contenu utilisateur. Les 5 `any` du parser GPX et d'Open-Meteo
+sont typés. `gpxparser` a été remplacé par le `DOMParser` natif : le bundle JS
+passe de 761,5 à 752,0 kB (gzip 219,5 → 217,0 kB) et les vulnérabilités npm de
+17 à 8.
 
 **D6. Index redondant.** `idx_attendances_week` (`schema.sql:84-85`) duplique le
 préfixe de l'index unique `(week_key, user_number)` (`:81-82`). En revanche, il
@@ -502,18 +511,18 @@ reste de l'application.
 | Élément | Référence | Note |
 |---|---|---|
 | `src/main.ts`, `src/counter.ts`, `src/style.css` | — | template Vite ; `main.ts` cible `#app` qui n'existe pas |
-| 13 fonctions de `storage.ts` | `storage.ts:13-184` | seuls `getUser`/`setUser`/`clearUser` sont utilisés |
-| `getNextParcours`, `updateParcours`, `getMyWeekVote` | `supabaseService.ts:28,52,258` | aucun import |
-| `addParcours`, `deleteParcours` (import) | `ParcoursList.tsx:11` | importés, jamais utilisés |
-| `handleCreateParcoursClick` | `ParcoursList.tsx:163-165` | défini, jamais appelé |
-| prop `onEdit` / `showActions` / `onView` | `ParcoursCard.tsx:14,17,29,49,103` | jamais passées ⇒ **bouton crayon et ré-import GPX sans effet** |
-| prop `compact` | `WeatherCard.tsx:9,37-53` | branche morte |
-| prop `center` | `MapView.tsx:17-18,31-33` | branche morte |
-| prop `onClick` | `ui/Card.tsx:6,14,17` | jamais utilisée |
-| prop `loading` | `ui/Button.tsx:7,36-41` | jamais passée ⇒ spinner mort |
+| ~~13 fonctions de `storage.ts`~~ | `storage.ts:13-184` | **retirées (tâche 13)** : seuls `getUser`/`setUser`/`clearUser` restent |
+| ~~`getNextParcours`, `updateParcours`, `getMyWeekVote`~~ | `supabaseService.ts` | **retirés (tâche 13)** : aucun import |
+| ~~`addParcours`, `deleteParcours` (import)~~ | `ParcoursList.tsx:11` | **retirés (tâche 13)** |
+| ~~`handleCreateParcoursClick`~~ | `ParcoursList.tsx:163-165` | **retiré (tâche 13)** |
+| prop `onEdit` / `showActions` / `onView` | `ParcoursCard.tsx:14,17,29,49,103` | jamais passées ⇒ **bouton crayon et ré-import GPX sans effet** (tâche 14) |
+| ~~prop `compact`~~ | `WeatherCard.tsx` | **retirée (tâche 13)** |
+| ~~prop `center`~~ | `MapView.tsx` | **retirée (tâche 13)** |
+| ~~prop `onClick`~~ | `ui/Card.tsx` | **retirée (tâche 13)** |
+| ~~prop `loading`~~ | `ui/Button.tsx` | **retirée (tâche 13)** |
 | ~~`workbox-window`~~ | `package.json` | déclarée, importée nulle part — **retirée (tâche 1)** |
 | `vite-plugin-pwa` | `package.json` | outil de **build** classé en `dependencies` (alors que `vite` est en `devDependencies`) |
-| types jamais consommés | `Coordinates`, `Participation`, `ParticipationStatus`, `Attendance`, plus 8 types de retour exportés | — |
+| ~~types jamais consommés~~ | `types/index.ts` | **retirés (tâche 13)** : `Coordinates`, `Participation`, `ParticipationStatus`, ré-exports `ParcoursInsert`/`Attendance`/`AttendanceStatus` |
 
 **Supprimés en tâche 2** : `src/main.ts`, `src/counter.ts`, `src/style.css`,
 `src/assets/*` (3 fichiers), `public/icons.svg`, `tailwind.config.js` et
@@ -687,7 +696,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 10b | Aperçu du tracé dans le vote | Suite de D1 : bouton « Voir le tracé » dans `ParcoursVoteCard`, une carte à la fois | fait |
 | 11 | Requêtes redondantes | D2, D3, D4 : `getWeekAttendances` en double, rechargements trop larges, références instables | fait |
 | 12 | `strict` + linter | H : `strict`, `noUnused*`, ESLint ; formateur/CI non retenus, 5 warnings `any` renvoyés en tâche 13 | fait |
-| 13 | Code mort restant, logs, tests GPX | §5.E, D5 : `storage.ts`, props mortes, 52 `console.*`, parser non testé | à faire |
+| 13 | Code mort restant, logs, tests GPX | §5.E, D5, A8 : `storage.ts` réduit, 3 exports et 4 props mortes retirés, logs nettoyés, `gpxparser` remplacé, tests GPX | fait |
 | 14 | Bouton « Modifier » / ré-import GPX | `onEdit` jamais fourni : deux actions sans effet | à faire |
 | 15 | Manifeste PWA | nom, langue, couleur, icônes de 309 octets | à faire |
 | 16 | Accessibilité | §5.G : labels, `role="dialog"`, Échap, `role="alert"`, `scope` | à faire |

@@ -14,13 +14,12 @@ L.Icon.Default.mergeOptions({
 
 interface MapViewProps {
   points: GPXPoint[]
-  center?: { lat: number; lng: number }
   zoom?: number
   height?: number
   interactive?: boolean
 }
 
-export function MapView({ points, center, zoom = 13, height = 300, interactive = true }: MapViewProps) {
+export function MapView({ points, zoom = 13, height = 300, interactive = true }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<L.Map | null>(null)
   const [mapReady, setMapReady] = useState(false)
@@ -28,14 +27,9 @@ export function MapView({ points, center, zoom = 13, height = 300, interactive =
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return
 
-    let initialCenter: [number, number]
-    if (center) {
-      initialCenter = [center.lat, center.lng]
-    } else if (points[0]) {
-      initialCenter = [points[0].lat, points[0].lng]
-    } else {
-      initialCenter = [48.8566, 2.3522]
-    }
+    const initialCenter: [number, number] = points[0]
+      ? [points[0].lat, points[0].lng]
+      : [48.8566, 2.3522]
     
     const map = L.map(mapRef.current, {
       zoomControl: interactive,

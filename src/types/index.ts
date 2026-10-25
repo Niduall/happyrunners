@@ -1,8 +1,3 @@
-export interface Coordinates {
-  lat: number
-  lng: number
-}
-
 export interface GPXPoint {
   lat: number
   lng: number
@@ -17,9 +12,6 @@ export interface GPXPoint {
 export type {
   Parcours,
   ParcoursSummary,
-  ParcoursInsert,
-  Attendance,
-  AttendanceStatus,
 } from './supabase'
 
 export interface WeatherData {
@@ -49,18 +41,6 @@ export interface WeatherForecast {
   current: WeatherData
   hourly: WeatherData[]
   daily: Array<WeatherData & { temp: { min: number; max: number } }>
-}
-
-export type ParticipationStatus = 'yes' | 'no' | null
-
-export interface Participation {
-  id: string
-  parcoursId: string
-  parcours_id: string
-  userNumber: number
-  status: ParticipationStatus
-  updatedAt: string
-  updated_at: string
 }
 
 export interface User {

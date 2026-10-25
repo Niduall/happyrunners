@@ -87,10 +87,10 @@ Reconnexion sur un autre appareil : on retrouve son `user_number` via
 |--------|--------------|------------------------------|
 | User (Prénom/Nom/user_number) | ✅ `running_user` (cache) | ✅ `user_profiles` |
 | PIN hash | ❌ | ✅ `user_profiles.pin_hash` |
-| Parcours | (helper legacy) | ✅ `parcours` |
-| Votes | (helper legacy) | ✅ `participations` |
+| Parcours | ❌ | ✅ `parcours` |
+| Votes | ❌ | ✅ `participations` |
 
-`storage.ts` contient aussi des helpers legacy pour parcours/participations qui ne sont **plus utilisés** par l'app (tout passe par Supabase).
+`storage.ts` ne conserve que le cache utilisateur (`getUser`/`setUser`/`clearUser`). Les anciens helpers parcours/participations ont été retirés en tâche 13 : tout passe par Supabase.
 
 ---
 
@@ -229,6 +229,7 @@ npm test:watch    # watch mode
 | Fichier | Couvre |
 |---------|--------|
 | `src/services/storage.test.ts` | cache local, invalidation des ids non entiers |
+| `src/services/gpxParser.test.ts` | XML/JSON GPX, distance, dénivelé, simplification, bounds |
 | `src/services/pin.test.ts` | `hashPin` (déterminisme, format, zéros en tête) |
 | `src/hooks/useAuth.integration.test.tsx` | Flux complet : first_login, création, PIN, nouvel appareil, reconnexion, robustesse |
 

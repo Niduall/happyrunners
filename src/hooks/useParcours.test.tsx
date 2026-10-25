@@ -8,7 +8,6 @@ import { parseGPX } from '../services/gpxParser'
 
 vi.mock('../services/supabaseService', () => ({
   getParcours: vi.fn(),
-  getNextParcours: vi.fn(),
   addParcours: vi.fn(),
   deleteParcours: vi.fn(),
   getUserProfile: vi.fn().mockResolvedValue(null),

@@ -1,238 +1,184 @@
-import gpxParser from 'gpxparser'
 import type { GPXPoint, Parcours } from '../types'
 
+/**
+ * Point brut, tel que le renvoie un GPX (lat/lon) ou un export JSON Strava
+ * (lat/lng). Les valeurs peuvent arriver en chaînes : on les convertit.
+ */
+interface RawPoint {
+  lat?: number | string
+  lon?: number | string
+  lng?: number | string
+  ele?: number | string
+  time?: string | Date | null
+}
+
+interface RawStravaExport {
+  name?: string
+  title?: string
+  description?: string
+  points?: RawPoint[]
+}
+
+/**
+ * Parse un GPX (XML) ou un export JSON Strava.
+ *
+ * Le XML est lu avec le `DOMParser` natif : `gpxparser` tirait un jsdom 15 et
+ * `jsdom-global`, qui remplaçaient le DOM de Vitest au moment de l'import et
+ * cassaient le teardown des tests. On ne garde que ce dont l'app a besoin.
+ */
 export function parseGPX(gpxContent: string): Parcours | null {
+  // Nettoyer le contenu (BOM, espaces)
+  const cleanContent = gpxContent.trim().replace(/^\uFEFF/, '')
+
+  if (!cleanContent) {
+    console.error('GPX vide')
+    return null
+  }
+
+  // Format JSON d'abord (export Strava récent)
+  const parsedJson = tryParseJson(cleanContent)
+  if (isStravaExport(parsedJson)) {
+    return parseJSONStrava(parsedJson)
+  }
+
+  // Sinon, format XML GPX standard (insensible à la casse)
+  const hasGPX =
+    /<gpx/i.test(cleanContent) ||
+    /<trk/i.test(cleanContent) ||
+    /<rte/i.test(cleanContent) ||
+    /<wpt/i.test(cleanContent)
+  if (!hasGPX) {
+    console.error('Pas un fichier GPX valide - pas de balise <gpx>, <trk>, <rte> ou <wpt>')
+    return null
+  }
+
+  const doc = parseXml(cleanContent)
+  if (!doc) {
+    console.error('GPX parse error: XML invalide')
+    return null
+  }
+
+  const track = firstDescendant(doc, 'trk')
+  if (track) {
+    const points = readXmlPoints(descendants(track, 'trkpt'))
+    if (points.length > 0) {
+      return buildParcours(childText(track, 'name'), childText(track, 'desc'), points)
+    }
+  }
+
+  const route = firstDescendant(doc, 'rte')
+  if (route) {
+    const points = readXmlPoints(descendants(route, 'rtept'))
+    if (points.length > 0) {
+      return buildParcours(childText(route, 'name'), childText(route, 'desc'), points)
+    }
+  }
+
+  const waypointElements = descendants(doc, 'wpt')
+  if (waypointElements.length > 0) {
+    const points = readXmlPoints(waypointElements)
+    if (points.length > 0) {
+      return buildParcours('Parcours waypoints', undefined, points)
+    }
+  }
+
+  console.error('Aucune trace, route ou waypoint trouvée')
+  return null
+}
+
+function tryParseJson(content: string): unknown {
   try {
-    // Nettoyer le contenu (BOM, espaces)
-    const cleanContent = gpxContent.trim().replace(/^\uFEFF/, '')
-    
-    if (!cleanContent) {
-      console.error('GPX vide')
-      return null
-    }
+    return JSON.parse(content)
+  } catch {
+    return null
+  }
+}
 
-    // Debug: afficher plus d'infos pour diagnostic
-    console.log('=== GPX DEBUG ===')
-    console.log('Content length:', cleanContent.length)
-    console.log('First 500 chars:', cleanContent.substring(0, 500))
-    console.log('Last 200 chars:', cleanContent.substring(Math.max(0, cleanContent.length - 200)))
-    
-    // Essayer de parser en JSON d'abord (format Strava JSON export)
-    let parsedJson = null
-    try {
-      parsedJson = JSON.parse(cleanContent)
-      console.log('JSON parsed successfully:', Object.keys(parsedJson))
-      console.log('Has points:', !!parsedJson.points, 'isArray:', Array.isArray(parsedJson.points))
-      if (parsedJson.points) {
-        console.log('Points length:', parsedJson.points.length)
-        console.log('First point:', parsedJson.points[0])
-      }
-    } catch {
-      console.log('Not valid JSON, trying XML GPX')
-    }
-    
-    // Si c'est du JSON avec un tableau "points", traiter comme format JSON Strava
-    if (parsedJson && parsedJson.points && Array.isArray(parsedJson.points)) {
-      console.log('Format JSON Strava détecté')
-      return parseJSONStrava(parsedJson)
-    }
-    
-    // Si JSON mais pas de points, essayer quand même si c'est un objet avec points
-    if (parsedJson && typeof parsedJson === 'object') {
-      console.log('JSON parsed but no points array, keys:', Object.keys(parsedJson))
-    }
-    
-    // Sinon, format XML GPX standard
-    // Check plus robuste (case-insensitive, ignore BOM/espace)
-    const hasGPX = /<gpx/i.test(cleanContent) || /<trk/i.test(cleanContent) || /<rte/i.test(cleanContent) || /<wpt/i.test(cleanContent)
-    if (!hasGPX) {
-      console.error('Pas un fichier GPX valide - pas de balise <gpx>, <trk>, <rte> ou <wpt>')
-      console.debug('Premiers 500 chars:', cleanContent.substring(0, 500))
-      return null
-    }
+function isStravaExport(value: unknown): value is RawStravaExport {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Array.isArray((value as RawStravaExport).points)
+  )
+}
 
-    const gpx = new gpxParser()
-    gpx.parse(cleanContent)
+function parseXml(content: string): Document | null {
+  const doc = new DOMParser().parseFromString(content, 'text/xml')
+  if (doc.getElementsByTagName('parsererror').length > 0) return null
+  return doc
+}
 
-    console.log('GPX parsed:', {
-      tracksCount: gpx.tracks?.length || 0,
-      routesCount: gpx.routes?.length || 0,
-      waypointsCount: gpx.waypoints?.length || 0,
+/**
+ * Éléments par nom local, quel que soit le préfixe ou l'espace de noms
+ * (`trk`, `gpx:trk`…). `getElementsByTagName` seul raterait les préfixes.
+ */
+function descendants(root: Document | Element, localName: string): Element[] {
+  return Array.from(root.getElementsByTagNameNS('*', localName))
+}
+
+function firstDescendant(root: Document, localName: string): Element | null {
+  return descendants(root, localName)[0] ?? null
+}
+
+/** Enfant direct uniquement : évite de confondre le nom d'une trace imbriquée. */
+function directChild(parent: Element, localName: string): Element | null {
+  for (const child of Array.from(parent.children)) {
+    if (child.localName === localName) return child
+  }
+  return null
+}
+
+function childText(parent: Element, localName: string): string | undefined {
+  const text = directChild(parent, localName)?.textContent?.trim()
+  return text ? text : undefined
+}
+
+function readXmlPoints(elements: Element[]): GPXPoint[] {
+  const points: GPXPoint[] = []
+
+  for (const element of elements) {
+    const lat = toNumber(element.getAttribute('lat'))
+    const lng = toNumber(element.getAttribute('lon'))
+    if (lat === undefined || lng === undefined) continue
+
+    const eleElement = directChild(element, 'ele')
+    points.push({
+      lat,
+      lng,
+      ele: eleElement ? toNumber(eleElement.textContent) : undefined,
+      time: childText(element, 'time'),
     })
-
-    // Essayer tracks d'abord
-    if (gpx.tracks && gpx.tracks.length > 0) {
-      return buildParcoursFromTrack(gpx.tracks[0])
-    }
-
-    // Sinon essayer routes
-    if (gpx.routes && gpx.routes.length > 0) {
-      return buildParcoursFromRoute(gpx.routes[0])
-    }
-
-    // Sinon waypoints
-    if (gpx.waypoints && gpx.waypoints.length > 0) {
-      return buildParcoursFromWaypoints(gpx.waypoints)
-    }
-
-    console.error('Aucune trace, route ou waypoint trouvée')
-    return null
-  } catch (err) {
-    console.error('GPX parse error:', err)
-    return null
   }
+
+  return points
 }
 
-function buildParcoursFromTrack(track: any): Parcours | null {
-  const points: GPXPoint[] = []
+function appendPoints(target: GPXPoint[], rawPoints: RawPoint[]): void {
+  for (const point of rawPoints) {
+    const lat = toNumber(point.lat)
+    const lng = toNumber(point.lng ?? point.lon)
+    if (lat === undefined || lng === undefined) continue
 
-  console.log('Track structure:', {
-    name: track.name,
-    desc: track.desc,
-    type: track.type,
-    pointsType: typeof track.points,
-    pointsIsArray: Array.isArray(track.points),
-    pointsLength: track.points?.length,
-    firstPointKeys: track.points?.[0] ? Object.keys(track.points[0]) : null,
-    firstSegment: track.points?.[0],
-  })
-
-  // CAS 1: track.points est un tableau PLAT de points (format Strava)
-  if (track.points && Array.isArray(track.points) && track.points.length > 0) {
-    const firstPoint = track.points[0]
-    
-    // Si le premier élément a lat/lon directement -> format plat
-    if (firstPoint && typeof firstPoint === 'object' && firstPoint.lat != null && firstPoint.lon != null) {
-      console.log('Format flat détecté (points directs)')
-      for (const point of track.points) {
-        if (point.lat != null && point.lon != null) {
-          points.push({
-            lat: Number(point.lat),
-            lng: Number(point.lon),
-            ele: point.ele != null ? Number(point.ele) : undefined,
-            time: point.time,
-          })
-        }
-      }
-    }
-    // Sinon format segments (tableau de tableaux)
-    else if (Array.isArray(firstPoint)) {
-      console.log('Format segments détecté')
-      for (const segment of track.points) {
-        if (Array.isArray(segment)) {
-          for (const point of segment) {
-            if (point.lat != null && point.lon != null) {
-              points.push({
-                lat: Number(point.lat),
-                lng: Number(point.lon),
-                ele: point.ele != null ? Number(point.ele) : undefined,
-                time: point.time,
-              })
-            }
-          }
-        }
-      }
-    }
+    target.push({
+      lat,
+      lng,
+      ele: toNumber(point.ele),
+      time: toTime(point.time),
+    })
   }
-
-  // Fallback: track.segments
-  if (points.length === 0 && track.segments && Array.isArray(track.segments)) {
-    console.log('Trying track.segments...')
-    for (const segment of track.segments) {
-      if (Array.isArray(segment)) {
-        for (const point of segment) {
-          if (point.lat != null && point.lon != null) {
-            points.push({
-              lat: Number(point.lat),
-              lng: Number(point.lon),
-              ele: point.ele != null ? Number(point.ele) : undefined,
-              time: point.time,
-            })
-          }
-        }
-      }
-    }
-  }
-
-  if (points.length === 0) {
-    console.error('Aucun point valide dans la trace après tous les fallbacks')
-    return null
-  }
-
-  console.log(`Successfully parsed ${points.length} points`)
-  return buildParcours(track.name, track.desc, points)
-}
-
-function buildParcoursFromRoute(route: any): Parcours | null {
-  const points: GPXPoint[] = []
-
-  if (route.points && Array.isArray(route.points)) {
-    for (const point of route.points) {
-      if (point.lat != null && point.lon != null) {
-        points.push({
-          lat: Number(point.lat),
-          lng: Number(point.lon),
-          ele: point.ele != null ? Number(point.ele) : undefined,
-          time: point.time,
-        })
-      }
-    }
-  }
-
-  if (points.length === 0) return null
-  return buildParcours(route.name, route.desc, points)
-}
-
-function buildParcoursFromWaypoints(waypoints: any[]): Parcours | null {
-  const points: GPXPoint[] = []
-
-  for (const wp of waypoints) {
-    if (wp.lat != null && wp.lon != null) {
-      points.push({
-        lat: Number(wp.lat),
-        lng: Number(wp.lon),
-        ele: wp.ele != null ? Number(wp.ele) : undefined,
-        time: wp.time,
-      })
-    }
-  }
-
-  if (points.length === 0) return null
-  return buildParcours('Parcours waypoints', undefined, points)
 }
 
 // Parser pour le format JSON Strava (export récent)
-function parseJSONStrava(json: any): Parcours | null {
-  if (!json.points || !Array.isArray(json.points) || json.points.length === 0) {
-    console.error('Format JSON invalide: pas de tableau points')
-    return null
-  }
-
-  console.log(`Parsing JSON Strava: ${json.points.length} points`)
-
+function parseJSONStrava(json: RawStravaExport): Parcours | null {
   const points: GPXPoint[] = []
-  
-  for (const point of json.points) {
-    if (point.lat != null && point.lng != null) {
-      points.push({
-        lat: Number(point.lat),
-        lng: Number(point.lng),
-        ele: point.ele != null ? Number(point.ele) : undefined,
-        time: point.time,
-      })
-    }
-  }
+  appendPoints(points, json.points ?? [])
 
   if (points.length === 0) {
     console.error('Aucun point valide dans le JSON')
     return null
   }
 
-  console.log(`Successfully parsed ${points.length} points from JSON`)
-  
-  // Utiliser le nom du fichier ou un nom par défaut
   const name = json.name || json.title || 'Parcours Strava'
-  
   return buildParcours(name, json.description, points)
 }
 
@@ -242,13 +188,16 @@ function buildParcours(name: string | undefined, desc: string | undefined, point
     distance += haversineDistance(points[i - 1], points[i])
   }
 
+  // Le dénivelé ne se cumule qu'entre deux altitudes connues : compter une
+  // altitude manquante comme 0 inventerait une montée (voir A8).
   let elevationGain = 0
-  for (let i = 1; i < points.length; i++) {
-    const prevEle = points[i - 1].ele ?? 0
-    const currEle = points[i].ele ?? 0
-    if (currEle > prevEle) {
-      elevationGain += currEle - prevEle
+  let previousEle: number | undefined
+  for (const point of points) {
+    if (point.ele === undefined) continue
+    if (previousEle !== undefined && point.ele > previousEle) {
+      elevationGain += point.ele - previousEle
     }
+    previousEle = point.ele
   }
 
   const now = new Date().toISOString()
@@ -268,6 +217,19 @@ function buildParcours(name: string | undefined, desc: string | undefined, point
     created_at: now,
     updated_at: now,
   }
+}
+
+function toNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === '') return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function toTime(value: string | Date | null | undefined): string | undefined {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? undefined : value.toISOString()
+  }
+  return typeof value === 'string' && value ? value : undefined
 }
 
 function haversineDistance(p1: GPXPoint, p2: GPXPoint): number {

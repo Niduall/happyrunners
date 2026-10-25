@@ -99,9 +99,6 @@ describe('Home — erreur météo', () => {
 
     await waitFor(() => expect(mockFetch).toHaveBeenCalled(), { timeout: 4000 })
     await new Promise((r) => setTimeout(r, 200))
-    console.log('BODY>>', document.body.textContent?.slice(0, 300))
-    console.log('REESSAYER?', document.body.textContent?.includes('Réessayer'))
-    console.log('weather?', document.body.textContent?.includes('Météo'))
     expect(errorBanner()).not.toBeNull()
   })
 

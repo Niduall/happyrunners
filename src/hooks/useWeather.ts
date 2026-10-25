@@ -83,11 +83,6 @@ export function useWeather(lat?: number, lon?: number) {
         // Ne purger qu'avec la clé encore courante : une réponse tardive de
         // l'ancienne semaine supprimerait le cache de la nouvelle.
         purgeOtherCaches(cacheKey)
-        console.log('[METEO] fetch ok', {
-          silencieux: !!opts?.silent,
-          hourly: data.hourly.length,
-          daily: data.daily.length,
-        })
       } catch (err) {
         if (isStale()) return
         console.error('[METEO] fetch echoue', err)
@@ -110,12 +105,6 @@ export function useWeather(lat?: number, lon?: number) {
     setFetchedAt(null)
 
     const restored = restoreFromCache()
-    console.log('[METEO] montage', {
-      weekKey,
-      cacheKey,
-      cacheRestauré: restored,
-      maintenant: Math.floor(Date.now() / 1000),
-    })
 
     if (restored) {
       setLoading(false)
@@ -132,7 +121,6 @@ export function useWeather(lat?: number, lon?: number) {
    */
   useEffect(() => {
     refreshRef.current = setInterval(() => {
-      console.log('[METEO] refresh de fond (30 min)')
       void doFetch({ silent: true })
     }, REFRESH_INTERVAL_MS)
 

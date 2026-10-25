@@ -6,18 +6,16 @@ import { Card, CardContent } from './ui/Card'
 
 interface WeatherCardProps {
   weather: WeatherData | null
-  compact?: boolean
   title?: string
 }
 
 /** Cercle coloré + emoji, remplace les images OpenWeather */
-function WeatherIcon({ weather, size = 'lg' }: { weather: WeatherData; size?: 'sm' | 'lg' }) {
+function WeatherIcon({ weather }: { weather: WeatherData }) {
   const info = getWeatherCodeInfo(weather.weatherCode, weather.isDay !== false)
-  const dims = size === 'lg' ? 'w-16 h-16 text-4xl' : 'w-10 h-10 text-2xl'
 
   return (
     <div
-      className={`${dims} ${info.bg} rounded-full flex items-center justify-center flex-shrink-0`}
+      className={`w-16 h-16 text-4xl ${info.bg} rounded-full flex items-center justify-center flex-shrink-0`}
       role="img"
       aria-label={info.label}
     >
@@ -26,31 +24,13 @@ function WeatherIcon({ weather, size = 'lg' }: { weather: WeatherData; size?: 's
   )
 }
 
-export function WeatherCard({ weather, compact = false, title = 'Météo' }: WeatherCardProps) {
+export function WeatherCard({ weather, title = 'Météo' }: WeatherCardProps) {
   if (!weather) return null
 
   const temp = Math.round(weather.temperature)
   const feelsLike = Math.round(weather.feelsLike)
   const info = getWeatherCodeInfo(weather.weatherCode, weather.isDay !== false)
   const rainPercent = weather.pop != null ? Math.round(weather.pop * 100) : null
-
-  if (compact) {
-    return (
-      <Card className="p-3">
-        <div className="flex items-center gap-3">
-          <WeatherIcon weather={weather} size="sm" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">{title}</p>
-            <p className="text-sm text-gray-500">{info.label}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-2xl font-bold text-gray-900">{temp}°C</p>
-            <p className="text-xs text-gray-500">Ressenti {feelsLike}°C</p>
-          </div>
-        </div>
-      </Card>
-    )
-  }
 
   return (
     <Card>

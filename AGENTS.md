@@ -98,8 +98,12 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   « changer de nom casse les votes »
 
 ### GPX Parsing
-- Formats : XML GPX, JSON Strava `{ "points": [...] }`, flat array, segments, track.segments
+- Formats : XML GPX (`trk`, `rte`, `wpt`), JSON Strava `{ "points": [...] }`
+- Le XML est lu avec le `DOMParser` natif, **pas** avec `gpxparser` (retiré en
+  tâche 13 : il tirait jsdom 15 et cassait le teardown des tests)
 - Retourne `{ distance_km, elevation_gain_m, points[] }`
+- Le D+ ne cumule qu'entre altitudes connues (une altitude absente vaut
+  « inconnue », jamais 0)
 - La liste (`getParcours`) ne charge **jamais** `points` (1,1 Mo pour 5
   parcours). Utiliser `useParcoursPoints(id)` (qui appelle
   `getParcoursPoints`) quand la carte est dépliée ; le hook garde le tracé en
@@ -237,6 +241,7 @@ Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour l
 | `src/pages/ParcoursList.admin.test.tsx` | portée du déverrouillage (page + personne) |
 | `src/services/schema.test.ts` | `schema.sql` rejouable et à jour |
 | `src/services/storage.test.ts` | cache utilisateur local |
+| `src/services/gpxParser.test.ts` | XML/JSON GPX, distance, dénivelé, simplification, bounds |
 | `src/test/setup.ts` | mock Supabase global + cleanup |
 
 Ajouter un test pour toute nouvelle logique d'auth ou d'identification.

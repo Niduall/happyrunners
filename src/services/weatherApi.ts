@@ -181,7 +181,42 @@ export function getRunTimestamp(from: Date = new Date()): number {
   return parisWallTimeToEpoch(y, m, d, RUN_HOUR, RUN_MINUTES)
 }
 
-export function transformOpenMeteoResponse(json: any): WeatherForecast {
+/** Réponse Open-Meteo — seuls les champs demandés dans `*_FIELDS` arrivent. */
+interface OpenMeteoResponse {
+  current: {
+    time: string
+    temperature_2m: number
+    apparent_temperature: number
+    relative_humidity_2m: number
+    wind_speed_10m: number
+    wind_direction_10m?: number
+    wind_gusts_10m?: number
+    weather_code: number
+    is_day?: number
+  }
+  hourly: {
+    time: string[]
+    temperature_2m: number[]
+    apparent_temperature: number[]
+    relative_humidity_2m: number[]
+    wind_speed_10m: number[]
+    wind_direction_10m: number[]
+    wind_gusts_10m?: number[]
+    precipitation_probability?: number[]
+    weather_code: number[]
+  }
+  daily: {
+    time: string[]
+    weather_code: number[]
+    temperature_2m_min: number[]
+    temperature_2m_max: number[]
+    precipitation_probability_max?: number[]
+    sunrise?: string[]
+    sunset?: string[]
+  }
+}
+
+export function transformOpenMeteoResponse(json: OpenMeteoResponse): WeatherForecast {
   const current: WeatherData = {
     temperature: json.current.temperature_2m,
     feelsLike: json.current.apparent_temperature,

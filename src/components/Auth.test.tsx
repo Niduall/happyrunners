@@ -205,7 +205,7 @@ describe('LoginForm — écran de création', () => {
     await user.type(screen.getByLabelText('Confirmer le PIN'), '9999')
     await user.click(screen.getByRole('button', { name: /Créer mon compte/ }))
 
-    expect(await screen.findByText('Les PIN ne correspondent pas')).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Les PIN ne correspondent pas')
     expect(mockCreate).not.toHaveBeenCalled()
   })
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { User as UserIcon, LogOut, ChevronDown, Pencil, ShieldCheck } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
@@ -14,6 +14,16 @@ export function UserMenu() {
   const [lastName, setLastName] = useState('')
   const [nameError, setNameError] = useState('')
   const [savingName, setSavingName] = useState(false)
+
+  // Échap ferme la modale de renommage, comme les autres modales.
+  useEffect(() => {
+    if (!editing) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !savingName) setEditing(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [editing, savingName])
 
   if (!isAuthenticated || !user) return null
 
@@ -111,10 +121,17 @@ export function UserMenu() {
       </div>
 
       {editing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="user-name-title"
+        >
           <div className="w-full max-w-md bg-white rounded-lg p-6 space-y-4">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Modifier le nom</h3>
+              <h3 id="user-name-title" className="text-lg font-semibold text-gray-900">
+                Modifier le nom
+              </h3>
               <p className="text-sm text-gray-500 mt-1">
                 Ton numéro d'identifiant (#{user.id}) ne change pas : tes votes et ton PIN
                 restent attachés.
@@ -122,24 +139,36 @@ export function UserMenu() {
             </div>
 
             {nameError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                 {nameError}
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
+                <label htmlFor="user-first-name" className="block text-sm font-medium text-gray-700 mb-1">
+                  Prénom
+                </label>
                 <Input
+                  id="user-first-name"
                   type="text"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
+                  autoComplete="given-name"
                   autoFocus
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
-                <Input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+                <label htmlFor="user-last-name" className="block text-sm font-medium text-gray-700 mb-1">
+                  Nom
+                </label>
+                <Input
+                  id="user-last-name"
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  autoComplete="family-name"
+                />
               </div>
             </div>
 

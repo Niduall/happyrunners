@@ -284,22 +284,31 @@ export function ParcoursList() {
             <CardContent className="p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-gray-900">Nouveau parcours</h3>
-                <Button variant="ghost" size="sm" onClick={handleCancel}>
+                <Button variant="ghost" size="sm" onClick={handleCancel} aria-label="Fermer le formulaire">
                   ✕
                 </Button>
               </div>
 
-              <input
-                type="text"
-                placeholder="Nom du parcours (ex: Boucle du lac)"
-                value={newParcoursName}
-                onChange={e => setNewParcoursName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                autoFocus
-              />
+              <div>
+                <label
+                  htmlFor="new-parcours-name"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Nom du parcours
+                </label>
+                <input
+                  id="new-parcours-name"
+                  type="text"
+                  placeholder="Nom du parcours (ex: Boucle du lac)"
+                  value={newParcoursName}
+                  onChange={e => setNewParcoursName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  autoFocus
+                />
+              </div>
 
               <div className="space-y-2">
-                <label className="block text-sm text-gray-500">Fichier GPX (depuis Strava → Exporter GPX)</label>
+                <label htmlFor="gpx-upload-parcours" className="block text-sm text-gray-500">Fichier GPX (depuis Strava → Exporter GPX)</label>
                 <input
                   type="file"
                   id="gpx-upload-parcours"
@@ -309,13 +318,13 @@ export function ParcoursList() {
                   disabled={uploading}
                 />
                 {uploadError && (
-                  <p className="text-sm text-error flex items-center gap-1">
+                  <p role="alert" className="text-sm text-error flex items-center gap-1">
                     <span className="w-4 h-4">⚠</span>
                     {uploadError}
                   </p>
                 )}
                 {parsedParcours && (
-                  <p className="text-sm text-primary flex items-center gap-1">
+                  <p role="status" className="text-sm text-primary flex items-center gap-1">
                     <span className="w-4 h-4">✓</span>
                     GPX chargé : {parsedParcours.distance_km.toFixed(1)} km, {parsedParcours.elevation_gain_m || 0}m D+
                   </p>

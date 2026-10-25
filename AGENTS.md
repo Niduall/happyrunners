@@ -167,6 +167,12 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   déverrouillage saisi pendant le chargement (course couverte par un test).
 - Conséquence assumée : un **rechargement de page redemande le code**.
 
+### Accessibilité (tâche 16)
+- Toute modale : `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, et fermeture par **Échap** — sauf pendant une écriture en cours.
+- Tout champ a un `<label htmlFor>` ; sinon un `aria-label` explicite.
+- Les erreurs dynamiques portent `role="alert"` (jamais un simple texte rouge).
+- Les en-têtes de tableau ont `scope="col"`.
+
 ## Environment Variables
 | Variable | Required | Description |
 |----------|----------|-------------|

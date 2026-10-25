@@ -166,13 +166,14 @@ export function ParcoursCard({
 
       {onReplaceGpx && (
         <CardFooter className="pt-2 space-y-2">
-          <label className="w-full">
+          <div className="w-full">
             <input
               type="file"
               accept=".gpx"
               onChange={handleFileUpload}
               className="sr-only"
               id={`gpx-upload-${parcours.id}`}
+              aria-label="Choisir un fichier GPX"
               disabled={uploading}
             />
             <Button
@@ -185,7 +186,7 @@ export function ParcoursCard({
               <Upload className="w-4 h-4" />
               <span>{uploading ? 'Remplacement…' : 'Remplacer le GPX'}</span>
             </Button>
-          </label>
+          </div>
 
           {uploadError && (
             <p role="alert" className="text-sm text-error">

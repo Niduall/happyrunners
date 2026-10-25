@@ -97,6 +97,17 @@ describe('SecurityModal — profil SANS PIN', () => {
     void user
   })
 
+  it('se présente comme une modale et se ferme avec Échap', async () => {
+    const { user, onClose } = await openModal(null)
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(dialog).toHaveAccessibleName('Sécurité')
+
+    await user.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   it('refuse si les deux PIN ne correspondent pas', async () => {
     const { user } = await openModal(null)
 
@@ -104,7 +115,7 @@ describe('SecurityModal — profil SANS PIN', () => {
     await user.type(screen.getByLabelText('Confirmer le PIN'), '4321')
     await user.click(screen.getByRole('button', { name: /Activer le PIN/ }))
 
-    expect(await screen.findByText('Les PIN ne correspondent pas')).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Les PIN ne correspondent pas')
     expect(mockUpdate).not.toHaveBeenCalled()
   })
 

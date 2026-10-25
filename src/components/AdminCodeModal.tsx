@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Lock, X } from 'lucide-react'
 import { Button } from './ui/Button'
 
@@ -17,6 +17,15 @@ interface AdminCodeModalProps {
 export function AdminCodeModal({ onUnlock, onCancel }: AdminCodeModalProps) {
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
+
+  // Échap ferme la demande de code, comme les autres modales.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
 
   const handleSubmit = useCallback(
     (e?: React.FormEvent) => {

@@ -127,8 +127,21 @@ describe('ParcoursList — code administrateur', () => {
     expect(screen.getByRole('button', { name: /Ajouter un parcours/ })).toBeInTheDocument()
   })
 
-  it('un code incorrect affiche une erreur et ne déverrouille rien', async () => {
+  it('Échap ferme la demande de code sans déverrouiller', async () => {
     const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Bois de Haye')
+
+    await user.click(screen.getAllByLabelText('Déverrouiller la gestion des parcours')[0])
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.queryByLabelText('Supprimer')).not.toBeInTheDocument()
+  })
+
+  it('un code incorrect affiche une erreur et ne déverrouille rien', async () => {    const user = userEvent.setup()
     renderPage()
     await screen.findByText('Bois de Haye')
 

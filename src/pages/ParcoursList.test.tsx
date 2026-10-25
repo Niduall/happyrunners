@@ -307,6 +307,20 @@ describe('ParcoursList — modification', () => {
   })
 })
 
+describe('ParcoursList — formulaire accessible', () => {
+  it('associe le nom et le fichier GPX à leurs labels', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Bois de Haye')
+
+    await user.click(screen.getByRole('button', { name: 'Ajouter un parcours' }))
+
+    expect(screen.getByLabelText('Nom du parcours')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Fichier GPX/)).toHaveAttribute('type', 'file')
+    expect(screen.getByRole('button', { name: 'Fermer le formulaire' })).toBeInTheDocument()
+  })
+})
+
 afterEach(() => {
   vi.unstubAllEnvs()
 })

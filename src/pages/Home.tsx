@@ -202,7 +202,7 @@ export function Home() {
             />
 
             {attendanceError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                 {attendanceError}
               </div>
             )}
@@ -245,7 +245,7 @@ export function Home() {
                 <Card className="border-error/20 bg-error/5">
                   <CardContent className="p-4 flex items-center gap-3 text-error">
                     {/* weatherApi préfixe déjà « Erreur météo : » */}
-                    <span>{weatherError}</span>
+                    <span role="alert">{weatherError}</span>
                     <Button variant="ghost" size="sm" onClick={refreshWeather}>
                       Réessayer
                     </Button>
@@ -288,7 +288,7 @@ export function Home() {
                 </p>
 
                 {votesError && (
-                  <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                  <div role="alert" className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                     {votesError}
                   </div>
                 )}

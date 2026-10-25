@@ -27,6 +27,15 @@ export function SecurityModal({ onClose }: SecurityModalProps) {
   const [done, setDone] = useState<Done | null>(null)
   const [saving, setSaving] = useState(false)
 
+  // Échap ferme la modale, sauf pendant un enregistrement.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !saving) onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, saving])
+
   // Charge l'état réel du PIN pour proposer la bonne action par défaut
   useEffect(() => {
     if (!user) return
@@ -135,11 +144,16 @@ export function SecurityModal({ onClose }: SecurityModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="security-title"
+    >
       <div className="w-full max-w-md bg-white rounded-lg p-6 space-y-5 max-h-[90vh] overflow-y-auto">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <h3 id="security-title" className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               {hasPin ? (
                 <ShieldCheck className="w-5 h-5 text-green-600" />
               ) : (
@@ -163,7 +177,7 @@ export function SecurityModal({ onClose }: SecurityModalProps) {
         </div>
 
         {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             {error}
           </div>
         )}

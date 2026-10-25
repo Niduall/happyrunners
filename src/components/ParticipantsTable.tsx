@@ -107,9 +107,9 @@ export function ParticipantsTable({ rows, currentUserNumber, weekLabel }: Partic
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200">
-                <th className="text-left font-medium text-gray-700 py-2 pr-4">Participant</th>
-                <th className="text-left font-medium text-gray-700 py-2 pr-4">Statut</th>
-                <th className="text-left font-medium text-gray-700 py-2">Parcours</th>
+                <th scope="col" className="text-left font-medium text-gray-700 py-2 pr-4">Participant</th>
+                <th scope="col" className="text-left font-medium text-gray-700 py-2 pr-4">Statut</th>
+                <th scope="col" className="text-left font-medium text-gray-700 py-2">Parcours</th>
               </tr>
             </thead>
             <tbody>

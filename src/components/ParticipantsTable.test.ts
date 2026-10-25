@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { sortPresenceRows, type PresenceRow } from './ParticipantsTable'
+import { createElement } from 'react'
+import { render, screen } from '@testing-library/react'
+import { ParticipantsTable, sortPresenceRows, type PresenceRow } from './ParticipantsTable'
 
 let nextUserNumber = 1
 const row = (
@@ -47,5 +49,24 @@ describe('sortPresenceRows', () => {
   it('conserve le parcours dans la ligne', () => {
     const rows = [row('Alice', 'Dupont', 'going', 'Bois de Haye')]
     expect(sortPresenceRows(rows)[0].parcoursName).toBe('Bois de Haye')
+  })
+})
+
+describe('ParticipantsTable — en-têtes accessibles', () => {
+  it('associe chaque en-tête à sa colonne', () => {
+    render(
+      createElement(ParticipantsTable, {
+        rows: [row('Alice', 'Dupont', 'going', 'Bois de Haye')],
+        weekLabel: 'Mercredi 7 octobre',
+      })
+    )
+
+    const headers = screen.getAllByRole('columnheader')
+    expect(headers.map((header) => header.textContent)).toEqual([
+      'Participant',
+      'Statut',
+      'Parcours',
+    ])
+    for (const header of headers) expect(header).toHaveAttribute('scope', 'col')
   })
 })

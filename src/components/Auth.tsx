@@ -225,7 +225,7 @@ export function LoginForm() {
 
           <form onSubmit={handleSignupSubmit} className="space-y-4">
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                 {error}
               </div>
             )}
@@ -295,7 +295,7 @@ export function LoginForm() {
 
           <form onSubmit={handlePinSubmit} className="space-y-4">
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                 {error}
               </div>
             )}
@@ -350,15 +350,15 @@ export function LoginForm() {
 
         <form onSubmit={handleIdentitySubmit} className="space-y-4">
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
               {error}
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <p className="block text-sm font-medium text-gray-700 mb-1">
               Identification
-            </label>
+            </p>
             <p className="text-sm text-gray-500 mb-3 flex items-start gap-2">
               <Info className="w-4 h-4 shrink-0 mt-0.5 text-gray-400" />
               <span>Ton nom te sert d'identifiant dans le groupe.</span>

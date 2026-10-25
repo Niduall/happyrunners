@@ -558,17 +558,14 @@ tâche 12).
 | ~~`ARCHITECTURE.md:169`, `AGENTS.md:106`~~ | horloge « tick 1 min » | `TICK_MS = 30_000` → **30 s** — **corrigé (tâche 3)** |
 | ~~`README.md:47-48`~~ | `schema.test.ts` prouve que la prod correspond au fichier | il vérifie seulement la cohérence du **fichier** — **corrigé (tâche 3)** |
 
-### G. Accessibilité
+### G. Accessibilité — corrigé (tâche 16)
 
-- Champs sans label associé : `ParcoursList.tsx:269-276`, `UserMenu.tsx:132-142` ;
-  `<label>` sans `htmlFor` : `ParcoursList.tsx:279-287`.
-- Modales sans `role="dialog"` ni `aria-modal` : `UserMenu.tsx:113-156`,
-  `SecurityModal.tsx:134-135` (les deux autres modales les ont).
-- Fermeture par Échap absente partout sauf `ConfirmDeleteModal.tsx:29-35`.
-- Bouton `✕` sans `aria-label` : `ParcoursList.tsx:264-266`.
-- Erreurs sans `role="alert"` : `Auth.tsx:224,294,349`, `Home.tsx:195,281`,
-  `UserMenu.tsx:125`, `SecurityModal.tsx:162`.
-- `<th>` sans `scope="col"` : `ParticipantsTable.tsx:110-112`.
+- Champs associés à un label : formulaire d’ajout de parcours (`Nom du parcours`, fichier GPX), renommage dans `UserMenu`. Les inputs fichier portent un `aria-label`.
+- Modales avec `role="dialog"`, `aria-modal="true"` et `aria-labelledby` : `UserMenu`, `SecurityModal` (les autres l’avaient déjà).
+- Fermeture par **Échap** sur toutes les modales (`AdminCodeModal`, `ConfirmDeleteModal`, `ParcoursRenameModal`, `SecurityModal`, renommage de `UserMenu`), jamais pendant une écriture.
+- Boutons icône sans texte : `aria-label` sur le `✕` du formulaire de parcours.
+- Erreurs dynamiques annoncées avec `role="alert"` : `Auth`, `Home` (présences, météo, votes), `UserMenu`, `SecurityModal`, formulaire de parcours.
+- En-têtes de `ParticipantsTable` avec `scope="col"`.
 
 ### H. Outillage manquant
 
@@ -703,7 +700,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 13 | Code mort restant, logs, tests GPX | §5.E, D5, A8 : `storage.ts` réduit, 3 exports et 4 props mortes retirés, logs nettoyés, `gpxparser` remplacé, tests GPX | fait |
 | 14 | Bouton « Modifier » / ré-import GPX | `onEdit` jamais fourni : deux actions sans effet | fait |
 | 15 | Manifeste PWA | nom, langue, couleur, icônes de 309 octets | fait |
-| 16 | Accessibilité | §5.G : labels, `role="dialog"`, Échap, `role="alert"`, `scope` | à faire |
+| 16 | Accessibilité | §5.G : labels, `role="dialog"`, Échap, `role="alert"`, `scope` | fait |
 | 17 | Base : `updated_at`, index, unicité | A9, A10, D6 | à faire |
 | 18 | Données : PIN de `#14`, casse des noms | §5.B | à faire |
 

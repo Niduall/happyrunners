@@ -9,7 +9,7 @@ const renderBanner = (myStatus: AttendanceStatus | null, onChange = vi.fn()) =>
     <AttendanceBanner
       myStatus={myStatus}
       saving={false}
-      weekLabel="semaine du 21 oct."
+      subtitle="Mercredi 28 octobre · 12h30 · dans 3 jours"
       onChange={onChange}
     />
   )
@@ -29,9 +29,10 @@ describe('AttendanceBanner', () => {
     renderBanner(null)
 
     expect(classes('Je viens')).not.toContain('bg-primary')
-    expect(classes("Pas aujourd'hui")).not.toContain('bg-error')
+    expect(classes("Pas cette semaine")).not.toContain('bg-error')
+    expect(classes("Pas cette semaine")).not.toContain('bg-gray-100')
     expect(bouton('Je viens')).toHaveAttribute('aria-pressed', 'false')
-    expect(bouton("Pas aujourd'hui")).toHaveAttribute('aria-pressed', 'false')
+    expect(bouton("Pas cette semaine")).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('remplit « Je viens » seulement quand il est choisi', () => {
@@ -39,14 +40,15 @@ describe('AttendanceBanner', () => {
 
     expect(classes('Je viens')).toContain('bg-primary')
     expect(bouton('Je viens')).toHaveAttribute('aria-pressed', 'true')
-    expect(bouton("Pas aujourd'hui")).toHaveAttribute('aria-pressed', 'false')
+    expect(bouton("Pas cette semaine")).toHaveAttribute('aria-pressed', 'false')
   })
 
-  it('remplit « Pas aujourd’hui » seulement quand il est choisi', () => {
+  it('remplit « Pas cette semaine » seulement quand il est choisi', () => {
     renderBanner('skip')
 
-    expect(classes("Pas aujourd'hui")).toContain('bg-error')
-    expect(bouton("Pas aujourd'hui")).toHaveAttribute('aria-pressed', 'true')
+    expect(classes("Pas cette semaine")).toContain('bg-gray-100')
+    expect(classes("Pas cette semaine")).not.toContain('bg-error')
+    expect(bouton("Pas cette semaine")).toHaveAttribute('aria-pressed', 'true')
     // Rien ne doit suggérer un « oui » quand on a répondu non
     expect(classes('Je viens')).not.toContain('bg-primary')
     expect(bouton('Je viens')).toHaveAttribute('aria-pressed', 'false')
@@ -57,7 +59,7 @@ describe('AttendanceBanner', () => {
     expect(screen.getByText(/pas encore répondu/)).toBeInTheDocument()
 
     rerender(
-      <AttendanceBanner myStatus="going" saving={false} weekLabel="x" onChange={vi.fn()} />
+      <AttendanceBanner myStatus="going" saving={false} subtitle="Mercredi 28 octobre · 12h30" onChange={vi.fn()} />
     )
     expect(screen.queryByText(/pas encore répondu/)).not.toBeInTheDocument()
   })
@@ -70,7 +72,7 @@ describe('AttendanceBanner', () => {
     await user.click(bouton('Je viens'))
     expect(onChange).toHaveBeenLastCalledWith('going')
 
-    await user.click(bouton("Pas aujourd'hui"))
+    await user.click(bouton("Pas cette semaine"))
     expect(onChange).toHaveBeenLastCalledWith('skip')
   })
 
@@ -78,7 +80,7 @@ describe('AttendanceBanner', () => {
     const onChange = vi.fn()
     const user = userEvent.setup()
     render(
-      <AttendanceBanner myStatus={null} saving weekLabel="x" onChange={onChange} />
+      <AttendanceBanner myStatus={null} saving subtitle="Mercredi 28 octobre · 12h30" onChange={onChange} />
     )
 
     await user.click(bouton('Je viens'))

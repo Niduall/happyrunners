@@ -47,7 +47,8 @@ describe('WeatherCard — heure de Paris', () => {
 
     render(<WeatherCard weather={weather} />)
 
-    expect(screen.getByText('07:30')).toBeInTheDocument()
-    expect(screen.getByText('19:45')).toBeInTheDocument()
+    // Lever et coucher sont désormais dans une seule tuile « Journée ».
+    expect(screen.getByText(/07:30/)).toBeInTheDocument()
+    expect(screen.getByText(/19:45/)).toBeInTheDocument()
   })
 })

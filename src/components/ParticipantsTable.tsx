@@ -13,7 +13,6 @@ export interface PresenceRow {
 interface ParticipantsTableProps {
   rows: PresenceRow[]
   currentUserNumber?: number
-  weekLabel: string
 }
 
 const AVATAR_COLORS = [
@@ -78,12 +77,21 @@ function StatusBadge({ status }: { status: AttendanceStatus | null }) {
   )
 }
 
-export function ParticipantsTable({ rows, currentUserNumber, weekLabel }: ParticipantsTableProps) {
+export function ParticipantsTable({ rows, currentUserNumber }: ParticipantsTableProps) {
   const sorted = sortPresenceRows(rows)
 
   const going = sorted.filter((r) => r.attendance === 'going').length
   const pending = sorted.filter((r) => r.attendance === null).length
   const skip = sorted.filter((r) => r.attendance === 'skip').length
+
+  /** Résumé qui remplace un second titre « Présence » et le rappel de semaine. */
+  const summary = [
+    `${going} présent${going > 1 ? 's' : ''}`,
+    pending > 0 ? `${pending} en attente` : null,
+    skip > 0 ? `${skip} absent${skip > 1 ? 's' : ''}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   if (sorted.length === 0) {
     return (
@@ -98,10 +106,7 @@ export function ParticipantsTable({ rows, currentUserNumber, weekLabel }: Partic
   return (
     <Card>
       <CardContent className="p-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-2 mb-4">
-          <h3 className="font-semibold text-gray-900">Présence</h3>
-          <p className="text-sm text-gray-500">{weekLabel}</p>
-        </div>
+        <p className="text-sm text-gray-500 mb-3">{summary}</p>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -126,7 +131,7 @@ export function ParticipantsTable({ rows, currentUserNumber, weekLabel }: Partic
                     <td className="py-2 pr-4">
                       <div className="flex items-center gap-2">
                         <div
-                          className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ${
+                          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${
                             isAbsent ? 'bg-gray-200 text-gray-500' : colorFor(row.userNumber)
                           }`}
                         >

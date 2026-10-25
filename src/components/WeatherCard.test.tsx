@@ -79,9 +79,11 @@ describe('WeatherCard — bandeau autour du run', () => {
     const { container } = render(<WeatherCard weather={runForecast} hours={runWindow} />)
 
     const strip = container.querySelector('[data-run]')?.parentElement
-    expect(strip?.textContent).toContain('0 %')
-    expect(strip?.textContent).toContain('40 %')
-    expect(strip?.textContent).toContain('55 %')
+    // L'espace avant « % » est une espace fine insécable (typographie française).
+    const text = (strip?.textContent ?? '').replace(/\u202f/g, ' ')
+    expect(text).toContain('0 %')
+    expect(text).toContain('40 %')
+    expect(text).toContain('55 %')
   })
 
   it('n’affiche pas de bandeau sans prévision', () => {

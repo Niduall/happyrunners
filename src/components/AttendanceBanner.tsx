@@ -1,4 +1,4 @@
-import { Smile, Coffee } from 'lucide-react'
+import { Smile, Coffee, Calendar } from 'lucide-react'
 import type { AttendanceStatus } from '../services/supabaseService'
 import { Button } from './ui/Button'
 import { Card, CardContent } from './ui/Card'
@@ -6,11 +6,12 @@ import { Card, CardContent } from './ui/Card'
 interface AttendanceBannerProps {
   myStatus: AttendanceStatus | null
   saving: boolean
-  weekLabel: string
+  /** « Mercredi 28 octobre · 12h30 · dans 3 jours » */
+  subtitle: string
   onChange: (status: AttendanceStatus) => void
 }
 
-export function AttendanceBanner({ myStatus, saving, weekLabel, onChange }: AttendanceBannerProps) {
+export function AttendanceBanner({ myStatus, saving, subtitle, onChange }: AttendanceBannerProps) {
   // Tant que la question n'a pas reçu de réponse, l'encadré se signale.
   // Une fois répondu, il se calme : la réponse est connue, inutile d'y
   // attirer l'œil à chaque visite.
@@ -26,10 +27,12 @@ export function AttendanceBanner({ myStatus, saving, weekLabel, onChange }: Atte
     >
       <CardContent className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            {/* Même taille que « Météo pour la course » et « Qui vient ? » */}
+          <div className="min-w-0">
             <p className="text-lg font-semibold text-gray-900">Tu viens ?</p>
-            <p className="text-xs text-gray-500 mt-0.5">Run du mercredi · {weekLabel}</p>
+            <p className="text-sm text-gray-500 mt-0.5 flex items-start gap-1.5">
+              <Calendar className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{subtitle}</span>
+            </p>
           </div>
 
           {/* Rien n'est choisi : les deux boutons restent en contour.
@@ -46,15 +49,17 @@ export function AttendanceBanner({ myStatus, saving, weekLabel, onChange }: Atte
               <Smile className="w-4 h-4" />
               Je viens
             </Button>
+            {/* Refuser une sortie n'est pas une action destructive : gris,
+                jamais rouge. Le rouge reste réservé aux suppressions. */}
             <Button
-              variant={myStatus === 'skip' ? 'danger' : 'outline'}
+              variant={myStatus === 'skip' ? 'secondary' : 'outline'}
               size="sm"
               disabled={saving}
               onClick={() => onChange('skip')}
               aria-pressed={myStatus === 'skip'}
             >
               <Coffee className="w-4 h-4" />
-              Pas aujourd'hui
+              Pas cette semaine
             </Button>
           </div>
         </div>

@@ -179,6 +179,22 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - Les erreurs dynamiques portent `role="alert"` (jamais un simple texte rouge).
 - Les en-têtes de tableau ont `scope="col"`.
 
+### Interface — tenue (tâche 20)
+- **La date du run n'est écrite qu'une fois** : dans la carte « Tu viens ? »
+  (`Mercredi 28 octobre · 12h30 · dans 3 jours`). Ne pas la répéter dans les
+  titres de section, les cartes ou le tableau.
+- **Refuser une sortie n'est pas une action destructive** : « Pas cette
+  semaine » est gris, jamais rouge. Le rouge est réservé aux suppressions et
+  aux erreurs.
+- **Un seul titre par bloc** : la carte météo n'a pas de titre (celui de la
+  section suffit) ; le tableau de présence a un résumé, pas un second titre.
+- **Une seule entrée vers la gestion des parcours** : l'icône de l'en-tête.
+  Pas de bouton pleine largeur en bas de page.
+- **Cibles tactiles ≥ 44 px** (`min-h-11` dans `Button`) et **aucun texte
+  inférieur à 12 px**.
+- **L'accent `#0077a8`** est le seul bleu portant du texte blanc (contraste
+  AA ≈ 5:1). Ne pas revenir à `#009ddc` pour un bouton.
+
 ## Environment Variables
 | Variable | Required | Description |
 |----------|----------|-------------|

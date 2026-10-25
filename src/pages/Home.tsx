@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { MapPin, Calendar, RefreshCw, ChevronRight, AlertCircle, Plus, Trophy } from 'lucide-react'
+import { MapPin, RefreshCw, AlertCircle, Plus, Trophy } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { WeatherCard } from '../components/WeatherCard'
 import { AttendanceBanner } from '../components/AttendanceBanner'
@@ -44,7 +44,6 @@ export function Home() {
     myStatus,
     attendees,
     loading: attendanceLoading,
-    weekLabel,
     saving: attendanceSaving,
     error: attendanceError,
     setMyStatus,
@@ -133,11 +132,18 @@ export function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const daysToRun = useMemo(() => daysUntilRun(), [weekKey])
 
-  const weatherTitle = useMemo(() => {
-    if (!hasForecast) return 'Météo actuelle (prévision pas encore dispo)'
-    if (daysToRun === 0) return 'Météo du jour · 12h30'
-    return `Météo dans ${daysToRun} ${daysToRun > 1 ? 'jours' : 'jour'} · 12h30`
-  }, [hasForecast, daysToRun])
+  /** La date du run est dite une seule fois, ici : « Mercredi 28 octobre · 12h30 · dans 3 jours » */
+  const runSubtitle = useMemo(() => {
+    const date = targetWednesday.toLocaleDateString('fr-FR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+    })
+    const label = date.charAt(0).toUpperCase() + date.slice(1)
+    const when =
+      daysToRun === 0 ? "aujourd'hui" : `dans ${daysToRun} ${daysToRun > 1 ? 'jours' : 'jour'}`
+    return `${label} · 12h30 · ${when}`
+  }, [targetWednesday, daysToRun])
 
   /** Ancienneté des données : "à l'instant", "il y a 12 min", "il y a 2 h" */
   const weatherFreshness = useMemo(() => {
@@ -184,30 +190,11 @@ export function Home() {
 
         {isAuthenticated && (
           <>
-            <Card className="bg-primary/5 border-primary/20">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <Calendar className="w-6 h-6 text-primary" />
-                  <div>
-                    <p className="text-sm text-primary">Prochaine sortie</p>
-                    <p className="font-semibold text-gray-900">
-                      Mercredi{' '}
-                      {targetWednesday.toLocaleDateString('fr-FR', {
-                        day: 'numeric',
-                        month: 'long',
-                      })}{' '}
-                      à 12h30
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 1. Je viens ou pas ? */}
+            {/* 1. Je viens ou pas ? La date n'est dite qu'ici. */}
             <AttendanceBanner
               myStatus={myStatus}
               saving={attendanceSaving}
-              weekLabel={weekLabel}
+              subtitle={runSubtitle}
               onChange={(s) => void setMyStatus(s)}
             />
 
@@ -223,14 +210,14 @@ export function Home() {
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">Météo pour la course</h2>
                   <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
-                    {weatherTitle}
+                    {hasForecast ? 'Prévision à 12h30' : 'Météo actuelle'}
                     {weatherFreshness && (
                       <span className="text-xs text-gray-400">· {weatherFreshness}</span>
                     )}
                     {!hasForecast && (
                       <span className="px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded-full flex items-center gap-1">
                         <AlertCircle className="w-3 h-3" />
-                        pas encore disponible
+                        prévision pas encore disponible
                       </span>
                     )}
                   </p>
@@ -271,11 +258,7 @@ export function Home() {
                   </CardContent>
                 </Card>
               ) : weather ? (
-                <WeatherCard
-                  weather={runForecast ?? weather.current}
-                  title={weatherTitle}
-                  hours={runWindow}
-                />
+                <WeatherCard weather={runForecast ?? weather.current} hours={runWindow} />
               ) : null}
             </div>
 
@@ -285,13 +268,10 @@ export function Home() {
                 ne peut pas peser dessus sans avoir dit qu'on vient. */}
             {myStatus !== 'skip' && (
               <div>
-                <div className="flex items-baseline justify-between gap-2 mb-1">
-                  <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                    <MapPin className="w-5 h-5 text-gray-400" />
-                    Parcours proposés
-                  </h2>
-                  <span className="text-xs text-gray-500">{weekLabel}</span>
-                </div>
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-1">
+                  <MapPin className="w-5 h-5 text-gray-400" />
+                  Parcours proposés
+                </h2>
                 <p className="text-sm text-gray-500 mb-3">
                   {myStatus === 'going'
                     ? 'Choisis le parcours qui te convient. Le plus plébiscité sera retenu.'
@@ -366,19 +346,9 @@ export function Home() {
                 <ParticipantsTable
                   rows={presenceRows}
                   currentUserNumber={user?.id}
-                  weekLabel={weekLabel}
                 />
               </div>
             )}
-
-            <Button
-              variant="outline"
-              className="w-full justify-center"
-              onClick={() => navigate('/parcours')}
-            >
-              Gérer les parcours
-              <ChevronRight className="w-4 h-4" />
-            </Button>
           </>
         )}
       </main>

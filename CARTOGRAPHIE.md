@@ -706,6 +706,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 17 | Base : `updated_at`, index, unicité | A9, A10, D6 | fait |
 | 18 | Données : PIN de `#14`, casse des noms | §5.B : choix assumés, aucune donnée modifiée | fait |
 | 19 | Pluie à 0 % et heures autour du run | `WeatherCard` : pluie toujours affichée ; bandeau 11h → 14h (`getRunWindow`) | fait |
+| 20 | Finitions d'interface (lot A) | une seule date, refus neutre, météo calmée, accent AA, cibles 44 px | fait |
 
 **Pourquoi cet ordre.** Les tâches 1 à 3 ne touchent aucune donnée et se
 vérifient en une commande : autant commencer par elles. La tâche 4 vient

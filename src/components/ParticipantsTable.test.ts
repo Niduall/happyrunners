@@ -57,7 +57,6 @@ describe('ParticipantsTable — en-têtes accessibles', () => {
     render(
       createElement(ParticipantsTable, {
         rows: [row('Alice', 'Dupont', 'going', 'Bois de Haye')],
-        weekLabel: 'Mercredi 7 octobre',
       })
     )
 

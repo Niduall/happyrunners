@@ -141,6 +141,8 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   `new Date(iso)` seul. Afficher lever/coucher avec `timeZone: 'Europe/Paris'`.
 - Vent **déjà en km/h** : ne pas multiplier par 3.6 (bug OpenWeather)
 - `precipitation_probability` est en **pourcent** → normaliser en 0..1
+- La probabilité de pluie est **toujours affichée**, même à `0 %` : « pas de
+  pluie prévue » est une information. Ne pas remasquer le bloc à zéro.
 - Tolérance de sélection : ±90 min autour de 12h30
 - `isDay` forcé à `true` pour la prévision du run (toujours à 12h30)
 - Icônes via `weatherCode.ts` (mapping WMO → emoji), pas d'images externes

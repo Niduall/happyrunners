@@ -70,7 +70,7 @@ export function WeatherCard({ weather, title = 'Météo' }: WeatherCardProps) {
             </div>
           )}
 
-          {rainPercent != null && rainPercent > 0 && (
+          {rainPercent != null && (
             <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-lg">
               <CloudRain className="w-5 h-5 text-blue-500" />
               <div>

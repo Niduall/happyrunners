@@ -27,7 +27,7 @@ export function parseGPX(gpxContent: string): Parcours | null {
         console.log('Points length:', parsedJson.points.length)
         console.log('First point:', parsedJson.points[0])
       }
-    } catch (e) {
+    } catch {
       console.log('Not valid JSON, trying XML GPX')
     }
     

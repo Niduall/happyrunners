@@ -166,7 +166,7 @@ export function importParcours(json: string): { success: boolean; message: strin
     }
     
     return { success: true, message: `${imported} parcours importé(s)`, count: imported }
-  } catch (err) {
+  } catch {
     return { success: false, message: 'Erreur lecture fichier JSON', count: 0 }
   }
 }

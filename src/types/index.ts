@@ -21,7 +21,6 @@ export type {
   Attendance,
   AttendanceStatus,
 } from './supabase'
-import type { Parcours } from './supabase'
 
 export interface WeatherData {
   temperature: number

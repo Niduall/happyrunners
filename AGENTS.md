@@ -30,10 +30,14 @@ npm run build      # TypeScript check + Vite build
 npm run preview    # Preview production build
 npm test           # Unit + integration tests (Vitest)
 npm test:watch     # Watch mode
+npm run lint       # ESLint (TypeScript + règles React hooks)
+npm run lint:fix   # ESLint avec corrections automatiques
+npm run typecheck  # tsc --noEmit
 ```
 
 ## Workflow obligatoire avant livraison
 ```bash
+npm run lint       # 0 erreur ESLint
 npm test           # toute la suite doit passer
 npm run build      # 0 erreur TypeScript
 # puis : présenter les changements, attendre validation, puis push
@@ -262,7 +266,7 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
 7f. **Heures météo en Europe/Paris** — `isoToEpoch` interprète les dates
     Open-Meteo dans ce fuseau, pas dans celui du navigateur ; lever/coucher
     affichés avec `timeZone: WEATHER_TIMEZONE`.
-8. **`npm test` + `npm run build` obligatoires** avant de présenter un changement
+8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues
 - Vulnérabilités npm présentes, non traitées — `npm audit` pour le détail et le compte à jour

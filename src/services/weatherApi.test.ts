@@ -183,7 +183,6 @@ describe('getRunTimestamp', () => {
 describe('getRunForecast — avec 16 jours de couverture', () => {
   it('trouve la prévision même à J-5 (vendredi pour mercredi)', () => {
     const from = at(2026, 10, 9, 9) // vendredi 9 oct
-    const target = getRunTimestamp(from) // mercredi 14 oct 12h30
     const start = Math.floor(new Date(2026, 9, 9, 0, 0, 0).getTime() / 1000)
 
     // Open-Meteo renvoie 384 heures (16 jours), on en prend 240 (10 jours)
@@ -203,7 +202,6 @@ describe('getRunForecast — avec 16 jours de couverture', () => {
 
   it('trouve la prévision à J-7 (dimanche pour le mercredi suivant)', () => {
     const from = at(2026, 10, 11, 9) // dimanche 11 oct
-    const target = getRunTimestamp(from) // mercredi 14 oct
     const start = Math.floor(new Date(2026, 9, 11, 0, 0, 0).getTime() / 1000)
 
     // 384 heures comme la vraie réponse Open-Meteo

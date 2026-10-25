@@ -5,7 +5,7 @@ import type { GPXPoint } from '../types'
 import { getBounds, simplifyPoints } from '../services/gpxParser'
 
 // Fix pour les icônes Leaflet
-delete (L.Icon.Default.prototype as any)._getIconUrl
+delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -57,6 +57,9 @@ export function MapView({ points, center, zoom = 13, height = 300, interactive =
       map.remove()
       mapInstanceRef.current = null
     }
+    // Initialisation unique : les changements de points/zoom sont gérés par
+    // l'effet de dessin ci-dessous. Recréer la carte à chaque point serait pire.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -76,7 +79,7 @@ export function MapView({ points, center, zoom = 13, height = 300, interactive =
 
     // Tracer le parcours avec la couleur primaire
     const latLngs: [number, number][] = displayPoints.map(p => [p.lat, p.lng])
-    const polyline = L.polyline(latLngs, {
+    L.polyline(latLngs, {
       color: '#593A5A',
       weight: 4,
       opacity: 0.8,

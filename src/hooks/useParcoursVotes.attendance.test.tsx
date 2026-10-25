@@ -28,7 +28,6 @@ vi.mock('../services/supabaseService', () => ({
 const mockTallies = vi.mocked(getWeekTallies)
 const mockVotes = vi.mocked(getWeekVotes)
 const mockAttendances = vi.mocked(getWeekAttendances)
-const mockGetProfile = vi.mocked(getUserProfile)
 const mockCast = vi.mocked(castWeekVote)
 const mockDelete = vi.mocked(deleteWeekVote)
 

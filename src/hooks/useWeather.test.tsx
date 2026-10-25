@@ -174,7 +174,7 @@ describe('useWeather — pas de clignotement', () => {
 
   it('le refresh de fond ne déclenche pas de spinner', async () => {
     // Fetch lent → loading=true pendant le réseau si non silencieux
-    let resolvers: (() => void)[] = []
+    const resolvers: (() => void)[] = []
     mockFetchWeather.mockImplementation(
       () =>
         new Promise((resolve) => {

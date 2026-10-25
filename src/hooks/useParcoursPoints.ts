@@ -25,6 +25,9 @@ export function useParcoursPoints(parcoursId: string) {
     setError(null)
 
     return () => {
+      // Invalide la requête en cours. Ce n'est pas un nœud DOM : le compteur
+      // doit bien être lu au moment du nettoyage, pas au montage.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       requestIdRef.current++
     }
   }, [parcoursId])

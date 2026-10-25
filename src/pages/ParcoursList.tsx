@@ -8,11 +8,11 @@ import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal'
 import { AdminCodeModal } from '../components/AdminCodeModal'
 import { parseGPX } from '../services/gpxParser'
 import { verifyAdminCode } from '../services/adminCode'
-import { addParcours, deleteParcours, getWeekTallies } from '../services/supabaseService'
+import { getWeekTallies } from '../services/supabaseService'
 import { useParcours } from '../hooks/useParcours'
 import { useAuth } from '../hooks/useAuth'
 import { useTargetWednesday } from '../hooks/useTargetWednesday'
-import type { ParcoursSummary } from '../types/supabase'
+import type { Parcours, ParcoursSummary } from '../types/supabase'
 
 export function ParcoursList() {
   const navigate = useNavigate()
@@ -22,7 +22,7 @@ export function ParcoursList() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [newParcoursName, setNewParcoursName] = useState('')
   const [uploading, setUploading] = useState(false)
-  const [parsedParcours, setParsedParcours] = useState<any>(null)
+  const [parsedParcours, setParsedParcours] = useState<Parcours | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   // Parcours en attente de confirmation de suppression
   const [pendingDelete, setPendingDelete] = useState<ParcoursSummary | null>(null)
@@ -158,10 +158,6 @@ export function ParcoursList() {
     setUploading(false)
     const fileInput = document.getElementById('gpx-upload-parcours') as HTMLInputElement
     if (fileInput) fileInput.value = ''
-  }
-
-  const handleCreateParcoursClick = () => {
-    document.getElementById('gpx-upload-parcours')?.click()
   }
 
   return (

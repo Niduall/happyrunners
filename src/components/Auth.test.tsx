@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { LoginForm } from './Auth'
-import { AuthProvider, useAuth } from '../hooks/useAuth'
+import { AuthProvider } from '../hooks/useAuth'
 import {
   findProfileByName,
   createUserProfile as createProfileInDb,
@@ -470,7 +470,7 @@ describe('LoginForm — le PIN est demandé à chaque reconnexion par nom', () =
     first.unmount()
 
     // Session 2 : nouvelle saisie du même nom → PIN demandé à nouveau
-    const second = renderForm()
+    renderForm()
     await waitFor(() => expect(screen.getByLabelText('Prénom')).toBeInTheDocument())
     await fillIdentity(user)
     await user.click(screen.getByRole('button', { name: /Continuer/ }))
@@ -489,7 +489,7 @@ describe('LoginForm — le PIN est demandé à chaque reconnexion par nom', () =
     await user.click(screen.getByRole('button', { name: /Continuer/ }))
     first.unmount()
 
-    const second = renderForm()
+    renderForm()
     await waitFor(() => expect(screen.getByLabelText('Prénom')).toBeInTheDocument())
     await fillIdentity(user)
     await user.click(screen.getByRole('button', { name: /Continuer/ }))

@@ -64,7 +64,7 @@ export function ParcoursCard({
     }
     setUploading(false)
     e.target.value = ''
-  }, [parcours.id, onEdit])
+  }, [parcours.id, parcours.name, onEdit])
 
   const distance = (parcours.distance_km || 0).toFixed(1)
   const elevation = parcours.elevation_gain_m ? `${Math.round(parcours.elevation_gain_m)}m D+` : ''

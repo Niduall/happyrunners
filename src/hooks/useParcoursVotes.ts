@@ -35,8 +35,6 @@ export interface WeekVoteState {
   isTie: boolean
 }
 
-const cellKey = (parcoursId: string, userNumber: number) => `${parcoursId}|${userNumber}`
-
 /** Mêmes compteurs — évite de remplacer l'objet au polling. */
 function sameTallies(
   a: Record<string, ParcoursTally>,
@@ -108,6 +106,13 @@ export function useParcoursVotes(
   // au passage de l'un à l'autre.
   const goingKey = goingUserNumbers === undefined ? 'unknown' : goingUserNumbers.join(',')
 
+  // Liste stable par contenu : les appelants peuvent passer un littéral
+  // (`[ALICE]`) sans recréer les callbacks à chaque rendu.
+  const goingList = useMemo(() => {
+    if (goingKey === 'unknown') return undefined
+    return goingKey ? goingKey.split(',').map(Number) : []
+  }, [goingKey])
+
   const parcoursKey = parcoursIds.join(',')
   const ids = useMemo(() => (parcoursKey ? parcoursKey.split(',') : []), [parcoursKey])
 
@@ -140,7 +145,7 @@ export function useParcoursVotes(
         // refetcher les présences à chaque cycle. Sans elle, on les charge
         // (premier passage, polling de repli, ou récupération après panne).
         const needAttendances =
-          goingUserNumbers === undefined &&
+          goingList === undefined &&
           (opts?.forceAttendances === true || goingRef.current === null)
 
         const [votesResult, attendancesResult] = await Promise.allSettled([
@@ -166,8 +171,8 @@ export function useParcoursVotes(
         //    enregistrée en base serait ré-adding par la requête, et le
         //    vote continuerait d'être compté jusqu'au polling suivant.
         let going: Set<number> | null
-        if (goingUserNumbers !== undefined) {
-          going = new Set(goingUserNumbers)
+        if (goingList !== undefined) {
+          going = new Set(goingList)
           goingRef.current = going
         } else if (needAttendances) {
           if (attendancesResult.status === 'fulfilled' && attendancesResult.value) {
@@ -196,7 +201,7 @@ export function useParcoursVotes(
         if (!isStale()) setLoading(false)
       }
     },
-    [user?.id, weekKey, goingKey, applyVotes]
+    [user?.id, weekKey, goingList, applyVotes]
   )
 
   const loadAll = useCallback(
@@ -257,7 +262,7 @@ export function useParcoursVotes(
       // mais l'interface n'est pas une garantie : cette garde empêche
       // d'écrire un vote depuis un état obsolète (autre onglet, cache,
       // appel direct à toggleChoice).
-      if (goingUserNumbers !== undefined && !goingUserNumbers.includes(user.id)) {
+      if (goingList !== undefined && !goingList.includes(user.id)) {
         console.error('[VOTES] Vote ignoré : présence non confirmée', { parcoursId })
         return
       }
@@ -300,7 +305,7 @@ export function useParcoursVotes(
           // trigger DB le garantit). Sans liste de présents fournie, on
           // l'ajoute au repli pour que le rechargement des votes ne
           // l'écarte pas.
-          if (goingUserNumbers === undefined && goingRef.current) {
+          if (goingList === undefined && goingRef.current) {
             goingRef.current = new Set(goingRef.current).add(user.id)
           }
         }
@@ -321,7 +326,7 @@ export function useParcoursVotes(
         setSavingParcoursId(null)
       }
     },
-    [user, myChoice, weekKey, loadVotesOnly, goingUserNumbers]
+    [user, myChoice, weekKey, loadVotesOnly, goingList]
   )
 
   const choiceOf = useCallback(

@@ -62,7 +62,7 @@ describe('useParcours — polling silencieux', () => {
     // On rend chaque fetch lent pour exposer un éventuel état loading=true
     // intermédiaire. En production, le réseau prend ~200 ms → le spinner
     // serait visible 200 ms toutes les 30 s.
-    let resolvers: (() => void)[] = []
+    const resolvers: (() => void)[] = []
     mockGetParcours.mockImplementation(
       () =>
         new Promise((resolve) => {

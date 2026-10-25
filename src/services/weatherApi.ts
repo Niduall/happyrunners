@@ -89,7 +89,8 @@ export async function fetchWeather(
   } catch (error) {
     console.error('Weather API error:', error)
     throw new Error(
-      `Erreur météo: ${error instanceof Error ? error.message : 'service indisponible'}`
+      `Erreur météo: ${error instanceof Error ? error.message : 'service indisponible'}`,
+      { cause: error }
     )
   }
 }

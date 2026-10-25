@@ -221,6 +221,7 @@ non-régression dans `weatherApi.test.ts` (vérifié en échec sans le fix).
 ## Tests
 
 ```bash
+npm run lint      # ESLint (TypeScript + règles React hooks)
 npm test          # run unique
 npm test:watch    # watch mode
 ```

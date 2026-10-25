@@ -119,6 +119,8 @@ export function Home() {
   const hasForecast = runForecast !== null
 
   /** Combien de jours avant le run (pour l'affichage "dans N jours") */
+  // Recalculé à chaque bascule de semaine : daysUntilRun lit l'horloge.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const daysToRun = useMemo(() => daysUntilRun(), [weekKey])
 
   const weatherTitle = useMemo(() => {

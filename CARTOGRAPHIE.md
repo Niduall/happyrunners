@@ -559,16 +559,21 @@ tâche 12).
 
 ### H. Outillage manquant
 
-- **Aucun linter, aucun formateur, aucune CI** (ni `.eslintrc`, ni `prettier`,
-  ni `.github/`, ni `.editorconfig`).
-- `tsconfig.json` : **`strict` absent**, `noUnusedLocals: false`,
-  `noUnusedParameters: false`. Conséquence : « 0 erreur TypeScript » ne garantit
-  pas grand-chose, et c'est ce qui laisse passer les imports morts ci-dessus.
+- ~~**Aucun linter**~~ **Linter ajouté (tâche 12)** : ESLint 10 +
+  `typescript-eslint` + `eslint-plugin-react-hooks`, avec `npm run lint` et
+  `npm run lint:fix`. Pas de formateur ni de CI (hors périmètre de la tâche 12) ;
+  il reste 5 avertissements `any` dans le parser GPX et la réponse Open-Meteo
+  (tâche 13).
+- ~~`tsconfig.json` : **`strict` absent**, `noUnusedLocals: false`,
+  `noUnusedParameters: false`~~ **Corrigé (tâche 12)** : `strict`,
+  `noUnusedLocals` et `noUnusedParameters` sont activés. Les 15 symboles morts
+  détectés ont été retirés.
 - `npm test` termine avec une erreur non gérée du harnais :
   `TypeError: 'removeEventListener' called on an object that is not a valid
   instance of EventTarget` (teardown jsdom ↔ Vitest). Sans effet sur les
   résultats, mais bruit permanent qui finira par masquer un vrai échec.
-- `tsconfig.json` a `include: ["src"]` : `vite.config.ts` n'est pas type-checké.
+- ~~`tsconfig.json` a `include: ["src"]`~~ **Corrigé (tâche 12)** :
+  `vite.config.ts` est maintenant type-checké.
 - Le mock Supabase global (`src/test/setup.ts:7-18`) ne définit ni `maybeSingle`,
   ni `in`, ni `ilike`, alors que le vrai service les utilise
   (`supabaseService.ts:35,80,132,170,269`) : ce mock ne peut pas exercer le
@@ -681,7 +686,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 10 | Tracé GPX à la demande | D1 : 131 kB gzip de coordonnées à chaque cycle, pour rien | fait |
 | 10b | Aperçu du tracé dans le vote | Suite de D1 : bouton « Voir le tracé » dans `ParcoursVoteCard`, une carte à la fois | fait |
 | 11 | Requêtes redondantes | D2, D3, D4 : `getWeekAttendances` en double, rechargements trop larges, références instables | fait |
-| 12 | `strict` + linter | H : ce qui laisse passer imports morts et props fantômes | à faire |
+| 12 | `strict` + linter | H : `strict`, `noUnused*`, ESLint ; formateur/CI non retenus, 5 warnings `any` renvoyés en tâche 13 | fait |
 | 13 | Code mort restant, logs, tests GPX | §5.E, D5 : `storage.ts`, props mortes, 52 `console.*`, parser non testé | à faire |
 | 14 | Bouton « Modifier » / ré-import GPX | `onEdit` jamais fourni : deux actions sans effet | à faire |
 | 15 | Manifeste PWA | nom, langue, couleur, icônes de 309 octets | à faire |

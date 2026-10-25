@@ -1,5 +1,5 @@
 import { CheckCircle2, Clock, XCircle } from 'lucide-react'
-import type { AttendanceStatus, Attendee } from '../services/supabaseService'
+import type { AttendanceStatus } from '../services/supabaseService'
 import { Card, CardContent } from './ui/Card'
 
 export interface PresenceRow {

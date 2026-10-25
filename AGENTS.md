@@ -214,6 +214,10 @@ qui n'existait plus depuis la migration `user_number`.
 - **Un nom = un compte** : index unique `user_profiles_name_key` sur
   `lower(first_name), lower(last_name)`. Une écriture en doublon renvoie
   Postgres `23505`, que `UserMenu` traduit en « Ce nom est déjà utilisé ».
+- **Le PIN est optionnel et la casse d'un nom est un choix personnel.** Ne jamais
+  forcer un PIN, ni normaliser un nom écrit en majuscules : aucune des deux
+  choses n'a d'effet fonctionnel (connexion en `ilike`, tri
+  `localeCompare(…, 'fr')`, index sur `lower(...)`).
 - La séquence `user_number` est irremplaçable. La perdre casse la création.
 - `profiles` et `responses` sont des tables **mortes** (ancien identifiant
   dérivé du nom). `schema.sql` les supprime ; ne pas les recréer.

@@ -420,9 +420,9 @@ seraient mises à `NULL`. Le fichier n'était référencé nulle part : **suppri
 
 | Constat | Détail |
 |---|---|
-| 11 membres, 10 avec PIN | **`#14 Julie Moudin` n'a pas de PIN** → n'importe qui peut se faire passer pour elle |
+| 11 membres, 10 avec PIN | `#14 Julie Moudin` n'a pas de PIN — **choix assumé (tâche 18)** : le PIN est optionnel par conception, chacun décide d'en mettre un. Ne pas en forcer un. |
 | 1 vote orphelin | `#16 Cinthia Marquant`, semaine `2026-10-14`, aucune présence |
-| Casse inhabituelle | `#13 HOUTMANN`, `#15 ZILLIOX` (les autres sont en `Title Case`) |
+| Casse inhabituelle | `#13 HOUTMANN`, `#15 ZILLIOX` — **casse volontaire (tâche 18)** : aucun effet fonctionnel (connexion en `ilike`, tri `localeCompare(…, 'fr')`, index sur `lower(...)`). Ne pas normaliser. |
 | Trou dans la séquence | `user_number` : 3 puis 8 → 17 (4, 5, 6, 7 absents) |
 | 5 parcours créés le même jour | tous le `2026-10-06` |
 | Tracés | les 5 ont leurs points (1 932 à 3 174 par parcours) |
@@ -704,15 +704,16 @@ Légende : `à faire` · `en cours` · `fait`
 | 15 | Manifeste PWA | nom, langue, couleur, icônes de 309 octets | fait |
 | 16 | Accessibilité | §5.G : labels, `role="dialog"`, Échap, `role="alert"`, `scope` | fait |
 | 17 | Base : `updated_at`, index, unicité | A9, A10, D6 | fait |
-| 18 | Données : PIN de `#14`, casse des noms | §5.B | à faire |
+| 18 | Données : PIN de `#14`, casse des noms | §5.B : choix assumés, aucune donnée modifiée | fait |
 
 **Pourquoi cet ordre.** Les tâches 1 à 3 ne touchent aucune donnée et se
 vérifient en une commande : autant commencer par elles. La tâche 4 vient
-**avant toute écriture en base** (6, 17, 18) parce que c'est le seul filet de
+**avant toute écriture en base** (6, 17) parce que c'est le seul filet de
 sécurité, et qu'il est troué. Les tâches 5 à 9 corrigent des comportements
 faux. 10 et 11 allègent le réseau. 12 arrive après, pour ne pas noyer les
-corrections métier sous des centaines d'erreurs de typage. 13 à 18 sont du
-nettoyage et de la finition.
+corrections métier sous des centaines d'erreurs de typage. 13 à 17 sont du
+nettoyage et de la finition ; 18 s'est conclue sans écriture, par deux
+décisions documentées (§5.B).
 
 **Hors périmètre, volontairement :**
 

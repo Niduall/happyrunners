@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 // Import `?raw` : Vite lit le fichier en texte. Évite d'ajouter @types/node
 // pour un seul test (le typage vient déjà de vite/client).
 import schema from '../../schema.sql?raw'
+import migration from '../../migrations/2026-10-25_tache17.sql?raw'
 
 /**
  * schema.sql est la source de vérité de la structure de la base.
@@ -119,5 +120,68 @@ describe('schema.sql — structure', () => {
     // Si un jour quelqu'un durcit les politiques, ce commentaire doit
     // disparaître dans le même commit — c'est un marqueur volontaire.
     expect(schema).toMatch(/aucune authentification serveur/i)
+  })
+
+  it('met à jour updated_at automatiquement sur les 3 tables', () => {
+    // Sans trigger, re-voter ou changer de présence laissait updated_at
+    // figée à la date de création (les upserts ne l'écrivent pas).
+    expect(schema).toMatch(/CREATE OR REPLACE FUNCTION touch_updated_at\(\)/)
+    expect(schema).toMatch(/NEW\.updated_at = now\(\)/)
+
+    for (const table of ['parcours', 'attendances', 'participations']) {
+      expect(schema).toMatch(new RegExp(`DROP TRIGGER IF EXISTS trg_${table}_touch ON ${table}`))
+      expect(schema).toMatch(
+        new RegExp(
+          `CREATE TRIGGER trg_${table}_touch\\s+BEFORE UPDATE ON ${table}\\s+FOR EACH ROW EXECUTE FUNCTION touch_updated_at\\(\\)`
+        )
+      )
+    }
+
+    // Le bloc était commenté avant la tâche 17 : plus aucune ligne ne doit
+    // commencer par « -- CREATE TRIGGER ».
+    expect(schema).not.toMatch(/^-- CREATE TRIGGER/m)
+  })
+
+  it('impose un nom unique, insensible à la casse', () => {
+    // `findProfileByName` cherche en ILIKE : sans cette contrainte,
+    // « paulin claudin » et « Paulin Claudin » créent deux comptes.
+    expect(schema).toMatch(
+      /CREATE UNIQUE INDEX IF NOT EXISTS user_profiles_name_key[\s\S]*?lower\(first_name\), lower\(last_name\)/
+    )
+  })
+
+  it("ne recrée pas l'index redondant sur attendances.week_key", () => {
+    // L'index unique (week_key, user_number) couvre déjà les lectures par
+    // semaine : un second index sur la seule première colonne ne sert à rien.
+    expect(schema).not.toMatch(/CREATE INDEX IF NOT EXISTS idx_attendances_week/)
+  })
+})
+
+describe('migration 2026-10-25 (tâche 17)', () => {
+  it('reprend les mêmes objets que schema.sql', () => {
+    for (const table of ['parcours', 'attendances', 'participations']) {
+      expect(migration).toMatch(new RegExp(`CREATE TRIGGER trg_${table}_touch`))
+    }
+    expect(migration).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS user_profiles_name_key/)
+    expect(migration).toMatch(/lower\(first_name\), lower\(last_name\)/)
+    expect(migration).toMatch(/DROP INDEX IF EXISTS idx_attendances_week/)
+  })
+
+  it('est rejouable', () => {
+    expect(migration).toMatch(/CREATE OR REPLACE FUNCTION touch_updated_at/)
+    expect(migration.match(/DROP TRIGGER IF EXISTS trg_\w+_touch/g)).toHaveLength(3)
+    expect(migration).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS/)
+  })
+
+  it('refuse de créer l\'index si des noms sont déjà en doublon', () => {
+    // Sinon l'échec serait « could not create unique index », sans dire
+    // quels profils fusionner avant de relancer.
+    expect(migration).toMatch(/HAVING count\(\*\) > 1/)
+    expect(migration).toMatch(/RAISE EXCEPTION/)
+  })
+
+  it('applique tout ou rien', () => {
+    expect(migration).toMatch(/^BEGIN;/m)
+    expect(migration.trimEnd().endsWith('COMMIT;')).toBe(true)
   })
 })

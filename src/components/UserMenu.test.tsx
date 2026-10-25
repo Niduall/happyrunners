@@ -89,4 +89,21 @@ describe('UserMenu — renommage accessible', () => {
     )
     expect(mockUpdate).not.toHaveBeenCalled()
   })
+
+  it('explique qu’un nom est déjà pris au lieu d’une erreur générique', async () => {
+    // L'index unique `user_profiles_name_key` renvoie 23505 : l'utilisateur
+    // doit comprendre que le nom est pris, pas que l'app est cassée.
+    mockUpdate.mockRejectedValue({
+      code: '23505',
+      message: 'duplicate key value violates unique constraint "user_profiles_name_key"',
+    })
+    const user = await renderMenu()
+    const dialog = await openRename(user)
+
+    await user.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Ce nom est déjà utilisé'
+    )
+  })
 })

@@ -41,6 +41,13 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 CREATE UNIQUE INDEX IF NOT EXISTS user_profiles_user_number_key
   ON user_profiles USING btree (user_number);
 
+-- Un seul profil par nom, insensible à la casse : `findProfileByName` cherche
+-- « paulin claudin » comme « Paulin Claudin ». Sans cette contrainte, deux
+-- graphies créent deux comptes et la personne ne retrouve plus ses votes.
+-- (`lower()` seulement : les espaces sont déjà normalisés côté client.)
+CREATE UNIQUE INDEX IF NOT EXISTS user_profiles_name_key
+  ON user_profiles USING btree (lower(first_name), lower(last_name));
+
 -- ---------------------------------------------------------------------------
 -- Table : parcours
 -- ---------------------------------------------------------------------------
@@ -82,8 +89,8 @@ CREATE TABLE IF NOT EXISTS attendances (
 CREATE UNIQUE INDEX IF NOT EXISTS attendances_week_key_user_number_key
   ON attendances USING btree (week_key, user_number);
 
-CREATE INDEX IF NOT EXISTS idx_attendances_week
-  ON attendances USING btree (week_key);
+-- Pas d'index séparé sur `week_key` : l'index unique
+-- `attendances_week_key_user_number_key` commence déjà par cette colonne.
 
 CREATE INDEX IF NOT EXISTS idx_attendances_user
   ON attendances USING btree (user_number);
@@ -123,8 +130,8 @@ CREATE INDEX IF NOT EXISTS idx_participations_parcours
 -- La règle était purement côté client : un vote pouvait exister sans présence
 -- (vote orphelin #16 / 2026-10-14). Elle tient maintenant en base.
 --
--- ⚠️ Contrairement aux triggers touch_updated_at ci-dessous (commentés),
---    ces triggers sont actifs en production.
+-- ⚠️ Comme les triggers touch_updated_at ci-dessous, ces triggers sont
+--    actifs en production.
 --
 -- `FOR SHARE` verrouille la présence le temps du vote. Sans lui, deux
 -- transactions concurrentes pourraient laisser un vote rattaché à une présence
@@ -201,24 +208,41 @@ CREATE TRIGGER attendances_remove_vote_on_delete
   EXECUTE FUNCTION remove_vote_when_not_going();
 
 -- ---------------------------------------------------------------------------
--- Optionnel : mise à jour automatique de updated_at
+-- Mise à jour automatique de updated_at
 -- ---------------------------------------------------------------------------
--- ⚠️ La PROD n'a PAS ces triggers. Ils sont proposés ici parce que
---    `castWeekVote()` et `setAttendance()` font un upsert SANS Toucher
---    updated_at : re-voter ne met donc pas la colonne à jour.
---    Pour les aligner sur la prod, supprime ce bloc avant d'exécuter.
+-- `castWeekVote()` et `setAttendance()` font un upsert sans toucher
+-- `updated_at` : re-voter ou changer de présence laissait la colonne figée à
+-- la création. Le trigger la remet à `now()` à chaque UPDATE, en base, donc
+-- quel que soit le client.
 --
--- CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS trigger AS $$
--- BEGIN
---   NEW.updated_at = now();
---   RETURN NEW;
--- END;
--- $$ LANGUAGE plpgsql;
---
--- CREATE TRIGGER trg_participations_touch BEFORE UPDATE ON participations
---   FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
--- CREATE TRIGGER trg_attendances_touch BEFORE UPDATE ON attendances
---   FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+-- `updateParcours()` continue d'écrire `updated_at` explicitement : le trigger
+-- l'écrase de toute façon avec la même valeur, mais l'app reste correcte si
+-- elle tourne contre une base où la migration n'est pas encore passée.
+CREATE OR REPLACE FUNCTION touch_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_parcours_touch ON parcours;
+CREATE TRIGGER trg_parcours_touch
+  BEFORE UPDATE ON parcours
+  FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+DROP TRIGGER IF EXISTS trg_attendances_touch ON attendances;
+CREATE TRIGGER trg_attendances_touch
+  BEFORE UPDATE ON attendances
+  FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+DROP TRIGGER IF EXISTS trg_participations_touch ON participations;
+CREATE TRIGGER trg_participations_touch
+  BEFORE UPDATE ON participations
+  FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 
 -- =============================================================================
 -- Row Level Security

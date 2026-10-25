@@ -395,19 +395,20 @@ point) était comptée comme 0 et inventait une montée. Le D+ ne cumule plus
 désormais qu'entre deux altitudes connues ; test de non-régression dans
 `gpxParser.test.ts` (« ne compte pas une altitude manquante comme 0 »).
 
-**A9. `updated_at` n'est jamais écrit.** Le trigger est commenté
-(`schema.sql:127-137`) et le code ne compense pas : ni `addParcours`
-(`supabaseService.ts:50-58`), ni les upserts de présence et de vote ne
-touchent la colonne. Seul `updateUserProfile` le fait (`:106`). Les colonnes
-`updated_at` de `parcours`, `attendances` et `participations` mentent donc :
-elles valent l'heure d'insertion.
+**A9. `updated_at` n'est jamais écrit. — corrigé (tâche 17).** Le trigger
+`touch_updated_at` est actif sur `parcours`, `attendances` et `participations`
+(`schema.sql`) : tout `UPDATE` remet la colonne à `now()`, y compris les upserts
+de présence et de vote qui l'ignoraient. `updateParcours` continue de l'écrire
+explicitement — le trigger l'écrase avec la même valeur, et l'application reste
+correcte tant que la migration n'est pas passée sur une base.
 
-**A10. Pas d'unicité sur le nom.** Aucune contrainte ni index sur
-`(first_name, last_name)` (`schema.sql:27-41`), alors que `findProfileByName`
-filtre en `ilike` sur ces deux colonnes (`supabaseService.ts:127-132`) et
-termine par `.maybeSingle()`. Deux « Julie Moudin » feraient échouer la
-reconnexion (et non renvoyer la première). Aujourd'hui la base n'a aucun
-doublon — c'est un piège, pas un incident.
+**A10. Pas d'unicité sur le nom. — corrigé (tâche 17).** L'index unique
+`user_profiles_name_key` porte sur `lower(first_name), lower(last_name)`, ce qui
+correspond au `ilike` de `findProfileByName`. Un renommage vers un nom déjà pris
+affiche « Ce nom est déjà utilisé par un autre profil » au lieu d'une erreur
+générique. La migration (`migrations/2026-10-25_tache17.sql`) refuse de
+s'appliquer si des doublons existent déjà : elle ne fusionne aucun compte
+elle-même.
 
 **A11 (corrigé, tâche 2). `fix_uuid.sql` détruisait `created_by`.** `created_by` est un `integer`
 (`schema.sql:58`), mais le script fait
@@ -502,9 +503,10 @@ sont typés. `gpxparser` a été remplacé par le `DOMParser` natif : le bundle 
 passe de 761,5 à 752,0 kB (gzip 219,5 → 217,0 kB) et les vulnérabilités npm de
 17 à 8.
 
-**D6. Index redondant.** `idx_attendances_week` (`schema.sql:84-85`) duplique le
-préfixe de l'index unique `(week_key, user_number)` (`:81-82`). En revanche, il
-**manque** un index sur les colonnes de `findProfileByName` (voir A10).
+**D6. Index redondant. — corrigé (tâche 17).** `idx_attendances_week` a été
+supprimé : le préfixe de l'index unique `(week_key, user_number)` couvre les
+mêmes lectures. L'index qui manquait sur les noms est désormais
+`user_profiles_name_key` (voir A10).
 
 **D7. Aucun découpage du bundle.** Pas de `build.rollupOptions.manualChunks`
 (`vite.config.ts`) : Leaflet et le parseur partent dans le même fichier que le
@@ -701,7 +703,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 14 | Bouton « Modifier » / ré-import GPX | `onEdit` jamais fourni : deux actions sans effet | fait |
 | 15 | Manifeste PWA | nom, langue, couleur, icônes de 309 octets | fait |
 | 16 | Accessibilité | §5.G : labels, `role="dialog"`, Échap, `role="alert"`, `scope` | fait |
-| 17 | Base : `updated_at`, index, unicité | A9, A10, D6 | à faire |
+| 17 | Base : `updated_at`, index, unicité | A9, A10, D6 | fait |
 | 18 | Données : PIN de `#14`, casse des noms | §5.B | à faire |
 
 **Pourquoi cet ordre.** Les tâches 1 à 3 ne touchent aucune donnée et se

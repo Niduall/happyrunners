@@ -5,6 +5,17 @@ import { Input } from './ui/Input'
 import { SecurityModal } from './SecurityModal'
 import { useAuth } from '../hooks/useAuth'
 
+/** Postgres 23505 sur l'index des noms → « ce nom est déjà pris », pas « erreur ». */
+function isDuplicateNameError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false
+  const { code, message } = err as { code?: unknown; message?: unknown }
+  return (
+    code === '23505' &&
+    typeof message === 'string' &&
+    message.includes('user_profiles_name_key')
+  )
+}
+
 export function UserMenu() {
   const { user, logout, updateName, isAuthenticated } = useAuth()
   const [open, setOpen] = useState(false)
@@ -50,8 +61,12 @@ export function UserMenu() {
       } else {
         setNameError('Modification impossible')
       }
-    } catch {
-      setNameError('Une erreur est survenue')
+    } catch (err) {
+      setNameError(
+        isDuplicateNameError(err)
+          ? 'Ce nom est déjà utilisé par un autre profil'
+          : 'Une erreur est survenue'
+      )
     } finally {
       setSavingName(false)
     }

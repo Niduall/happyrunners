@@ -207,9 +207,30 @@ qui n'existait plus depuis la migration `user_number`.
 - **Un vote exige une présence `going`**. Les triggers
   `participations_require_going` et `attendances_remove_vote*` le garantissent
   en base ; le client ne suffit pas (vote orphelin `#16`).
+- **`updated_at` est tenu par la base** : les triggers `trg_parcours_touch`,
+  `trg_attendances_touch` et `trg_participations_touch` appellent
+  `touch_updated_at()` à chaque `UPDATE`. Ne pas compter sur le client pour
+  l'écrire ; `updateParcours` le fait encore par sécurité, sans effet de bord.
+- **Un nom = un compte** : index unique `user_profiles_name_key` sur
+  `lower(first_name), lower(last_name)`. Une écriture en doublon renvoie
+  Postgres `23505`, que `UserMenu` traduit en « Ce nom est déjà utilisé ».
 - La séquence `user_number` est irremplaçable. La perdre casse la création.
 - `profiles` et `responses` sont des tables **mortes** (ancien identifiant
   dérivé du nom). `schema.sql` les supprime ; ne pas les recréer.
+
+### Migrations
+`schema.sql` décrit l'**état cible** d'une base vide. `migrations/` contient les
+scripts datés qui font évoluer une base **existante** :
+
+```bash
+# 1. base de test d'abord, 2. prod après validation explicite
+# (SQL Editor du dashboard Supabase, ou psql avec la chaîne de connexion)
+```
+
+Règles : un fichier par tâche, **rejouable** (`IF NOT EXISTS`, `OR REPLACE`,
+`DROP ... IF EXISTS`), **jamais de perte de données** (pas de `DELETE` /
+`TRUNCATE` / `DROP TABLE`), et il doit reprendre exactement ce que `schema.sql`
+décrit. `src/services/schema.test.ts` vérifie que les deux ne divergent pas.
 
 ### Sauvegarde
 ```bash

@@ -10,8 +10,10 @@ import { getUserProfile } from '../services/supabaseService'
 vi.mock('../services/weatherApi', () => ({
   fetchWeather: vi.fn(),
   getRunForecast: vi.fn(() => null),
+  getRunWindow: vi.fn(() => []),
   daysUntilRun: vi.fn(() => 2),
   formatWindDirection: vi.fn(() => 'O'),
+  WEATHER_TIMEZONE: 'Europe/Paris',
 }))
 
 vi.mock('../services/supabaseService', () => ({

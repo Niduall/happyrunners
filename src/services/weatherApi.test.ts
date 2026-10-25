@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   getRunForecast,
   getRunTimestamp,
+  getRunWindow,
   daysUntilRun,
   transformOpenMeteoResponse,
   isoToEpoch,
@@ -284,6 +285,41 @@ describe('getRunForecast — avec 16 jours de couverture', () => {
 
   it('retourne null si aucune donnée horaire', () => {
     expect(getRunForecast(forecast([]), at(2026, 10, 6), Math.floor(at(2026, 10, 6).getTime() / 1000))).toBeNull()
+  })
+})
+
+describe('getRunWindow — heures autour du run', () => {
+  // Mardi 6 octobre : le run cible est le mercredi 7 à 12h30.
+  const from = at(2026, 10, 6)
+  const target = getRunTimestamp(from)
+  // Décalages en minutes : 10h, 11h, 12h, 13h, 14h, 15h.
+  const offsets = [-150, -90, -30, 30, 90, 150]
+  const data = forecast(offsets.map((m) => hour(target + m * 60)))
+
+  it('retient les quatre heures de 11h à 14h', () => {
+    expect(getRunWindow(data, from).map((h) => (h.dt - target) / 60)).toEqual([-90, -30, 30, 90])
+  })
+
+  it('écarte 10h et 15h, hors de la tolérance de 90 min', () => {
+    const window = getRunWindow(data, from)
+    expect(window.some((h) => h.dt === target - 150 * 60)).toBe(false)
+    expect(window.some((h) => h.dt === target + 150 * 60)).toBe(false)
+  })
+
+  it('trie les heures de la plus ancienne à la plus récente', () => {
+    const shuffled = forecast([...data.hourly].reverse())
+    expect(getRunWindow(shuffled, from).map((h) => h.dt)).toEqual(
+      getRunWindow(data, from).map((h) => h.dt)
+    )
+  })
+
+  it('retourne une liste vide sans données horaires', () => {
+    expect(getRunWindow(forecast([]), from)).toEqual([])
+  })
+
+  it('retourne une liste vide quand le run est hors couverture', () => {
+    const far = forecast([hour(target + 20 * 24 * 3600)])
+    expect(getRunWindow(far, from)).toEqual([])
   })
 })
 

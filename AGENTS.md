@@ -143,6 +143,10 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - `precipitation_probability` est en **pourcent** → normaliser en 0..1
 - La probabilité de pluie est **toujours affichée**, même à `0 %` : « pas de
   pluie prévue » est une information. Ne pas remasquer le bloc à zéro.
+- Un bandeau **« Autour de 12h30 »** affiche les heures 11h → 14h
+  (`getRunWindow`), avec la même tolérance de ±90 min que la sélection du run.
+  Ce sont les **heures murales réelles** (`11h`, `12h`…) : ne pas étiqueter
+  « 12h30 » une donnée de 12h. Le bandeau disparaît sans prévision du run.
 - Tolérance de sélection : ±90 min autour de 12h30
 - `isDay` forcé à `true` pour la prévision du run (toujours à 12h30)
 - Icônes via `weatherCode.ts` (mapping WMO → emoji), pas d'images externes

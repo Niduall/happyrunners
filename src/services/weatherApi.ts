@@ -319,6 +319,24 @@ export function getRunForecast(
   }
 }
 
+/**
+ * Heures de la fenêtre du run (11h → 14h autour de 12h30), triées.
+ *
+ * Sert au bandeau « Autour de 12h30 » : la prévision retenue pour le run n'est
+ * qu'un point, alors que le temps change vite en une heure. Aucune requête
+ * supplémentaire, `hourly` contient déjà 16 jours.
+ *
+ * Retourne `[]` si le jour du run sort de la couverture de l'API.
+ */
+export function getRunWindow(weather: WeatherForecast, from: Date = new Date()): WeatherData[] {
+  const target = getRunTimestamp(from)
+  const tolerance = RUN_WINDOW_MINUTES * 60
+
+  return (weather.hourly ?? [])
+    .filter((h) => Math.abs(h.dt - target) <= tolerance)
+    .sort((a, b) => a.dt - b.dt)
+}
+
 function startOfDay(epochSeconds: number): number {
   // Jour civil à Paris : `setHours(0, 0, 0, 0)` dépendrait du navigateur.
   const { year, month, day } = parisWallClock(new Date(epochSeconds * 1000))

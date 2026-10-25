@@ -246,7 +246,7 @@ Table de référence pour éviter de corriger une règle à un seul endroit.
 | Code admin | `src/services/adminCode.ts` + `VITE_ADMIN_CODE` | ✅ mais présent **en clair** dans le bundle (§6) |
 | Verrou admin = une page, une personne | `ParcoursList.tsx` (`useState`) | ✅ et verrouillé par 11 tests |
 | PIN 4 chiffres | `src/services/pin.ts` + `user_profiles.pin_hash` | ⚠️ obfuscation, pas un vrai hash |
-| Météo = prochaine sortie uniquement, 12h30 | `weatherApi.ts:73-105` | ✅ |
+| Météo = prochaine sortie, 12h30, avec les heures 11h → 14h | `weatherApi.ts` (`getRunForecast`, `getRunWindow`) | ✅ |
 
 ---
 
@@ -705,6 +705,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 16 | Accessibilité | §5.G : labels, `role="dialog"`, Échap, `role="alert"`, `scope` | fait |
 | 17 | Base : `updated_at`, index, unicité | A9, A10, D6 | fait |
 | 18 | Données : PIN de `#14`, casse des noms | §5.B : choix assumés, aucune donnée modifiée | fait |
+| 19 | Pluie à 0 % et heures autour du run | `WeatherCard` : pluie toujours affichée ; bandeau 11h → 14h (`getRunWindow`) | fait |
 
 **Pourquoi cet ordre.** Les tâches 1 à 3 ne touchent aucune donnée et se
 vérifient en une commande : autant commencer par elles. La tâche 4 vient

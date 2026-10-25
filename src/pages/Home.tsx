@@ -14,7 +14,7 @@ import { useWeather } from '../hooks/useWeather'
 import { useParcours } from '../hooks/useParcours'
 import { useParcoursVotes } from '../hooks/useParcoursVotes'
 import { useAttendance } from '../hooks/useAttendance'
-import { getRunForecast, daysUntilRun } from '../services/weatherApi'
+import { getRunForecast, getRunWindow, daysUntilRun } from '../services/weatherApi'
 import { useTargetWednesday } from '../hooks/useTargetWednesday'
 
 export function Home() {
@@ -115,6 +115,16 @@ export function Home() {
     if (!weather) return null
     return getRunForecast(weather)
   }, [weather])
+
+  /**
+   * Heures 11h → 14h autour du run, pour le bandeau « Autour de 12h30 ».
+   * Vide quand il n'y a pas de prévision du run : on n'affiche pas des heures
+   * sans le point de référence.
+   */
+  const runWindow = useMemo(() => {
+    if (!weather || !runForecast) return []
+    return getRunWindow(weather)
+  }, [weather, runForecast])
 
   const hasForecast = runForecast !== null
 
@@ -264,6 +274,7 @@ export function Home() {
                 <WeatherCard
                   weather={runForecast ?? weather.current}
                   title={weatherTitle}
+                  hours={runWindow}
                 />
               ) : null}
             </div>

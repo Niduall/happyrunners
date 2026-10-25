@@ -4,13 +4,15 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ParcoursList } from './ParcoursList'
 import { AuthProvider } from '../hooks/useAuth'
-import { getParcours, deleteParcours, getWeekTallies } from '../services/supabaseService'
+import { getParcours, deleteParcours, updateParcours, getWeekTallies } from '../services/supabaseService'
+import { parseGPX } from '../services/gpxParser'
 
 vi.mock('../services/supabaseService', () => ({
   getParcours: vi.fn(),
   getParcoursPoints: vi.fn(),
   addParcours: vi.fn(),
   deleteParcours: vi.fn(),
+  updateParcours: vi.fn(),
   getUserProfile: vi.fn().mockResolvedValue(null),
   upsertUserProfile: vi.fn(),
   findProfileByName: vi.fn(),
@@ -29,6 +31,8 @@ vi.mock('../services/gpxParser', () => ({ parseGPX: vi.fn() }))
 
 const mockGetParcours = vi.mocked(getParcours)
 const mockDeleteParcours = vi.mocked(deleteParcours)
+const mockUpdateParcours = vi.mocked(updateParcours)
+const mockParseGPX = vi.mocked(parseGPX)
 const mockGetTallies = vi.mocked(getWeekTallies)
 
 const seed = () => {
@@ -70,6 +74,7 @@ beforeEach(() => {
   vi.stubEnv('VITE_ADMIN_CODE', '')
   seed()
   mockDeleteParcours.mockResolvedValue(undefined)
+  mockUpdateParcours.mockResolvedValue({} as never)
   mockGetTallies.mockResolvedValue([] as never)
   mockGetParcours.mockResolvedValue([
     parcours('p1', 'Bois de Haye'),
@@ -197,6 +202,108 @@ describe('ParcoursList — suppression', () => {
     // Le parcours est toujours dans la liste : rien n'a été supprimé
     expect(screen.getAllByText('Bois de Haye').length).toBeGreaterThan(0)
     expect(screen.getByText('Bosserville')).toBeInTheDocument()
+  })
+})
+
+describe('ParcoursList — modification', () => {
+  it('le crayon ouvre le renommage et enregistre le nouveau nom', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Bois de Haye')
+
+    await user.click(screen.getAllByLabelText('Modifier')[0])
+
+    const dialog = await screen.findByRole('dialog')
+    const input = within(dialog).getByLabelText('Nom du parcours')
+    expect(input).toHaveValue('Bois de Haye')
+
+    // Après l'écriture, la base renvoie le nouveau nom
+    mockGetParcours.mockResolvedValue([
+      parcours('p1', 'Boucle du lac'),
+      parcours('p2', 'Bosserville'),
+    ] as never)
+
+    await user.clear(input)
+    await user.type(input, 'Boucle du lac')
+    await user.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() =>
+      expect(mockUpdateParcours).toHaveBeenCalledWith('p1', { name: 'Boucle du lac' })
+    )
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(await screen.findByText('Boucle du lac')).toBeInTheDocument()
+    // Le nom d'origine a bien disparu, aucun doublon
+    expect(screen.queryByText('Bois de Haye')).not.toBeInTheDocument()
+  })
+
+  it('« Annuler » ne modifie rien', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Bois de Haye')
+
+    await user.click(screen.getAllByLabelText('Modifier')[0])
+    await screen.findByRole('dialog')
+    await user.click(screen.getByRole('button', { name: 'Annuler' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(mockUpdateParcours).not.toHaveBeenCalled()
+  })
+
+  it('garde la modale ouverte et affiche l’erreur si le renommage échoue', async () => {
+    const user = userEvent.setup()
+    mockUpdateParcours.mockRejectedValue(new Error('network'))
+    renderPage()
+    await screen.findByText('Bois de Haye')
+
+    await user.click(screen.getAllByLabelText('Modifier')[0])
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('network')
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('« Remplacer le GPX » met à jour le tracé sans changer le nom', async () => {
+    const user = userEvent.setup()
+    mockParseGPX.mockReturnValue({
+      id: '',
+      name: 'GPX',
+      distance_km: 6.4,
+      elevation_gain_m: 120,
+      points: [{ lat: 48.6, lng: 6.1 }],
+      created_by: null,
+      created_at: '',
+      updated_at: '',
+    })
+    renderPage()
+    await screen.findByText('Bois de Haye')
+
+    const input = document.getElementById('gpx-upload-p1') as HTMLInputElement
+    await user.upload(input, new File(['<gpx />'], 'trace.gpx', { type: 'application/gpx+xml' }))
+
+    await waitFor(() =>
+      expect(mockUpdateParcours).toHaveBeenCalledWith('p1', {
+        distance_km: 6.4,
+        elevation_gain_m: 120,
+        points: [{ lat: 48.6, lng: 6.1 }],
+      })
+    )
+    expect(await screen.findByText('Tracé remplacé.')).toBeInTheDocument()
+    // Le nom n'est pas dans la requête : il reste inchangé
+    expect(screen.getByText('Bois de Haye')).toBeInTheDocument()
+  })
+
+  it('signale un GPX invalide sans écrire en base', async () => {
+    const user = userEvent.setup()
+    mockParseGPX.mockReturnValue(null)
+    renderPage()
+    await screen.findByText('Bois de Haye')
+
+    const input = document.getElementById('gpx-upload-p1') as HTMLInputElement
+    await user.upload(input, new File(['pas un gpx'], 'trace.gpx'))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Fichier GPX invalide')
+    expect(mockUpdateParcours).not.toHaveBeenCalled()
   })
 })
 

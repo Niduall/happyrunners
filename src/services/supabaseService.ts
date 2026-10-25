@@ -58,6 +58,25 @@ export async function addParcours(parcours: ParcoursInsert): Promise<Parcours> {
   return data
 }
 
+/**
+ * Modifie un parcours existant (nom et/ou tracé).
+ * `updated_at` est écrit ici : le trigger SQL est désactivé (voir A9).
+ */
+export async function updateParcours(
+  id: string,
+  updates: Partial<ParcoursInsert>
+): Promise<Parcours> {
+  const { data, error } = await supabase
+    .from('parcours')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
 export async function deleteParcours(id: string): Promise<void> {
   const { error } = await supabase.from('parcours').delete().eq('id', id)
   if (error) throw error

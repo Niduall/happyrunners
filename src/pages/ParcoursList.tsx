@@ -6,6 +6,7 @@ import { Card, CardContent } from '../components/ui/Card'
 import { ParcoursCard } from '../components/ParcoursCard'
 import { ConfirmDeleteModal } from '../components/ConfirmDeleteModal'
 import { AdminCodeModal } from '../components/AdminCodeModal'
+import { ParcoursRenameModal } from '../components/ParcoursRenameModal'
 import { parseGPX } from '../services/gpxParser'
 import { verifyAdminCode } from '../services/adminCode'
 import { getWeekTallies } from '../services/supabaseService'
@@ -16,7 +17,7 @@ import type { Parcours, ParcoursSummary } from '../types/supabase'
 
 export function ParcoursList() {
   const navigate = useNavigate()
-  const { parcoursList, loading, createParcours, removeParcours } = useParcours()
+  const { parcoursList, loading, createParcours, editParcours, removeParcours } = useParcours()
   const { weekKey } = useTargetWednesday()
   const { adminLockEnabled, user } = useAuth()
   const [showAddForm, setShowAddForm] = useState(false)
@@ -26,6 +27,8 @@ export function ParcoursList() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   // Parcours en attente de confirmation de suppression
   const [pendingDelete, setPendingDelete] = useState<ParcoursSummary | null>(null)
+  // Parcours dont on modifie le nom
+  const [pendingRename, setPendingRename] = useState<ParcoursSummary | null>(null)
   // Nombre de votes par parcours, pour annoncer ce qui sera perdu
   const [voteCounts, setVoteCounts] = useState<Record<string, number>>({})
   // Demande du code administrateur
@@ -132,6 +135,19 @@ export function ParcoursList() {
 
   const cancelDelete = useCallback(() => setPendingDelete(null), [])
 
+  // Le crayon ouvre la modale ; l'enregistrement la referme seulement s'il réussit.
+  const handleRename = useCallback(async (name: string) => {
+    if (!pendingRename) return
+    await editParcours(pendingRename.id, { name })
+    setPendingRename(null)
+  }, [pendingRename, editParcours])
+
+  // Remplacement du tracé : le nom et les autres champs sont conservés.
+  const handleReplaceGpx = useCallback(
+    (id: string, gpxContent: string) => editParcours(id, { gpxContent }),
+    [editParcours]
+  )
+
   // Comptes de votes de la semaine, pour la confirmation
   useEffect(() => {
     let cancelled = false
@@ -217,6 +233,8 @@ export function ParcoursList() {
                 parcours={parcours}
                 isNext={index === 0}
                 onDelete={handleDelete}
+                onEdit={canManageParcours ? setPendingRename : undefined}
+                onReplaceGpx={canManageParcours ? handleReplaceGpx : undefined}
                 adminUnlocked={canManageParcours}
                 onRequestAdmin={
                   adminLockEnabled && !adminUnlocked ? () => setAdminModalOpen(true) : undefined
@@ -248,6 +266,15 @@ export function ParcoursList() {
             voteCount={voteCounts[pendingDelete.id] ?? 0}
             onConfirm={() => void confirmDelete()}
             onCancel={cancelDelete}
+          />
+        )}
+
+      {/* Renommage — réservé à l'admin déverrouillé */}
+        {pendingRename && (
+          <ParcoursRenameModal
+            currentName={pendingRename.name}
+            onSave={handleRename}
+            onCancel={() => setPendingRename(null)}
           />
         )}
 

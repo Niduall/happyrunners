@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { getParcours, addParcours, deleteParcours } from '../services/supabaseService'
+import { getParcours, addParcours, updateParcours, deleteParcours } from '../services/supabaseService'
 import type { Parcours, ParcoursSummary, ParcoursInsert } from '../types/supabase'
 import { parseGPX } from '../services/gpxParser'
 import { useAuth } from './useAuth'
@@ -95,6 +95,35 @@ export function useParcours() {
     return addParcours(parcoursData)
   }
 
+  /**
+   * Modifie un parcours : nom, tracé, ou les deux.
+   * Le GPX est parsé ici, une seule fois, pour que le nom et le tracé soient
+   * mis à jour ensemble et que l'erreur de format remonte à l'appelant.
+   */
+  const editParcours = async (
+    id: string,
+    changes: { name?: string; gpxContent?: string }
+  ): Promise<void> => {
+    const updates: Partial<ParcoursInsert> = {}
+
+    if (changes.name !== undefined) updates.name = changes.name
+
+    if (changes.gpxContent !== undefined) {
+      const parsed = parseGPX(changes.gpxContent)
+      if (!parsed) throw new Error('Fichier GPX invalide')
+      updates.distance_km = parsed.distance_km
+      updates.elevation_gain_m = parsed.elevation_gain_m
+      updates.points = parsed.points
+    }
+
+    if (Object.keys(updates).length === 0) return
+
+    await updateParcours(id, updates)
+    // ⚠️ Sans ce rechargement, la liste garde l'ancien nom / l'ancienne
+    // distance jusqu'au polling (30 s).
+    await loadParcours({ silent: true })
+  }
+
   const removeParcours = async (id: string) => {
     await deleteParcours(id)
     // ⚠️ Sans ce rechargement, la ligne supprimée reste affichée jusqu'au
@@ -108,6 +137,7 @@ export function useParcours() {
     loading,
     error,
     createParcours,
+    editParcours,
     removeParcours,
     refresh: loadParcours,
   }

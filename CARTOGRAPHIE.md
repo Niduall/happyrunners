@@ -297,6 +297,10 @@ clic « Je viens » ─▶ useAttendance.setMyStatus
 meurt au démontage **et** au changement d'utilisateur (`AGENTS.md`, 11 tests).
 L'import GPX reste ouvert à tous.
 
+Une fois déverrouillé, le crayon ouvre `ParcoursRenameModal` (nom seul) et le
+bouton « Remplacer le GPX » de chaque carte remplace le tracé sans toucher au
+nom (`editParcours` dans `useParcours`, `updateParcours` dans le service).
+
 ---
 
 ## 5. Dette classée par gravité
@@ -515,7 +519,7 @@ reste de l'application.
 | ~~`getNextParcours`, `updateParcours`, `getMyWeekVote`~~ | `supabaseService.ts` | **retirés (tâche 13)** : aucun import |
 | ~~`addParcours`, `deleteParcours` (import)~~ | `ParcoursList.tsx:11` | **retirés (tâche 13)** |
 | ~~`handleCreateParcoursClick`~~ | `ParcoursList.tsx:163-165` | **retiré (tâche 13)** |
-| prop `onEdit` / `showActions` / `onView` | `ParcoursCard.tsx:14,17,29,49,103` | jamais passées ⇒ **bouton crayon et ré-import GPX sans effet** (tâche 14) |
+| ~~prop `onEdit` / `showActions` / `onView`~~ | `ParcoursCard.tsx` | **corrigé (tâche 14)** : `onEdit` ouvre la modale de renommage, `onReplaceGpx` remplace le tracé ; `showActions`/`onView` (jamais passées) retirées |
 | ~~prop `compact`~~ | `WeatherCard.tsx` | **retirée (tâche 13)** |
 | ~~prop `center`~~ | `MapView.tsx` | **retirée (tâche 13)** |
 | ~~prop `onClick`~~ | `ui/Card.tsx` | **retirée (tâche 13)** |

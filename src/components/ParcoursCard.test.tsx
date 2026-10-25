@@ -128,3 +128,54 @@ describe('ParcoursCard — tracé à la demande', () => {
     expect(await screen.findByText('Aucun tracé disponible')).toBeInTheDocument()
   })
 })
+
+describe('ParcoursCard — modification réservée à l’admin', () => {
+  it('appelle onEdit avec le parcours au clic sur le crayon', async () => {
+    const user = userEvent.setup()
+    const onEdit = vi.fn()
+
+    render(<ParcoursCard parcours={parcours} adminUnlocked onEdit={onEdit} />)
+    await user.click(screen.getByLabelText('Modifier'))
+
+    expect(onEdit).toHaveBeenCalledWith(parcours)
+  })
+
+  it('n’affiche ni crayon ni remplacement du GPX quand c’est verrouillé', () => {
+    render(<ParcoursCard parcours={parcours} onEdit={vi.fn()} />)
+
+    expect(screen.queryByLabelText('Modifier')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Remplacer le GPX/ })).not.toBeInTheDocument()
+  })
+
+  it('transmet le contenu du fichier à onReplaceGpx puis confirme', async () => {
+    const user = userEvent.setup()
+    const onReplaceGpx = vi.fn().mockResolvedValue(undefined)
+
+    const { container } = render(
+      <ParcoursCard parcours={parcours} adminUnlocked onReplaceGpx={onReplaceGpx} />
+    )
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(input, new File(['<gpx>trace</gpx>'], 'trace.gpx'))
+
+    await waitFor(() =>
+      expect(onReplaceGpx).toHaveBeenCalledWith('p1', '<gpx>trace</gpx>')
+    )
+    expect(await screen.findByText('Tracé remplacé.')).toBeInTheDocument()
+  })
+
+  it('affiche l’erreur renvoyée par le remplacement', async () => {
+    const user = userEvent.setup()
+    const onReplaceGpx = vi.fn().mockRejectedValue(new Error('Fichier GPX invalide'))
+
+    const { container } = render(
+      <ParcoursCard parcours={parcours} adminUnlocked onReplaceGpx={onReplaceGpx} />
+    )
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(input, new File(['pas un gpx'], 'trace.gpx'))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Fichier GPX invalide')
+    expect(screen.queryByText('Tracé remplacé.')).not.toBeInTheDocument()
+  })
+})

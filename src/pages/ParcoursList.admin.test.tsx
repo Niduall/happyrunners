@@ -11,6 +11,7 @@ vi.mock('../services/supabaseService', () => ({
   getParcoursPoints: vi.fn(),
   addParcours: vi.fn(),
   deleteParcours: vi.fn(),
+  updateParcours: vi.fn(),
   getUserProfile: vi.fn().mockResolvedValue(null),
   upsertUserProfile: vi.fn(),
   findProfileByName: vi.fn(),
@@ -105,6 +106,8 @@ describe('ParcoursList — code administrateur', () => {
     // Aucun bouton sensible sans le code
     expect(screen.queryByLabelText('Supprimer')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Modifier')).not.toBeInTheDocument()
+    // Le remplacement du tracé est une modification : lui aussi attend le code
+    expect(screen.queryByRole('button', { name: /Remplacer le GPX/ })).not.toBeInTheDocument()
     // Le cadenas est là, un par carte
     expect(screen.getAllByLabelText('Déverrouiller la gestion des parcours')).toHaveLength(2)
   })
@@ -149,6 +152,7 @@ describe('ParcoursList — code administrateur', () => {
     await unlockViaUi(user)
 
     expect(screen.getAllByLabelText('Modifier')).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: /Remplacer le GPX/ })).toHaveLength(2)
   })
 
   it('ne mémorise rien dans le navigateur', async () => {

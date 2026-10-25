@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   getParcours,
   getParcoursPoints,
+  updateParcours,
   getWeekVotes,
   getWeekTallies,
   getWeekAttendances,
@@ -16,6 +17,7 @@ const mockAttendanceRows = vi.fn()
 const mockError = vi.fn()
 const mockAttendanceError = vi.fn()
 const mockSelectColumns = vi.fn()
+const mockUpdateValues = vi.fn()
 
 /**
  * Chaque table a sa propre source de données. `from(table)` capture le nom
@@ -30,6 +32,10 @@ vi.mock('../lib/supabase', () => ({
         return q
       }
       q.eq = () => q
+      q.update = (values?: unknown) => {
+        mockUpdateValues(values)
+        return q
+      }
       q.not = () => q
       q.in = () => q
       q.order = () => q
@@ -63,6 +69,7 @@ beforeEach(() => {
   mockError.mockReset()
   mockAttendanceError.mockReset()
   mockSelectColumns.mockReset()
+  mockUpdateValues.mockReset()
 
   mockRows.mockReturnValue([])
   mockProfiles.mockReturnValue([])
@@ -105,6 +112,39 @@ describe('getParcours — le tracé n’est pas dans la liste', () => {
 
     expect(mockSelectColumns).toHaveBeenCalledWith('points')
     expect(points).toEqual([{ lat: 48.6, lng: 6.1 }])
+  })
+})
+
+describe('updateParcours — le nom et le tracé se modifient séparément', () => {
+  it('écrit les champs demandés et met à jour updated_at', async () => {
+    mockRows.mockReturnValue({
+      id: 'p1',
+      name: 'Boucle du lac',
+      distance_km: 4.2,
+      elevation_gain_m: 93,
+      points: [],
+      created_by: null,
+      created_at: '',
+      updated_at: '2026-10-25T10:00:00.000Z',
+    })
+
+    const updated = await updateParcours('p1', { name: 'Boucle du lac' })
+
+    // Le trigger SQL est désactivé (voir A9) : l'horodatage est écrit ici.
+    expect(mockUpdateValues).toHaveBeenCalledWith({
+      name: 'Boucle du lac',
+      updated_at: expect.any(String),
+    })
+    // La date envoyée est une date ISO valide
+    const sent = mockUpdateValues.mock.calls[0][0] as { updated_at: string }
+    expect(Number.isNaN(Date.parse(sent.updated_at))).toBe(false)
+    expect(updated.name).toBe('Boucle du lac')
+  })
+
+  it('propage une erreur d’écriture', async () => {
+    mockError.mockReturnValue(new Error('écriture refusée'))
+
+    await expect(updateParcours('p1', { name: 'X' })).rejects.toThrow('écriture refusée')
   })
 })
 

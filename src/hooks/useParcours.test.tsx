@@ -3,13 +3,14 @@ import { renderHook, act, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { AuthProvider } from './useAuth'
 import { useParcours } from './useParcours'
-import { getParcours, deleteParcours } from '../services/supabaseService'
+import { getParcours, deleteParcours, updateParcours } from '../services/supabaseService'
 import { parseGPX } from '../services/gpxParser'
 
 vi.mock('../services/supabaseService', () => ({
   getParcours: vi.fn(),
   addParcours: vi.fn(),
   deleteParcours: vi.fn(),
+  updateParcours: vi.fn(),
   getUserProfile: vi.fn().mockResolvedValue(null),
   upsertUserProfile: vi.fn(),
   getWeekTallies: vi.fn(),
@@ -25,6 +26,8 @@ vi.mock('../services/gpxParser', () => ({ parseGPX: vi.fn() }))
 
 const mockGetParcours = vi.mocked(getParcours)
 const mockDeleteParcours = vi.mocked(deleteParcours)
+const mockUpdateParcours = vi.mocked(updateParcours)
+const mockParseGPX = vi.mocked(parseGPX)
 
 const wrapper = ({ children }: { children: ReactNode }) => <AuthProvider>{children}</AuthProvider>
 
@@ -243,5 +246,105 @@ describe('useParcours — polling silencieux', () => {
     })
   })
 
-  void parseGPX
+  describe('modification', () => {
+    beforeEach(() => {
+      localStorage.clear()
+      vi.clearAllMocks()
+      vi.useRealTimers()
+      mockGetParcours.mockResolvedValue(SAMPLE as never)
+      mockUpdateParcours.mockResolvedValue({} as never)
+    })
+
+    it('renomme sans toucher au tracé', async () => {
+      const { result } = renderHook(() => useParcours(), { wrapper })
+      await waitFor(() => expect(result.current.parcoursList).toHaveLength(2))
+
+      await act(async () => {
+        await result.current.editParcours('p1', { name: 'Nouveau nom' })
+      })
+
+      expect(mockUpdateParcours).toHaveBeenCalledWith('p1', { name: 'Nouveau nom' })
+      expect(mockParseGPX).not.toHaveBeenCalled()
+      expect(mockGetParcours).toHaveBeenCalledTimes(2)
+    })
+
+    it('remplace le tracé sans changer le nom', async () => {
+      // Le nom, la description et le créateur restent en base : seuls les
+      // champs issus du GPX sont envoyés.
+      mockParseGPX.mockReturnValue({
+        id: 'p1',
+        name: 'GPX sans nom',
+        distance_km: 7.8,
+        elevation_gain_m: 210,
+        points: [{ lat: 48.6, lng: 6.1 }],
+        created_by: null,
+        created_at: '',
+        updated_at: '',
+      })
+
+      const { result } = renderHook(() => useParcours(), { wrapper })
+      await waitFor(() => expect(result.current.parcoursList).toHaveLength(2))
+
+      await act(async () => {
+        await result.current.editParcours('p1', { gpxContent: '<gpx />' })
+      })
+
+      expect(mockParseGPX).toHaveBeenCalledWith('<gpx />')
+      expect(mockUpdateParcours).toHaveBeenCalledWith('p1', {
+        distance_km: 7.8,
+        elevation_gain_m: 210,
+        points: [{ lat: 48.6, lng: 6.1 }],
+      })
+    })
+
+    it('refuse un GPX invalide et n’écrit rien', async () => {
+      mockParseGPX.mockReturnValue(null)
+
+      const { result } = renderHook(() => useParcours(), { wrapper })
+      await waitFor(() => expect(result.current.parcoursList).toHaveLength(2))
+
+      await act(async () => {
+        await expect(
+          result.current.editParcours('p1', { gpxContent: 'pas un gpx' })
+        ).rejects.toThrow('Fichier GPX invalide')
+      })
+
+      expect(mockUpdateParcours).not.toHaveBeenCalled()
+      expect(result.current.parcoursList).toHaveLength(2)
+    })
+
+    it('recharge la liste sans spinner après modification', async () => {
+      const { result } = renderHook(() => useParcours(), { wrapper })
+      await waitFor(() => expect(result.current.parcoursList).toHaveLength(2))
+
+      // La base renvoie le nouveau nom ; sans rechargement la liste garderait
+      // l'ancien jusqu'au polling de 30 s.
+      mockGetParcours.mockResolvedValue([
+        { ...SAMPLE[0], name: 'Nouveau nom' },
+        SAMPLE[1],
+      ] as never)
+
+      const loadingDuringEdit: boolean[] = []
+      await act(async () => {
+        const p = result.current.editParcours('p1', { name: 'Nouveau nom' })
+        loadingDuringEdit.push(result.current.loading)
+        await p
+      })
+
+      expect(loadingDuringEdit).toEqual([false])
+      expect(result.current.loading).toBe(false)
+      expect(result.current.parcoursList[0].name).toBe('Nouveau nom')
+    })
+
+    it('ne lance aucune requête sans changement', async () => {
+      const { result } = renderHook(() => useParcours(), { wrapper })
+      await waitFor(() => expect(result.current.parcoursList).toHaveLength(2))
+
+      await act(async () => {
+        await result.current.editParcours('p1', {})
+      })
+
+      expect(mockUpdateParcours).not.toHaveBeenCalled()
+    })
+  })
 })

@@ -152,6 +152,9 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   jamais bloquer l'admin par surprise sur un déploiement non configuré.
 - L'**import GPX reste libre** pour tous. Seules la suppression et la
   modification demandent le code.
+- Déverrouillé, le crayon ouvre une modale de **renommage** (nom seul) et
+  « Remplacer le GPX » remplace le tracé **sans changer le nom**. Le GPX est
+  parsé avant l'écriture : un fichier invalide ne modifie rien.
 - ⚠️ Le déverrouillage est un **état local à `ParcoursList`** (`useState`).
   **Ne pas le remettre dans `useAuth` ni dans `sessionStorage`** : c'était
   l'implémentation précédente, et elle laissait l'accès ouvert à tout l'onglet,

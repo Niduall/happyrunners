@@ -31,6 +31,24 @@ vi.mock('../lib/supabase', () => {
   }
 })
 
+// jsdom 25 n'implémente pas `File.prototype.text()`, utilisé par l'import GPX.
+// Les navigateurs ciblés le supportent : c'est une limite de l'environnement
+// de test, pas du code applicatif.
+if (typeof File !== 'undefined' && typeof File.prototype.text !== 'function') {
+  Object.defineProperty(File.prototype, 'text', {
+    value: function (this: File) {
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result ?? ''))
+        reader.onerror = () => reject(reader.error)
+        reader.readAsText(this)
+      })
+    },
+    configurable: true,
+    writable: true,
+  })
+}
+
 beforeEach(() => {
   localStorage.clear()
 })

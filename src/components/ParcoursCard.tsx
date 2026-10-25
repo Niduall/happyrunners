@@ -3,20 +3,19 @@ import { MapPin, Calendar, Upload, Trash2, Edit2, Eye, Lock } from 'lucide-react
 import { Button } from './ui/Button'
 import { Card, CardHeader, CardContent, CardFooter } from './ui/Card'
 import { MapView } from './MapView'
-import { parseGPX } from '../services/gpxParser'
 import { useParcoursPoints } from '../hooks/useParcoursPoints'
-import type { Parcours, ParcoursSummary } from '../types'
+import type { ParcoursSummary } from '../types'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
 interface ParcoursCardProps {
   parcours: ParcoursSummary
   isNext?: boolean
-  /** Reçoit le parcours complet après un import GPX, ou le résumé depuis le bouton Modifier. */
-  onEdit?: (parcours: Parcours | ParcoursSummary) => void
+  /** Ouvre le renommage (bouton crayon). */
+  onEdit?: (parcours: ParcoursSummary) => void
   onDelete?: (id: string) => void
-  onView?: (parcours: ParcoursSummary) => void
-  showActions?: boolean
+  /** Remplace le tracé par un nouveau GPX (bouton « Remplacer le GPX »). */
+  onReplaceGpx?: (id: string, gpxContent: string) => Promise<void>
   /** true → modification et suppression accessibles */
   adminUnlocked?: boolean
   /** Ouvre la demande de code admin (absent → pas de cadenas) */
@@ -28,8 +27,7 @@ export function ParcoursCard({
   isNext,
   onEdit,
   onDelete,
-  onView,
-  showActions = true,
+  onReplaceGpx,
   adminUnlocked = false,
   onRequestAdmin,
 }: ParcoursCardProps) {
@@ -37,6 +35,8 @@ export function ParcoursCard({
   const { points, loading: loadingPoints, error: pointsError, load: loadPoints } =
     useParcoursPoints(parcours.id)
   const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploadSuccess, setUploadSuccess] = useState(false)
 
   const toggleMap = useCallback(() => {
     if (showMap) {
@@ -49,22 +49,24 @@ export function ParcoursCard({
   }, [showMap, loadPoints])
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const input = e.target
+    const file = input.files?.[0]
+    if (!file || !onReplaceGpx) return
 
+    setUploadError(null)
+    setUploadSuccess(false)
     setUploading(true)
-    const text = await file.text()
-    const parsed = parseGPX(text)
-    
-    if (parsed) {
-      parsed.id = parcours.id
-      parsed.name = parcours.name
-      parsed.updated_at = new Date().toISOString()
-      if (onEdit) onEdit(parsed)
+    try {
+      const text = await file.text()
+      await onReplaceGpx(parcours.id, text)
+      setUploadSuccess(true)
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Impossible de remplacer le tracé')
+    } finally {
+      setUploading(false)
+      input.value = ''
     }
-    setUploading(false)
-    e.target.value = ''
-  }, [parcours.id, parcours.name, onEdit])
+  }, [parcours.id, onReplaceGpx])
 
   const distance = (parcours.distance_km || 0).toFixed(1)
   const elevation = parcours.elevation_gain_m ? `${Math.round(parcours.elevation_gain_m)}m D+` : ''
@@ -103,39 +105,37 @@ export function ParcoursCard({
             </div>
           </div>
 
-          {showActions && (
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" size="sm" onClick={toggleMap} aria-label={showMap ? 'Masquer la carte' : 'Voir la carte'}>
-                <Eye className="w-4 h-4" />
-              </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={toggleMap} aria-label={showMap ? 'Masquer la carte' : 'Voir la carte'}>
+              <Eye className="w-4 h-4" />
+            </Button>
 
-              {/* Modification et suppression réservées à l'admin : un seul
-                  cadenas à la place des deux boutons. La carte reste
-                  visible, elle est inoffensive. */}
-              {adminUnlocked ? (
-                <>
-                  <Button variant="ghost" size="sm" onClick={() => onEdit?.(parcours)} aria-label="Modifier">
-                    <Edit2 className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => onDelete?.(parcours.id)} aria-label="Supprimer" className="text-error hover:text-error/80">
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </>
-              ) : (
-                onRequestAdmin && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onRequestAdmin}
-                    aria-label="Déverrouiller la gestion des parcours"
-                    title="Code administrateur requis"
-                  >
-                    <Lock className="w-4 h-4 text-gray-400" />
-                  </Button>
-                )
-              )}
-            </div>
-          )}
+            {/* Modification et suppression réservées à l'admin : un seul
+                cadenas à la place des deux boutons. La carte reste
+                visible, elle est inoffensive. */}
+            {adminUnlocked ? (
+              <>
+                <Button variant="ghost" size="sm" onClick={() => onEdit?.(parcours)} aria-label="Modifier">
+                  <Edit2 className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => onDelete?.(parcours.id)} aria-label="Supprimer" className="text-error hover:text-error/80">
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </>
+            ) : (
+              onRequestAdmin && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onRequestAdmin}
+                  aria-label="Déverrouiller la gestion des parcours"
+                  title="Code administrateur requis"
+                >
+                  <Lock className="w-4 h-4 text-gray-400" />
+                </Button>
+              )
+            )}
+          </div>
         </div>
       </CardHeader>
 
@@ -164,8 +164,8 @@ export function ParcoursCard({
         </CardContent>
       )}
 
-      {showActions && (
-        <CardFooter className="pt-2">
+      {onReplaceGpx && (
+        <CardFooter className="pt-2 space-y-2">
           <label className="w-full">
             <input
               type="file"
@@ -183,18 +183,21 @@ export function ParcoursCard({
               disabled={uploading}
             >
               <Upload className="w-4 h-4" />
-              <span>{uploading ? 'Import...' : 'Importer GPX'}</span>
+              <span>{uploading ? 'Remplacement…' : 'Remplacer le GPX'}</span>
             </Button>
           </label>
-        </CardFooter>
-      )}
 
-      {onView && !showActions && (
-        <CardContent className="pt-2">
-          <Button variant="outline" size="sm" className="w-full" onClick={() => onView(parcours)}>
-            Voir le parcours
-          </Button>
-        </CardContent>
+          {uploadError && (
+            <p role="alert" className="text-sm text-error">
+              {uploadError}
+            </p>
+          )}
+          {uploadSuccess && (
+            <p role="status" className="text-sm text-primary">
+              Tracé remplacé.
+            </p>
+          )}
+        </CardFooter>
       )}
     </Card>
   )

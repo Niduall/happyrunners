@@ -57,75 +57,90 @@ export function ParcoursVoteCard({
       }
     >
       <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap mb-0.5">
-              {isWinner && (
-                <span
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${
-                    isTied ? 'bg-amber-100 text-amber-800' : 'bg-primary/10 text-primary'
-                  }`}
-                >
-                  {isTied ? (
-                    <>
-                      <Scale className="w-3 h-3" />
-                      Égalité
-                    </>
-                  ) : (
-                    <>
-                      <Trophy className="w-3 h-3" />
-                      En tête
-                    </>
-                  )}
-                </span>
-              )}
-              <span className="text-xs text-gray-500">
+            {isWinner && (
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-0.5 mb-1 text-xs font-medium rounded-full ${
+                  isTied ? 'bg-amber-100 text-amber-800' : 'bg-primary/10 text-primary'
+                }`}
+              >
+                {isTied ? (
+                  <>
+                    <Scale className="w-3 h-3" />
+                    Égalité
+                  </>
+                ) : (
+                  <>
+                    <Trophy className="w-3 h-3" />
+                    En tête
+                  </>
+                )}
+              </span>
+            )}
+            <h3 className="font-semibold text-gray-900 truncate">{parcours.name}</h3>
+            {/* Tout le secondaire tient sur une ligne : distance, dénivelé,
+                participation. Le nombre de votants n'a plus sa propre ligne. */}
+            <p className="text-sm text-gray-500 flex items-center gap-x-1.5 gap-y-0.5 mt-0.5 flex-wrap">
+              <MapPin className="w-3.5 h-3.5 shrink-0" />
+              <span className="whitespace-nowrap">
+                {parcours.distance_km.toFixed(1)} km
+                {parcours.elevation_gain_m
+                  ? ` · +${Math.round(parcours.elevation_gain_m)} m`
+                  : ''}
+              </span>
+              <span aria-hidden="true">·</span>
+              <span className="whitespace-nowrap">
                 {yesCount} {yesCount > 1 ? 'personnes' : 'personne'}
               </span>
-            </div>
-            <h3 className="font-semibold text-gray-900 truncate">{parcours.name}</h3>
-            <p className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
-              <MapPin className="w-3.5 h-3.5" />
-              {parcours.distance_km.toFixed(1)} km
-              {parcours.elevation_gain_m ? ` · +${Math.round(parcours.elevation_gain_m)} m` : ''}
+              {voteLocked && isMyChoice && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="inline-flex items-center gap-1 font-medium text-primary">
+                    <Check className="w-3.5 h-3.5" />
+                    Mon choix
+                  </span>
+                </>
+              )}
             </p>
           </div>
 
-          {/* Pas de bouton de vote tant que la présence n'est pas confirmée :
-              le parcours reste visible et lisible, mais on n'affiche pas
-              d'action qui rejette un clic. */}
-          {!voteLocked ? (
+          {/* Le tracé n'est plus une ligne à lui seul : une icône suffit,
+              avec une cible de 44 px et un libellé pour les lecteurs d'écran. */}
+          {onToggleMap && (
             <Button
-              variant={isMyChoice ? 'primary' : 'outline'}
+              type="button"
+              variant="ghost"
               size="sm"
-              disabled={saving}
-              onClick={onToggle}
-              aria-pressed={isMyChoice}
-              className={isMyChoice ? '' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}
+              onClick={onToggleMap}
+              aria-expanded={mapOpen}
+              aria-controls={`parcours-map-${parcours.id}`}
+              aria-label={mapOpen ? 'Masquer le tracé' : 'Voir le tracé'}
+              title={mapOpen ? 'Masquer le tracé' : 'Voir le tracé'}
+              className="-mr-2 -mt-2 shrink-0"
             >
-              <Check className="w-4 h-4" />
-              {isMyChoice ? 'Mon choix' : 'Je veux celui-ci'}
+              <Eye className="w-4 h-4" />
+              {mapOpen ? 'Masquer' : 'Tracé'}
             </Button>
-          ) : isMyChoice ? (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-primary/10 text-primary shrink-0">
-              <Check className="w-4 h-4" />
-              Mon choix
-            </span>
-          ) : null}
+          )}
         </div>
 
-        {onToggleMap && (
+        {/* Pas de bouton de vote tant que la présence n'est pas confirmée :
+            le parcours reste visible et lisible, mais on n'affiche pas
+            d'action qui rejette un clic. */}
+        {!voteLocked && (
           <Button
-            type="button"
-            variant="ghost"
+            variant={isMyChoice ? 'primary' : 'outline'}
             size="sm"
-            onClick={onToggleMap}
-            aria-expanded={mapOpen}
-            aria-controls={`parcours-map-${parcours.id}`}
-            className="-ml-2 mt-1"
+            disabled={saving}
+            onClick={onToggle}
+            aria-pressed={isMyChoice}
+            className={`mt-2 w-full sm:w-auto ${
+              isMyChoice ? '' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+            }`}
           >
-            <Eye className="w-3.5 h-3.5" />
-            {mapOpen ? 'Masquer le tracé' : 'Voir le tracé'}
+            <Check className="w-4 h-4" />
+            {isMyChoice ? 'Mon choix' : 'Je veux celui-ci'}
           </Button>
         )}
 

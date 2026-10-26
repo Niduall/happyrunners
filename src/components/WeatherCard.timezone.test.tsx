@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { WeatherCard } from './WeatherCard'
+import { isoToEpoch } from '../services/weatherApi'
 import type { WeatherData } from '../types'
 
 // Le tsconfig de l'app ne charge pas les types Node ; `process` existe pourtant
@@ -10,8 +11,8 @@ declare const process: { env: Record<string, string | undefined> }
 const ORIGINAL_TZ = process.env.TZ
 
 beforeAll(() => {
-  // Se placer hors de France : sans `timeZone: 'Europe/Paris'`, l'affichage
-  // serait décalé de six heures et le test échouerait.
+  // Se placer hors de France : sans `timeZone: 'Europe/Paris'`, les heures
+  // affichées seraient décalées de six heures et le test échouerait.
   process.env.TZ = 'America/New_York'
 })
 
@@ -20,35 +21,36 @@ afterAll(() => {
   else process.env.TZ = ORIGINAL_TZ
 })
 
-const weather: WeatherData = {
-  temperature: 18,
-  feelsLike: 17,
+const at = (iso: string): WeatherData => ({
+  temperature: 12,
+  feelsLike: 11,
   humidity: 60,
   windSpeed: 10,
   windDeg: 180,
   weatherCode: 0,
   isDay: true,
-  dt: 0,
-  // 6 octobre 2026 : 07:30 et 19:45 heure de Paris (UTC+2)
-  sunrise: Date.UTC(2026, 9, 6, 5, 30) / 1000,
-  sunset: Date.UTC(2026, 9, 6, 17, 45) / 1000,
-}
+  dt: isoToEpoch(iso),
+})
+
+/** Mercredi 28 octobre 2026, de 11h à 14h heure de Paris. */
+const runWindow = [
+  at('2026-10-28T11:00'),
+  at('2026-10-28T12:00'),
+  at('2026-10-28T13:00'),
+  at('2026-10-28T14:00'),
+]
 
 describe('WeatherCard — heure de Paris', () => {
-  it('affiche lever et coucher dans le fuseau de la course', () => {
-    // Vérifie que le test tourne bien dans un autre fuseau : sans le
-    // `timeZone` du composant, l'heure affichée serait 01:30.
-    expect(
-      new Date(weather.sunrise! * 1000).toLocaleTimeString('fr-FR', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    ).toBe('01:30')
+  it('affiche les heures du bandeau dans le fuseau de la course', () => {
+    // Vérifie que le test tourne bien dans un autre fuseau : 12h à Paris
+    // n'est pas 12h à New York.
+    expect(new Date(runWindow[1].dt * 1000).getHours()).not.toBe(12)
 
-    render(<WeatherCard weather={weather} />)
+    render(<WeatherCard weather={runWindow[1]} hours={runWindow} />)
 
-    // Lever et coucher sont désormais dans une seule tuile « Journée ».
-    expect(screen.getByText(/07:30/)).toBeInTheDocument()
-    expect(screen.getByText(/19:45/)).toBeInTheDocument()
+    expect(screen.getByText('11h')).toBeInTheDocument()
+    expect(screen.getByText('12h')).toBeInTheDocument()
+    expect(screen.getByText('13h')).toBeInTheDocument()
+    expect(screen.getByText('14h')).toBeInTheDocument()
   })
 })

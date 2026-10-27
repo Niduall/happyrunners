@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { MapPin, Calendar, Upload, Trash2, Edit2, Eye, Lock } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Card, CardHeader, CardContent, CardFooter } from './ui/Card'
-import { MapView } from './MapView'
+import { LazyMapView } from './LazyMapView'
 import { useParcoursPoints } from '../hooks/useParcoursPoints'
 import type { ParcoursSummary } from '../types'
 import { format } from 'date-fns'
@@ -154,7 +154,7 @@ export function ParcoursCard({
             </div>
           ) : points.length > 0 ? (
             <div className="relative h-64 rounded-lg overflow-hidden">
-              <MapView points={points} height={256} interactive={false} />
+              <LazyMapView points={points} height={256} interactive={false} />
             </div>
           ) : (
             <div className="h-64 rounded-lg bg-gray-100 flex items-center justify-center text-sm text-gray-500">

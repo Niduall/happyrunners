@@ -3,7 +3,7 @@ import { Check, Trophy, MapPin, Scale, Eye } from 'lucide-react'
 import type { ParcoursSummary } from '../types/supabase'
 import { Button } from './ui/Button'
 import { Card, CardContent } from './ui/Card'
-import { MapView } from './MapView'
+import { LazyMapView } from './LazyMapView'
 import { useParcoursPoints } from '../hooks/useParcoursPoints'
 
 interface ParcoursVoteCardProps {
@@ -159,7 +159,7 @@ export function ParcoursVoteCard({
               </div>
             ) : points.length > 0 ? (
               <div className="relative h-60 rounded-lg overflow-hidden">
-                <MapView points={points} height={240} interactive={false} />
+                <LazyMapView points={points} height={240} interactive={false} />
               </div>
             ) : (
               <div className="h-60 rounded-lg bg-gray-100 flex items-center justify-center text-sm text-gray-500">

@@ -12,7 +12,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 })
 
-interface MapViewProps {
+export interface MapViewProps {
   points: GPXPoint[]
   zoom?: number
   height?: number

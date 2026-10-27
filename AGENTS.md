@@ -67,6 +67,7 @@ npm run build      # 0 erreur TypeScript
 | `src/components/Auth.tsx` | `LoginForm` |
 | `src/components/UserMenu.tsx` | menu du profil : nom, sécurité (PIN), déconnexion |
 | `src/components/ParcoursVoteCard.tsx` | Carte parcours + 1 bouton de vote |
+| `src/components/LazyMapView.tsx` | carte Leaflet chargée à la demande — **importer ce composant, pas `MapView`** |
 | `src/components/ParticipantsTable.tsx` | Tableau récapitulatif + avatars |
 
 ## Critical Implementation Details
@@ -331,6 +332,8 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
 7f. **Heures météo en Europe/Paris** — `isoToEpoch` interprète les dates
     Open-Meteo dans ce fuseau, pas dans celui du navigateur ; lever/coucher
     affichés avec `timeZone: WEATHER_TIMEZONE`.
+7g. **Importer `LazyMapView`, jamais `MapView` en direct** — un import statique
+    ramène Leaflet (~43 kB gzip) dans le bundle principal et au démarrage.
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

@@ -114,7 +114,8 @@ Toutes les lignes sont sous `running-app/`.
 | `src/components/ParticipantsTable.tsx` | tableau présence + parcours choisi, tri, avatars | 163 |
 | `src/components/UserMenu.tsx` | menu utilisateur : nom, édition, Sécurité, déconnexion | 161 |
 | `src/components/WeatherCard.tsx` | météo, deux mises en page (compacte / complète) | 146 |
-| `src/components/MapView.tsx` | carte Leaflet : polyligne + marqueurs départ/arrivée | 127 |
+| `src/components/MapView.tsx` | carte Leaflet : polyligne + marqueurs départ/arrivée | 123 |
+| `src/components/LazyMapView.tsx` | carte chargée à la demande (`lazy` + `Suspense`), fallback à la même hauteur | 39 |
 | `src/components/AdminCodeModal.tsx` | saisie du code administrateur | 110 |
 | `src/components/ParcoursVoteCard.tsx` | carte parcours en mode vote (1 bouton, compteur, badge vainqueur) | 103 |
 | `src/components/ConfirmDeleteModal.tsx` | confirmation de suppression + annonce des votes perdus | 97 |
@@ -189,6 +190,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/hooks/useTargetWednesday.test.ts` | horloge de semaine |
 | `src/components/AttendanceBanner.test.tsx` | aucun bouton rempli sans réponse |
 | `src/components/ParcoursVoteCard.test.tsx` | bouton de vote |
+| `src/components/LazyMapView.test.tsx` | fallback puis carte, hauteur par défaut |
 | `src/components/ParticipantsTable.test.ts` | tri des lignes |
 | `src/services/pin.test.ts` | `hashPin` |
 | `src/pages/Home.weather.test.tsx` | météo sur la page d'accueil |
@@ -510,9 +512,13 @@ supprimé : le préfixe de l'index unique `(week_key, user_number)` couvre les
 mêmes lectures. L'index qui manquait sur les noms est désormais
 `user_profiles_name_key` (voir A10).
 
-**D7. Aucun découpage du bundle.** Pas de `build.rollupOptions.manualChunks`
-(`vite.config.ts`) : Leaflet et le parseur partent dans le même fichier que le
-reste de l'application.
+**D7. Aucun découpage du bundle. — corrigé (tâche 22).** Leaflet n'est plus
+embarqué dans le bundle principal : `LazyMapView` l'importe dynamiquement, donc
+le module part dans un chunk séparé, chargé au premier affichage de carte
+(précaché ensuite par le service worker). Mesuré : **755,60 → 604,89 kB**
+(gzip **218,17 → 173,61 kB**) au premier chargement, Leaflet pesant à lui seul
+149,76 kB (gzip 43,41 kB). Le bundle principal reste au-dessus de 500 kB
+(warning Vite, non bloquant) ; le parseur GPX reste dans le principal.
 
 ### E. Code mort et fichiers orphelins
 
@@ -710,6 +716,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 19 | Pluie à 0 % et heures autour du run | `WeatherCard` : pluie toujours affichée ; bandeau 11h → 14h (`getRunWindow`) | fait |
 | 20 | Finitions d'interface (lot A) | une seule date, refus neutre, météo calmée, accent AA, cibles 44 px | fait |
 | 21 | Horloge partagée | C5 : un seul `setInterval` pour toute l'app, libéré sans abonné, instantané stable entre deux ticks | fait |
+| 22 | Chargement différé de la carte | D7 : Leaflet (~150 kB min / 43 kB gzip) sort du bundle principal, chargé au premier tracé | fait |
 
 **Pourquoi cet ordre.** Les tâches 1 à 3 ne touchent aucune donnée et se
 vérifient en une commande : autant commencer par elles. La tâche 4 vient

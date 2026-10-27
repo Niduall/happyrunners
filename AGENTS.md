@@ -334,6 +334,10 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
     affichés avec `timeZone: WEATHER_TIMEZONE`.
 7g. **Importer `LazyMapView`, jamais `MapView` en direct** — un import statique
     ramène Leaflet (~43 kB gzip) dans le bundle principal et au démarrage.
+7h. **Un changement de présence ne relance pas un chargement complet** —
+    `useParcoursVotes` recalcule depuis `votesRef`, puis rafraîchit les votes
+    seuls en silence. Un refetch complet = écran vidé, `loading`, et deux
+    requêtes pour rien.
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

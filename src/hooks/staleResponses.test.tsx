@@ -303,25 +303,21 @@ describe('useParcoursVotes — réponses obsolètes autour de la bascule', () =>
     // La liste des présents est fournie : aucune requête de présences.
     expect(mockAttendances).not.toHaveBeenCalled()
 
-    // La présence change : un second chargement démarre avant que le premier
-    // n'ait répondu.
+    // La présence change pendant que la requête est en vol : plus besoin de
+    // relancer un chargement, c'est un recalcul local.
     rerender({ going: [] })
-    await waitFor(() => expect(voteReads).toHaveLength(2))
+    expect(voteReads).toHaveLength(1)
     expect(mockAttendances).not.toHaveBeenCalled()
 
-    await act(async () => {
-      voteReads[1].resolve([])
-      await voteReads[1].promise
-    })
-    await waitFor(() => expect(result.current.tallies.p1).toBeUndefined())
-
-    // Le premier chargement répond en retard avec un vote qui ne vaut plus
+    // La réponse arrive avec un vote qui ne vaut plus : la liste la plus
+    // récente fait autorité, le vote est écarté.
     await act(async () => {
       voteReads[0].resolve([{ parcoursId: 'p1', userNumber: ALICE, status: 'yes' }])
       await voteReads[0].promise
     })
 
     expect(result.current.tallies.p1).toBeUndefined()
+    expect(result.current.loading).toBe(false)
   })
 })
 

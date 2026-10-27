@@ -463,9 +463,19 @@ commentaire (`useTargetWednesday.ts:8-11`) demande de le monter une seule fois.
 **Corrigé (tâche 21)** : l'horloge est un store de module, un seul timer pour
 tous les abonnés, libéré quand plus personne n'écoute.
 
-**C6.** `useParcoursVotes` relance un chargement réseau complet à chaque
-changement de la liste des présents (`:65,125,138-141`) : le commentaire
-`:63-64` annonce un simple recalcul local.
+**C6. — corrigé (tâche 23).** `useParcoursVotes` relançait un chargement réseau
+complet à chaque changement de la liste des présents : l'effet de montage
+dépendait de `goingList`, donc chaque réponse de présence vidait les compteurs,
+repassait par `loading` et refaisait `getWeekVotes` + `getWeekAttendances`.
+Les votes bruts sont désormais conservés (`votesRef`) et `summarizeVotes` est
+réappliqué localement quand les présents changent : compteur à jour
+immédiatement, sans état vide. Un rafraîchissement **silencieux** des votes
+seuls suit ce changement (une requête, jamais les présences, pas de `loading`)
+pour récupérer un vote déposé dans la foulée. `fetchVotes` relit la liste au
+moment de la réponse (`goingListRef`) : une requête en vol reste filtrée par la
+présence la plus récente. Tests : `useParcoursVotes.test.tsx` (compteur
+immédiat, rafraîchissement silencieux, pas de double chargement au démarrage)
+et `staleResponses.test.tsx` (présence changée pendant la requête).
 
 ### D. Performance
 
@@ -717,6 +727,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 20 | Finitions d'interface (lot A) | une seule date, refus neutre, météo calmée, accent AA, cibles 44 px | fait |
 | 21 | Horloge partagée | C5 : un seul `setInterval` pour toute l'app, libéré sans abonné, instantané stable entre deux ticks | fait |
 | 22 | Chargement différé de la carte | D7 : Leaflet (~150 kB min / 43 kB gzip) sort du bundle principal, chargé au premier tracé | fait |
+| 23 | Recalcul local des votes | C6 : un changement de présence ne relance plus de chargement ni n'efface l'affichage | fait |
 
 **Pourquoi cet ordre.** Les tâches 1 à 3 ne touchent aucune donnée et se
 vérifient en une commande : autant commencer par elles. La tâche 4 vient

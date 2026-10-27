@@ -419,4 +419,72 @@ describe('useParcoursVotes — un choix unique par semaine', () => {
       vi.useRealTimers()
     }
   })
+
+  it('recalcule les compteurs localement quand la liste des présents change', async () => {
+    store = [
+      { parcoursId: 'p1', userNumber: 1, status: 'yes' },
+      { parcoursId: 'p1', userNumber: 2, status: 'yes' },
+    ]
+
+    const { result, rerender } = renderHook(
+      ({ going }: { going: number[] | undefined }) => useParcoursVotes(PARCOURS, {}, going),
+      { wrapper, initialProps: { going: [1, 2] as number[] | undefined } }
+    )
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.tallies.p1?.yes).toBe(2)
+
+    const votesCalls = mockVotes.mock.calls.length
+    const attendanceCalls = mockAttendances.mock.calls.length
+
+    rerender({ going: [1] })
+
+    // Recalcul synchrone : aucun effacement, pas de passage par `loading`.
+    expect(result.current.loading).toBe(false)
+    expect(result.current.tallies.p1?.yes).toBe(1)
+
+    // Rafraîchissement silencieux : les votes seuls, jamais les présences.
+    await waitFor(() => expect(mockVotes.mock.calls.length).toBe(votesCalls + 1))
+    expect(mockAttendances.mock.calls.length).toBe(attendanceCalls)
+    expect(result.current.loading).toBe(false)
+  })
+
+  it('ne double pas le chargement quand les présences arrivent après les votes', async () => {
+    store = [{ parcoursId: 'p1', userNumber: 1, status: 'yes' }]
+    everyoneComing()
+
+    const { result, rerender } = renderHook(
+      ({ going }: { going: number[] | undefined }) => useParcoursVotes(PARCOURS, {}, going),
+      { wrapper, initialProps: { going: undefined as number[] | undefined } }
+    )
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    const votesCalls = mockVotes.mock.calls.length
+    expect(result.current.tallies.p1?.yes).toBe(1)
+
+    // Premier passage undefined → liste : le chargement initial suffit.
+    rerender({ going: [1] })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(mockVotes.mock.calls.length).toBe(votesCalls)
+    expect(result.current.tallies.p1?.yes).toBe(1)
+  })
+
+  it('garde les compteurs quand les présences deviennent inconnues', async () => {
+    store = [
+      { parcoursId: 'p1', userNumber: 1, status: 'yes' },
+      { parcoursId: 'p1', userNumber: 2, status: 'yes' },
+    ]
+
+    const { result, rerender } = renderHook(
+      ({ going }: { going: number[] | undefined }) => useParcoursVotes(PARCOURS, {}, going),
+      { wrapper, initialProps: { going: [1, 2] as number[] | undefined } }
+    )
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.tallies.p1?.yes).toBe(2)
+
+    // Panne de présences : on garde l'affichage au lieu de compter tout.
+    rerender({ going: undefined })
+    expect(result.current.tallies.p1?.yes).toBe(2)
+  })
 })

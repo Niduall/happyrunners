@@ -91,6 +91,12 @@ export function useParcoursVotes(
   // Dernière liste de présents connue, pour recharger les votes seuls après
   // une action sans refetcher les présences.
   const goingRef = useRef<Set<number> | null>(null)
+  // Votes bruts du dernier chargement réussi : permet de recalculer les
+  // compteurs quand seules les présences changent, sans repasser par le réseau.
+  const votesRef = useRef<WeekVote[] | null>(null)
+  // Dernière signature de présents traitée : distingue le premier passage
+  // (undefined → liste) d'un vrai changement de présence.
+  const lastGoingKeyRef = useRef<string | null>(null)
 
   const { weekKey, weekLabel } = useTargetWednesday()
   // Voir useAttendance : une réponse de l'ancienne semaine ne doit jamais
@@ -112,6 +118,12 @@ export function useParcoursVotes(
     if (goingKey === 'unknown') return undefined
     return goingKey ? goingKey.split(',').map(Number) : []
   }, [goingKey])
+
+  // Lu par `fetchVotes` : la liste des présents change souvent (quelqu'un
+  // répond), mais elle ne doit pas recréer les callbacks ni redémarrer le
+  // polling. Le recalcul local s'en charge (effet plus bas).
+  const goingListRef = useRef<number[] | undefined>(goingList)
+  goingListRef.current = goingList
 
   const parcoursKey = parcoursIds.join(',')
   const ids = useMemo(() => (parcoursKey ? parcoursKey.split(',') : []), [parcoursKey])
@@ -145,7 +157,7 @@ export function useParcoursVotes(
         // refetcher les présences à chaque cycle. Sans elle, on les charge
         // (premier passage, polling de repli, ou récupération après panne).
         const needAttendances =
-          goingList === undefined &&
+          goingListRef.current === undefined &&
           (opts?.forceAttendances === true || goingRef.current === null)
 
         const [votesResult, attendancesResult] = await Promise.allSettled([
@@ -170,9 +182,13 @@ export function useParcoursVotes(
         // ⚠️ Ne PAS fusionner les deux : une réponse « pas aujourd'hui »
         //    enregistrée en base serait ré-adding par la requête, et le
         //    vote continuerait d'être compté jusqu'au polling suivant.
+        // Relue après la réponse : la liste des présents a pu changer pendant
+        // la requête (quelqu'un vient de répondre). C'est la plus récente qui
+        // fait autorité, même si aucun nouveau chargement n'a été lancé.
+        const goingNow = goingListRef.current
         let going: Set<number> | null
-        if (goingList !== undefined) {
-          going = new Set(goingList)
+        if (goingNow !== undefined) {
+          going = new Set(goingNow)
           goingRef.current = going
         } else if (needAttendances) {
           if (attendancesResult.status === 'fulfilled' && attendancesResult.value) {
@@ -190,6 +206,7 @@ export function useParcoursVotes(
           going = goingRef.current
         }
 
+        votesRef.current = votesResult.value
         applyVotes(votesResult.value, going)
 
         if (!opts?.keepError) setError(null)
@@ -201,7 +218,7 @@ export function useParcoursVotes(
         if (!isStale()) setLoading(false)
       }
     },
-    [user?.id, weekKey, goingList, applyVotes]
+    [user?.id, weekKey, applyVotes]
   )
 
   const loadAll = useCallback(
@@ -223,6 +240,8 @@ export function useParcoursVotes(
     if (authLoading) return
     if (!user?.id) {
       goingRef.current = null
+      votesRef.current = null
+      lastGoingKeyRef.current = null
       setTallies({})
       setMyChoice(null)
       setChoices({})
@@ -231,6 +250,8 @@ export function useParcoursVotes(
     }
 
     goingRef.current = null
+    votesRef.current = null
+    lastGoingKeyRef.current = null
     setLoading(true)
     setTallies({})
     setMyChoice(null)
@@ -249,6 +270,41 @@ export function useParcoursVotes(
       }
     }
   }, [authLoading, user?.id, loadAll])
+
+  /**
+   * Les présents changent (quelqu'un vient de répondre) : on recalcule les
+   * compteurs à partir des votes déjà chargés — aucun écran vidé, aucun
+   * `loading`. C'est ce que promettait le commentaire de `goingKey`, mais
+   * l'effet de montage se relançait à chaque changement.
+   *
+   * Un vote a pu être déposé juste après la réponse de présence : on
+   * rafraîchit alors les votes seuls, en silence (pas de spinner, pas
+   * d'effacement). Une requête rare, une par changement de présence.
+   *
+   * `undefined` = présences inconnues : on garde l'affichage courant plutôt
+   * que de compter tous les votes, comme lors d'une panne.
+   *
+   * Déclaré après l'effet de montage : au changement de semaine, celui-ci
+   * vide `votesRef` d'abord, donc ce recalcul ne peut pas réappliquer les
+   * votes de la semaine précédente.
+   */
+  useEffect(() => {
+    if (goingList === undefined) return
+
+    const previousKey = lastGoingKeyRef.current
+    lastGoingKeyRef.current = goingKey
+    if (!votesRef.current) return
+
+    const going = new Set(goingList)
+    goingRef.current = going
+    applyVotes(votesRef.current, going)
+
+    // Premier passage (présences inconnues → liste) : le chargement initial
+    // s'en occupe déjà, inutile de doubler.
+    if (previousKey !== null && previousKey !== goingKey) {
+      void loadVotesOnly({ keepError: true })
+    }
+  }, [goingList, goingKey, applyVotes, loadVotesOnly])
 
   const toggleChoice = useCallback(
     async (parcoursId: string) => {

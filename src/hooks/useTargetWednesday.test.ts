@@ -100,4 +100,45 @@ describe('useTargetWednesday — pas de re-rendu inutile', () => {
     expect(result.current.date.getHours()).toBe(12)
     expect(result.current.date.getMinutes()).toBe(0)
   })
+
+  it('partage un seul timer entre tous les consommateurs', () => {
+    // Défaut d'origine : chaque appel du hook créait son propre setInterval,
+    // donc N composants = N timers et N re-rendus par tick.
+    vi.setSystemTime(new Date(2026, 9, 5, 9, 0, 0))
+    const sansAbonne = vi.getTimerCount()
+
+    const premier = renderHook(() => useTargetWednesday())
+    const avecUn = vi.getTimerCount()
+    expect(avecUn).toBe(sansAbonne + 1)
+
+    const deuxieme = renderHook(() => useTargetWednesday())
+    const troisieme = renderHook(() => useTargetWednesday())
+    expect(vi.getTimerCount()).toBe(avecUn)
+
+    premier.unmount()
+    deuxieme.unmount()
+    // Un abonné restant suffit : le timer ne doit pas être recréé.
+    expect(vi.getTimerCount()).toBe(avecUn)
+
+    troisieme.unmount()
+    // Plus personne n'écoute → le timer est libéré.
+    expect(vi.getTimerCount()).toBe(sansAbonne)
+  })
+
+  it('garde la même référence tant que la semaine ne change pas', () => {
+    // `useSyncExternalStore` compare les instantanés : en changer l'identité
+    // à chaque tick ferait re-rendre la page pour rien.
+    vi.setSystemTime(new Date(2026, 9, 5, 9, 0, 0))
+    const { result, rerender } = renderHook(() => useTargetWednesday())
+    const premier = result.current
+
+    for (let i = 0; i < 10; i++) {
+      act(() => {
+        vi.advanceTimersByTime(30_000)
+      })
+      rerender()
+    }
+
+    expect(result.current).toBe(premier)
+  })
 })

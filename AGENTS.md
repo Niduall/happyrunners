@@ -127,6 +127,10 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - `useTargetWednesday()` fournit l'horloge partagée (tick 30 s) : à **consommer**
   dans tout hook qui a besoin de la clé de semaine, sinon le hook fige sa clé au
   montage et affiche le run d'hier
+- L'horloge est un **store de module** : un seul `setInterval` pour toute
+  l'application, quel que soit le nombre d'appelants. Appeler le hook dans
+  chaque composant concerné est donc sans coût ; ne pas réintroduire un
+  `setInterval` local ni exiger un montage unique.
 - Cache météo lié à la semaine (`weather_cache_<weekKey>`) → invalidé à la bascule
 - Toute réponse réseau liée à la semaine (présences, votes, météo) est ignorée
   si une requête plus récente est partie ou si la clé de semaine a changé

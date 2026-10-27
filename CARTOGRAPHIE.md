@@ -458,6 +458,8 @@ fois dans `types/index.ts` et `types/supabase.ts`.
 `useAttendance.ts:41`, `useParcoursVotes.ts:61`, `useWeather.ts:28`,
 `ParcoursList.tsx:20`), donc cinq `setInterval` — alors que son propre
 commentaire (`useTargetWednesday.ts:8-11`) demande de le monter une seule fois.
+**Corrigé (tâche 21)** : l'horloge est un store de module, un seul timer pour
+tous les abonnés, libéré quand plus personne n'écoute.
 
 **C6.** `useParcoursVotes` relance un chargement réseau complet à chaque
 changement de la liste des présents (`:65,125,138-141`) : le commentaire
@@ -707,6 +709,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 18 | Données : PIN de `#14`, casse des noms | §5.B : choix assumés, aucune donnée modifiée | fait |
 | 19 | Pluie à 0 % et heures autour du run | `WeatherCard` : pluie toujours affichée ; bandeau 11h → 14h (`getRunWindow`) | fait |
 | 20 | Finitions d'interface (lot A) | une seule date, refus neutre, météo calmée, accent AA, cibles 44 px | fait |
+| 21 | Horloge partagée | C5 : un seul `setInterval` pour toute l'app, libéré sans abonné, instantané stable entre deux ticks | fait |
 
 **Pourquoi cet ordre.** Les tâches 1 à 3 ne touchent aucune donnée et se
 vérifient en une commande : autant commencer par elles. La tâche 4 vient

@@ -143,6 +143,8 @@ en base (historique) mais ne sont plus affichés.
 `useTargetWednesday()` fournit une horloge partagée (tick 30 s) consommée par
 `useAttendance`, `useParcoursVotes`, `useWeather` et `Home`. Sans ça, chaque hook
 figerait sa clé au montage et l'app afficherait le run d'hier toute la soirée.
+L'horloge est un store de module : un seul timer, quel que soit le nombre de
+consommateurs, et il s'arrête quand le dernier se démonte.
 
 ### Cache météo lié à la semaine
 Clé `weather_cache_<weekKey>` : quand la cible change à 14h, le cache est

@@ -1,17 +1,18 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useSyncExternalStore } from 'react'
 import { getCurrentWeekKey, getTargetWednesday, formatWeekLabel, isRunDay } from '../services/weekKey'
 
 /**
  * Horloge partagée : fournit la clé de semaine et se met à jour pour que la
  * bascule de 14h (mercredi) soit détectée même si l'app reste ouverte.
  *
- * ⚠️ Ce hook doit être monté UNE SEULE FOIS (dans `Home`) et le résultat
- * passé aux enfants via props/context. Si chaque hook consommateur a son
- * propre timer, on obtient N timers → N re-rendus par minute de toute la
- * page, ce qui est visible à l'écran.
+ * L'horloge vit au niveau du module : un seul `setInterval` pour toute
+ * l'application, quel que soit le nombre de composants qui appellent le hook.
+ * Il n'y a donc plus besoin de le monter une seule fois ni de passer le
+ * résultat par contexte — et un composant ajouté plus tard ne peut pas
+ * réintroduire un timer par appelant.
  *
- * Le tick ne force un re-render que si la clé a réellement changé (bascule
- * de 14h) : inutile de re-rendre pour rien.
+ * Le tick ne réveille les abonnés que si la clé a réellement changé (bascule
+ * de 14h) : inutile de re-rendre la page toutes les 30 s.
  */
 
 /** On vérifie toutes les 30 s — la bascule ne peut arriver qu'à 14h pile */
@@ -28,29 +29,53 @@ export interface TargetWednesday {
   isRunDay: boolean
 }
 
-export function useTargetWednesday(): TargetWednesday {
-  // Ne contient que la clé de semaine : change uniquement à la bascule
-  const [weekKey, setWeekKey] = useState(() => getCurrentWeekKey())
+/** Instantané courant. Son identité ne change qu'à la bascule de 14h. */
+function read(): TargetWednesday {
+  const now = new Date()
+  const weekKey = getCurrentWeekKey()
+  return {
+    weekKey,
+    weekLabel: formatWeekLabel(weekKey),
+    date: getTargetWednesday(now),
+    isRunDay: isRunDay(weekKey, now),
+  }
+}
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      const current = getCurrentWeekKey()
-      // setState avec la même valeur = bail-out de React, aucun rendu
-      setWeekKey(current)
-    }, TICK_MS)
-    return () => clearInterval(id)
-  }, [])
+let snapshot = read()
+let ticker: ReturnType<typeof setInterval> | null = null
+const subscribers = new Set<() => void>()
 
-  // Recalculé uniquement quand weekKey change (pas à chaque tick)
-  return useMemo(() => {
-    const now = new Date()
-    return {
-      weekKey,
-      weekLabel: formatWeekLabel(weekKey),
-      date: getTargetWednesday(now),
-      isRunDay: isRunDay(weekKey, now),
+function tick(): void {
+  const next = read()
+  // Même clé → aucun rendu : l'identité de l'instantané reste stable.
+  if (next.weekKey === snapshot.weekKey) return
+  snapshot = next
+  for (const notify of subscribers) notify()
+}
+
+function subscribe(notify: () => void): () => void {
+  // Premier abonné d'un nouveau cycle : le module peut dater d'un montage
+  // précédent (ou d'un test), on repart de l'heure courante.
+  if (subscribers.size === 0) snapshot = read()
+
+  subscribers.add(notify)
+  ticker ??= setInterval(tick, TICK_MS)
+
+  return () => {
+    subscribers.delete(notify)
+    if (subscribers.size === 0 && ticker !== null) {
+      clearInterval(ticker)
+      ticker = null
     }
-  }, [weekKey])
+  }
+}
+
+function getSnapshot(): TargetWednesday {
+  return snapshot
+}
+
+export function useTargetWednesday(): TargetWednesday {
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
 export { formatWeekLabel }

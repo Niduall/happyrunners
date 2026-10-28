@@ -344,6 +344,8 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues
-- Vulnérabilités npm présentes, non traitées — `npm audit` pour le détail et le compte à jour
+- Vulnérabilités npm : 4 restantes, toutes `low`, dans l'outillage de build
+  (`workbox-build` → `deepmerge`) — jamais servies aux utilisateurs, aucun
+  correctif amont disponible ; `npm audit` pour le détail
 - Bundle au-dessus de 500 kB — warning Vite, pas bloquant — `npm run build` pour la taille exacte
 - Sécurité du PIN faible par conception (hash client simple, pas d'auth serveur) — acceptable pour un club de collègues, **pas** pour un usage réel

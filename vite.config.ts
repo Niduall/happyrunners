@@ -1,8 +1,8 @@
-/// <reference types="vitest" />
-import { defineConfig } from 'vite'
+// `defineConfig` vient de Vitest : c'est lui qui type la section `test`.
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
-import { pwaManifest } from './src/config/pwaManifest'
+import { pwaManifest } from './src/config/pwaManifest.ts'
 
 export default defineConfig({
   plugins: [

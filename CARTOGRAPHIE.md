@@ -34,7 +34,9 @@
 | React | **19.3.0** | `^19.3.0` ✅ |
 | react-dom | **19.3.0** | `^19.3.0` ✅ |
 | TypeScript | 6.0.3 | `~6.0.2` |
-| Vite | 5.4.0 | `^5.4.0` |
+| Vite | **8.3.5** | `^8.3.5` |
+| Vitest | **5.0.5** | `^5.0.5` |
+| jsdom | **30.1.3** | `^30.1.3` |
 | Tailwind | 4.3.3 | `^4.3.3` |
 
 **Corrigé (tâche 1).** `react` et `react-dom` étaient importés partout mais
@@ -213,7 +215,7 @@ vides/invalides, conversion des coordonnées, distance, dénivelé (dont A8),
 
 | Fichier | Responsabilité | À savoir |
 |---|---|---|
-| `vite.config.ts` | build + PWA + config Vitest | le manifeste vient de `src/config/pwaManifest.ts` (testé) ; `includeAssets` cite `favicon.svg` et l'icône Apple |
+| `vite.config.ts` | build + PWA + config Vitest | `defineConfig` vient de `vitest/config` (tâche 27) ; le manifeste vient de `src/config/pwaManifest.ts` (testé, importé avec son extension) ; `includeAssets` cite `favicon.svg` et l'icône Apple |
 | `tsconfig.json` | TypeScript | `strict` activé (tâche 12) ; `noUnusedLocals` et `noUnusedParameters` aussi |
 | `.github/workflows/ci.yml` | CI GitHub Actions | `npm ci` + lint + tests + build sur push `main` et PR (tâche 24) |
 | `postcss.config.js` | `@tailwindcss/postcss` + autoprefixer | `autoprefixer` est redondant avec v4, sans effet |
@@ -549,7 +551,7 @@ le module part dans un chunk séparé, chargé au premier affichage de carte
 | ~~prop `onClick`~~ | `ui/Card.tsx` | **retirée (tâche 13)** |
 | ~~prop `loading`~~ | `ui/Button.tsx` | **retirée (tâche 13)** |
 | ~~`workbox-window`~~ | `package.json` | déclarée, importée nulle part — **retirée (tâche 1)** |
-| `vite-plugin-pwa` | `package.json` | outil de **build** classé en `dependencies` (alors que `vite` est en `devDependencies`) |
+| ~~`vite-plugin-pwa`~~ | `package.json` | outil de **build** classé en `dependencies` (alors que `vite` est en `devDependencies`) — **corrigé (tâche 27)** : passé en `devDependencies` |
 | ~~types jamais consommés~~ | `types/index.ts` | **retirés (tâche 13)** : `Coordinates`, `Participation`, `ParticipationStatus`, ré-exports `ParcoursInsert`/`Attendance`/`AttendanceStatus` |
 
 **Supprimés en tâche 2** : `src/main.ts`, `src/counter.ts`, `src/style.css`,
@@ -616,6 +618,19 @@ tâche 12).
   méthodes sont dans le chaînage, comme celles que le service appelle
   réellement (`eq`, `select`, `single`, `order`, `limit`, `insert`, `update`,
   `upsert`, `delete`).
+- ~~Dépendances d'outillage d'une génération de retard (Vite 5, Vitest 2,
+  `@vitejs/plugin-react` 4, `vite-plugin-pwa` 1, jsdom 25)~~ **Montées
+  (tâche 27)** : Vite 8.3.5 (moteur Rolldown), Vitest 5.0.5, plugin-react
+  6.1.2, vite-plugin-pwa 2.0.0, jsdom 30.1.3. Deux adaptations ont suffi dans
+  `vite.config.ts` : `defineConfig` vient désormais de `vitest/config` (Vitest 5
+  ne type plus la section `test` depuis `vite`), et l'import de
+  `pwaManifest.ts` porte son extension (chargeur de config natif de Vite 8).
+  Effets mesurés : build **~6,2 s → ~1,5 s**, bundle principal
+  **604,83 → 593,41 kB** (gzip 173,59 → 170,62), et `npm audit` **8 → 4
+  vulnérabilités**, toutes `low`, confinées à la chaîne de build
+  `vite-plugin-pwa → workbox-build → @rollup/plugin-node-resolve → deepmerge`
+  (jamais servie aux utilisateurs, sans correctif amont disponible).
+  `vite-plugin-pwa` a été reclassé en `devDependencies`, comme `vite`.
 
 ### I. Sauvegarde — `backup.py` (à traiter avant de s'en servir)
 
@@ -739,6 +754,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 24 | Intégration continue | H : lint + tests + build sur chaque push et PR — un test cassé ne part plus en prod | fait |
 | 25 | Une seule définition par concept | C4 : `GPXPoint` unique, `ProfileIdentity` / `UserIdentity`, conversion centralisée | fait |
 | 26 | Finitions de vocabulaire et de mock | C3 : `PresenceRow.status` ; `in`, `ilike`, `maybeSingle` ajoutés au mock Supabase | fait |
+| 27 | Montée d'outillage | H : Vite 8, Vitest 5, plugin-react 6, PWA 2, jsdom 30 ; 8 → 4 vulnérabilités `low` | fait |
 
 **Pourquoi cet ordre.** Les tâches 1 à 3 ne touchent aucune donnée et se
 vérifient en une commande : autant commencer par elles. La tâche 4 vient

@@ -1,17 +1,13 @@
-export interface GPXPoint {
-  lat: number
-  lng: number
-  ele?: number
-  time?: string
-}
-
 /**
  * Parcours — ré-exporté depuis les types DB pour éviter deux définitions
- * divergentes (l'app entière lit ce qui vient de Supabase).
+ * divergentes (l'app entière lit ce qui vient de Supabase). Idem pour
+ * `GPXPoint` : une seule définition, dans `types/supabase.ts`.
  */
 export type {
+  GPXPoint,
   Parcours,
   ParcoursSummary,
+  ProfileIdentity,
 } from './supabase'
 
 export interface WeatherData {
@@ -41,6 +37,16 @@ export interface WeatherForecast {
   current: WeatherData
   hourly: WeatherData[]
   daily: Array<WeatherData & { temp: { min: number; max: number } }>
+}
+
+/**
+ * Identité minimale d'une personne, en camelCase (forme application).
+ * `PendingUser` en est un alias : une seule forme pour le même concept.
+ */
+export interface UserIdentity {
+  userNumber: number
+  firstName: string
+  lastName: string
 }
 
 export interface User {

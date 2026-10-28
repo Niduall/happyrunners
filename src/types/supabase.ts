@@ -1,3 +1,9 @@
+/**
+ * Un point d'un tracé GPX.
+ *
+ * Définition unique : `types/index.ts` la ré-exporte. Ne pas en créer une
+ * seconde copie dans un autre fichier de types.
+ */
 export interface GPXPoint {
   lat: number
   lng: number
@@ -91,6 +97,13 @@ export interface UserProfile {
   created_at: string
   updated_at: string
 }
+
+/**
+ * Les trois champs d'identité d'un profil, en snake_case (forme base).
+ * Utilisé partout où seuls le numéro et le nom sont nécessaires — évite de
+ * réécrire la même forme à la main.
+ */
+export type ProfileIdentity = Pick<UserProfile, 'user_number' | 'first_name' | 'last_name'>
 
 export interface UserProfileInsert {
   first_name: string

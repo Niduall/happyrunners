@@ -10,6 +10,7 @@ import type {
   UserProfile,
   UserProfileInsert,
   UserProfileUpdate,
+  ProfileIdentity,
   GPXPoint,
 } from '../types/supabase'
 
@@ -193,7 +194,7 @@ export async function getWeekAttendances(weekKey: string): Promise<Attendee[]> {
   }
 
   const names = new Map(
-    ((profiles || []) as { user_number: number; first_name: string; last_name: string }[]).map((p) => [
+    ((profiles || []) as ProfileIdentity[]).map((p) => [
       p.user_number,
       { firstName: p.first_name, lastName: p.last_name },
     ])

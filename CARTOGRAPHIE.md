@@ -157,15 +157,15 @@ Toutes les lignes sont sous `running-app/`.
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/types/supabase.ts` | types des lignes DB en snake_case | 96 |
-| `src/types/index.ts` | types applicatifs + ré-exports DB | 54 |
+| `src/types/supabase.ts` | types des lignes DB en snake_case — **source unique** de `GPXPoint` et `ProfileIdentity` | 118 |
+| `src/types/index.ts` | types applicatifs (`User`, `UserIdentity`) + ré-exports DB | 60 |
 | `src/lib/supabase.ts` | instancie le client Supabase | 15 |
 | `src/lib/utils.ts` | `cn()` = `clsx`, **sans fusion Tailwind** | 4 |
-| `src/test/setup.ts` | mock global Vitest + nettoyage | 40 |
+| `src/test/setup.ts` | mock global Vitest + nettoyage | 58 |
 
 ### 2.8 Tests
 
-23 fichiers, 288 tests, ~30 s.
+34 fichiers, 440 tests, ~30 s.
 
 | Fichier | Couvre |
 |---|---|
@@ -452,10 +452,12 @@ une création de profil sur une simple panne.
 (`ParticipantsTable.tsx:9`), `user?.id` passé à `currentUserNumber`
 (`Home.tsx:341`).
 
-**C4.** Conversion snake_case ↔ camelCase refaite à la main dans chaque
-fonction (`supabaseService.ts:179-184,233-238`, `useAuth.tsx:57-63`). Le type
-`Participation` dupliqué a été retiré (tâche 13) ; `GPXPoint` reste défini à la
-fois dans `types/index.ts` et `types/supabase.ts`.
+**C4. — corrigé (tâche 25).** Les conversions snake_case ↔ camelCase étaient
+réécrites à la main à plusieurs endroits. Désormais : `GPXPoint` n'a **qu'une
+définition** (`types/supabase.ts`, ré-exportée par `types/index.ts`) ;
+`ProfileIdentity` (`Pick<UserProfile, …>`) remplace les trois formes inline ;
+`UserIdentity` (camelCase) sert de base à `PendingUser`, et `identityOf()`
+centralise la conversion profil → identité dans `useAuth.tsx`.
 
 **C5.** `useTargetWednesday` instancié **cinq fois** (`Home.tsx:33`,
 `useAttendance.ts:41`, `useParcoursVotes.ts:61`, `useWeather.ts:28`,
@@ -732,6 +734,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 22 | Chargement différé de la carte | D7 : Leaflet (~150 kB min / 43 kB gzip) sort du bundle principal, chargé au premier tracé | fait |
 | 23 | Recalcul local des votes | C6 : un changement de présence ne relance plus de chargement ni n'efface l'affichage | fait |
 | 24 | Intégration continue | H : lint + tests + build sur chaque push et PR — un test cassé ne part plus en prod | fait |
+| 25 | Une seule définition par concept | C4 : `GPXPoint` unique, `ProfileIdentity` / `UserIdentity`, conversion centralisée | fait |
 
 **Pourquoi cet ordre.** Les tâches 1 à 3 ne touchent aucune donnée et se
 vérifient en une commande : autant commencer par elles. La tâche 4 vient

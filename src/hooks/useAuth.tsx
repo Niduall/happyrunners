@@ -8,16 +8,14 @@ import {
 } from '../services/supabaseService'
 import { hashPin } from '../services/pin'
 import { isAdminLockEnabled } from '../services/adminCode'
+import type { ProfileIdentity, UserIdentity } from '../types'
 
 export type { User }
 
 export type AuthMode = 'loading' | 'first_login' | 'pin_verification' | 'authenticated'
 
-export interface PendingUser {
-  userNumber: number
-  firstName: string
-  lastName: string
-}
+/** Identité en attente de vérification du PIN — voir `UserIdentity`. */
+export type PendingUser = UserIdentity
 
 export interface AuthState {
   user: User | null
@@ -60,18 +58,28 @@ export interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null)
 
+/** Profil base (snake_case) → identité application (camelCase). */
+function identityOf(profile: ProfileIdentity): UserIdentity {
+  return {
+    userNumber: profile.user_number,
+    firstName: profile.first_name,
+    lastName: profile.last_name,
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [mode, setMode] = useState<AuthMode>('loading')
   const [pendingUser, setPendingUser] = useState<PendingUser | null>(null)
 
   const connect = useCallback(
-    (profile: { user_number: number; first_name: string; last_name: string }) => {
+    (profile: ProfileIdentity) => {
+      const { userNumber, firstName, lastName } = identityOf(profile)
       const localUser: User = {
-        id: profile.user_number,
-        firstName: profile.first_name,
-        lastName: profile.last_name,
-        name: `${profile.first_name} ${profile.last_name}`.trim(),
+        id: userNumber,
+        firstName,
+        lastName,
+        name: `${firstName} ${lastName}`.trim(),
       }
       setUserStorage(localUser)
       setUser(localUser)
@@ -82,12 +90,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const requestPin = useCallback(
-    (profile: { user_number: number; first_name: string; last_name: string }) => {
-      setPendingUser({
-        userNumber: profile.user_number,
-        firstName: profile.first_name,
-        lastName: profile.last_name,
-      })
+    (profile: ProfileIdentity) => {
+      setPendingUser(identityOf(profile))
       setMode('pin_verification')
     },
     []

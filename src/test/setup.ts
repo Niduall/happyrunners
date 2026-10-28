@@ -11,9 +11,12 @@ vi.mock('../lib/supabase', () => {
     upsert: () => mockQuery,
     delete: () => mockQuery,
     eq: () => mockQuery,
+    in: () => mockQuery,
+    ilike: () => mockQuery,
     order: () => mockQuery,
     limit: () => mockQuery,
     single: () => Promise.resolve({ data: null, error: null }),
+    maybeSingle: () => Promise.resolve({ data: null, error: null }),
     then: (resolve: (v: unknown) => unknown) => resolve({ data: [], error: null }),
   }
 

@@ -6,7 +6,7 @@ export interface PresenceRow {
   userNumber: number
   firstName: string
   lastName: string
-  attendance: AttendanceStatus | null
+  status: AttendanceStatus | null
   parcoursName: string | null
 }
 
@@ -39,8 +39,8 @@ const colorFor = (userNumber: number): string =>
 /** Tri : présents → en attente → absents, alphabétique à l'intérieur de chaque groupe */
 export function sortPresenceRows(rows: PresenceRow[]): PresenceRow[] {
   const rank = (a: PresenceRow): number => {
-    if (a.attendance === 'going') return 0
-    if (a.attendance === null) return 1
+    if (a.status === 'going') return 0
+    if (a.status === null) return 1
     return 2 // skip
   }
 
@@ -80,9 +80,9 @@ function StatusBadge({ status }: { status: AttendanceStatus | null }) {
 export function ParticipantsTable({ rows, currentUserNumber }: ParticipantsTableProps) {
   const sorted = sortPresenceRows(rows)
 
-  const going = sorted.filter((r) => r.attendance === 'going').length
-  const pending = sorted.filter((r) => r.attendance === null).length
-  const skip = sorted.filter((r) => r.attendance === 'skip').length
+  const going = sorted.filter((r) => r.status === 'going').length
+  const pending = sorted.filter((r) => r.status === null).length
+  const skip = sorted.filter((r) => r.status === 'skip').length
 
   /** Résumé qui remplace un second titre « Présence » et le rappel de semaine. */
   const summary = [
@@ -120,7 +120,7 @@ export function ParticipantsTable({ rows, currentUserNumber }: ParticipantsTable
             <tbody>
               {sorted.map((row) => {
                 const isMe = row.userNumber === currentUserNumber
-                const isAbsent = row.attendance === 'skip'
+                const isAbsent = row.status === 'skip'
                 return (
                   <tr
                     key={row.userNumber}
@@ -144,7 +144,7 @@ export function ParticipantsTable({ rows, currentUserNumber }: ParticipantsTable
                       </div>
                     </td>
                     <td className="py-2 pr-4 whitespace-nowrap">
-                      <StatusBadge status={row.attendance} />
+                      <StatusBadge status={row.status} />
                     </td>
                     <td className="py-2 text-gray-700">
                       {row.parcoursName || <span className="text-gray-400">—</span>}

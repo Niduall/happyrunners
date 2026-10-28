@@ -161,7 +161,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/types/index.ts` | types applicatifs (`User`, `UserIdentity`) + ré-exports DB | 60 |
 | `src/lib/supabase.ts` | instancie le client Supabase | 15 |
 | `src/lib/utils.ts` | `cn()` = `clsx`, **sans fusion Tailwind** | 4 |
-| `src/test/setup.ts` | mock global Vitest + nettoyage | 58 |
+| `src/test/setup.ts` | mock global Vitest + nettoyage | 61 |
 
 ### 2.8 Tests
 
@@ -447,10 +447,11 @@ Correction : contrat documenté et appliqué — `false` = refus métier, une pa
 (« Impossible de… ») et conservent la saisie ; `profileExists` ne propose plus
 une création de profil sur une simple panne.
 
-**C3.** Trois vocabulaires pour la même notion à la frontière UI ↔ service :
-`presence` / `attendance`, `Attendee.status` → `PresenceRow.attendance`
-(`ParticipantsTable.tsx:9`), `user?.id` passé à `currentUserNumber`
-(`Home.tsx:341`).
+**C3. — corrigé (tâche 26).** Un seul mot pour le statut de présence :
+`PresenceRow.attendance` est devenu `PresenceRow.status`, comme
+`Attendee.status` et la colonne `attendances.status`. Le seul écart restant est
+assumé et documenté : `User.id` contient un `user_number` ; le renommer
+casserait les sessions déjà enregistrées en `localStorage`.
 
 **C4. — corrigé (tâche 25).** Les conversions snake_case ↔ camelCase étaient
 réécrites à la main à plusieurs endroits. Désormais : `GPXPoint` n'a **qu'une
@@ -609,10 +610,12 @@ tâche 12).
   (`removeEventListener` sur un objet qui n'est pas un `EventTarget`)~~ :
   **disparue** — suite relancée le 28/10/2026, 34 fichiers / 440 tests sans
   erreur de teardown.
-- Le mock Supabase global (`src/test/setup.ts:7-18`) ne définit ni `maybeSingle`,
+- ~~Le mock Supabase global (`src/test/setup.ts:7-18`) ne définit ni `maybeSingle`,
   ni `in`, ni `ilike`, alors que le vrai service les utilise
-  (`supabaseService.ts:35,80,132,170,269`) : ce mock ne peut pas exercer le
-  service réel.
+  (`supabaseService.ts:35,80,132,170,269`)~~ **Complété (tâche 26)** : les trois
+  méthodes sont dans le chaînage, comme celles que le service appelle
+  réellement (`eq`, `select`, `single`, `order`, `limit`, `insert`, `update`,
+  `upsert`, `delete`).
 
 ### I. Sauvegarde — `backup.py` (à traiter avant de s'en servir)
 
@@ -735,6 +738,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 23 | Recalcul local des votes | C6 : un changement de présence ne relance plus de chargement ni n'efface l'affichage | fait |
 | 24 | Intégration continue | H : lint + tests + build sur chaque push et PR — un test cassé ne part plus en prod | fait |
 | 25 | Une seule définition par concept | C4 : `GPXPoint` unique, `ProfileIdentity` / `UserIdentity`, conversion centralisée | fait |
+| 26 | Finitions de vocabulaire et de mock | C3 : `PresenceRow.status` ; `in`, `ilike`, `maybeSingle` ajoutés au mock Supabase | fait |
 
 **Pourquoi cet ordre.** Les tâches 1 à 3 ne touchent aucune donnée et se
 vérifient en une commande : autant commencer par elles. La tâche 4 vient

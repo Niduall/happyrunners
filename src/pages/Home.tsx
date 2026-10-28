@@ -103,7 +103,7 @@ export function Home() {
         userNumber: a.userNumber,
         firstName: a.firstName,
         lastName: a.lastName,
-        attendance: a.status,
+        status: a.status,
         parcoursName: chosenId ? (parcoursById.get(chosenId)?.name ?? null) : null,
       }
     })

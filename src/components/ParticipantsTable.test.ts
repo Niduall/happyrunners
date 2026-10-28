@@ -7,9 +7,9 @@ let nextUserNumber = 1
 const row = (
   firstName: string,
   lastName: string,
-  attendance: PresenceRow['attendance'],
+  status: PresenceRow['status'],
   parcoursName: string | null = null
-): PresenceRow => ({ userNumber: nextUserNumber++, firstName, lastName, attendance, parcoursName })
+): PresenceRow => ({ userNumber: nextUserNumber++, firstName, lastName, status, parcoursName })
 
 describe('sortPresenceRows', () => {
   it('met les présents en premier, puis en attente, puis absents', () => {

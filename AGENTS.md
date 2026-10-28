@@ -310,6 +310,9 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
 ## Deployment
 - GitHub : `Niduall/happyrunners` (branche `main`)
 - Vercel auto-deploy au push sur `main` → **nécessite validation utilisateur avant push**
+- CI GitHub Actions (`.github/workflows/ci.yml`) : `npm ci` + lint + tests + build
+  sur chaque push `main` et PR. Vercel ne lance que `npm run build` : ne pas
+  pousser sur un run rouge.
 - Env vars : Vercel Dashboard → Settings → Environment Variables
 
 ## Common Pitfalls to Avoid

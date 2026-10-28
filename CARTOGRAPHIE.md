@@ -214,7 +214,8 @@ vides/invalides, conversion des coordonnées, distance, dénivelé (dont A8),
 | Fichier | Responsabilité | À savoir |
 |---|---|---|
 | `vite.config.ts` | build + PWA + config Vitest | le manifeste vient de `src/config/pwaManifest.ts` (testé) ; `includeAssets` cite `favicon.svg` et l'icône Apple |
-| `tsconfig.json` | TypeScript | ⚠️ **`strict` absent** ⇒ mode non-strict ; `noUnusedLocals: false` |
+| `tsconfig.json` | TypeScript | `strict` activé (tâche 12) ; `noUnusedLocals` et `noUnusedParameters` aussi |
+| `.github/workflows/ci.yml` | CI GitHub Actions | `npm ci` + lint + tests + build sur push `main` et PR (tâche 24) |
 | `postcss.config.js` | `@tailwindcss/postcss` + autoprefixer | `autoprefixer` est redondant avec v4, sans effet |
 | `.env` | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_ADMIN_CODE` | non versionné ✅ |
 
@@ -591,19 +592,21 @@ tâche 12).
 
 - ~~**Aucun linter**~~ **Linter ajouté (tâche 12)** : ESLint 10 +
   `typescript-eslint` + `eslint-plugin-react-hooks`, avec `npm run lint` et
-  `npm run lint:fix`. Pas de formateur ni de CI (hors périmètre de la tâche 12) ;
-  il reste 5 avertissements `any` dans le parser GPX et la réponse Open-Meteo
-  (tâche 13).
+  `npm run lint:fix`. Il reste un manque : aucun formateur.
+- **Aucune CI — corrigé (tâche 24).** GitHub Actions exécute `npm ci`,
+  `npm run lint`, `npm test` et `npm run build` sur chaque push vers `main` et
+  chaque pull request (`.github/workflows/ci.yml`). Vercel, lui, ne lance que
+  `npm run build` : sans CI, un test cassé pouvait être déployé.
 - ~~`tsconfig.json` : **`strict` absent**, `noUnusedLocals: false`,
   `noUnusedParameters: false`~~ **Corrigé (tâche 12)** : `strict`,
   `noUnusedLocals` et `noUnusedParameters` sont activés. Les 15 symboles morts
   détectés ont été retirés.
-- `npm test` termine avec une erreur non gérée du harnais :
-  `TypeError: 'removeEventListener' called on an object that is not a valid
-  instance of EventTarget` (teardown jsdom ↔ Vitest). Sans effet sur les
-  résultats, mais bruit permanent qui finira par masquer un vrai échec.
 - ~~`tsconfig.json` a `include: ["src"]`~~ **Corrigé (tâche 12)** :
   `vite.config.ts` est maintenant type-checké.
+- ~~`npm test` termine avec une erreur non gérée du harnais
+  (`removeEventListener` sur un objet qui n'est pas un `EventTarget`)~~ :
+  **disparue** — suite relancée le 28/10/2026, 34 fichiers / 440 tests sans
+  erreur de teardown.
 - Le mock Supabase global (`src/test/setup.ts:7-18`) ne définit ni `maybeSingle`,
   ni `in`, ni `ilike`, alors que le vrai service les utilise
   (`supabaseService.ts:35,80,132,170,269`) : ce mock ne peut pas exercer le
@@ -728,6 +731,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 21 | Horloge partagée | C5 : un seul `setInterval` pour toute l'app, libéré sans abonné, instantané stable entre deux ticks | fait |
 | 22 | Chargement différé de la carte | D7 : Leaflet (~150 kB min / 43 kB gzip) sort du bundle principal, chargé au premier tracé | fait |
 | 23 | Recalcul local des votes | C6 : un changement de présence ne relance plus de chargement ni n'efface l'affichage | fait |
+| 24 | Intégration continue | H : lint + tests + build sur chaque push et PR — un test cassé ne part plus en prod | fait |
 
 **Pourquoi cet ordre.** Les tâches 1 à 3 ne touchent aucune donnée et se
 vérifient en une commande : autant commencer par elles. La tâche 4 vient

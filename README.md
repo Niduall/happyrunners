@@ -1,5 +1,7 @@
 # HappyRunners 🏃‍♂️
 
+[![CI](https://github.com/Niduall/happyrunners/actions/workflows/ci.yml/badge.svg)](https://github.com/Niduall/happyrunners/actions/workflows/ci.yml)
+
 Application PWA pour organiser les sorties running du mercredi midi avec les collègues.
 
 ## Fonctionnalités

@@ -22,6 +22,7 @@ vi.mock('../services/supabaseService', () => ({
   getWeekTallies: vi.fn().mockResolvedValue([]),
   getWeekVotes: vi.fn().mockResolvedValue([]),
   getWeekAttendances: vi.fn().mockResolvedValue([]),
+  getAllProfiles: vi.fn().mockResolvedValue([]),
   getUserProfile: vi.fn(),
   findProfileByName: vi.fn(),
   createUserProfile: vi.fn(),

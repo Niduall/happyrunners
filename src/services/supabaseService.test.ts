@@ -6,6 +6,7 @@ import {
   getWeekVotes,
   getWeekTallies,
   getWeekAttendances,
+  getAllProfiles,
 } from './supabaseService'
 import { supabase } from '../lib/supabase'
 
@@ -112,6 +113,35 @@ describe('getParcours — le tracé n’est pas dans la liste', () => {
 
     expect(mockSelectColumns).toHaveBeenCalledWith('points')
     expect(points).toEqual([{ lat: 48.6, lng: 6.1 }])
+  })
+})
+
+describe('getAllProfiles — l’annuaire complet', () => {
+  it('ne lit que les trois colonnes d’identité', async () => {
+    mockProfiles.mockReturnValue([
+      { user_number: 1, first_name: 'Ada', last_name: 'Lovelace' },
+      { user_number: 2, first_name: 'Alan', last_name: 'Turing' },
+    ])
+
+    const list = await getAllProfiles()
+
+    expect(mockSelectColumns).toHaveBeenCalledWith('user_number,first_name,last_name')
+    expect(list).toEqual([
+      { user_number: 1, first_name: 'Ada', last_name: 'Lovelace' },
+      { user_number: 2, first_name: 'Alan', last_name: 'Turing' },
+    ])
+  })
+
+  it('propage une erreur de lecture', async () => {
+    mockProfilesError.mockReturnValue(new Error('lecture refusée'))
+
+    await expect(getAllProfiles()).rejects.toThrow('lecture refusée')
+  })
+
+  it('retourne un tableau vide quand il n’y a personne', async () => {
+    mockProfiles.mockReturnValue(null)
+
+    await expect(getAllProfiles()).resolves.toEqual([])
   })
 })
 

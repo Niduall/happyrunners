@@ -14,6 +14,8 @@ import { useWeather } from '../hooks/useWeather'
 import { useParcours } from '../hooks/useParcours'
 import { useParcoursVotes } from '../hooks/useParcoursVotes'
 import { useAttendance } from '../hooks/useAttendance'
+import { useProfiles } from '../hooks/useProfiles'
+import { mergePresenceRows } from '../services/presenceRows'
 import { getRunForecast, getRunWindow, daysUntilRun } from '../services/weatherApi'
 import { useTargetWednesday } from '../hooks/useTargetWednesday'
 
@@ -49,6 +51,12 @@ export function Home() {
     setMyStatus,
     showParcours,
   } = useAttendance()
+
+  /**
+   * L'annuaire complet : il permet d'afficher aussi les personnes qui n'ont
+   * pas répondu. Échec silencieux → on retombe sur les seules réponses.
+   */
+  const { profiles } = useProfiles(isAuthenticated)
 
   /**
    * Qui a dit « je viens ». Passe aux votes pour qu'un choix d'un absent
@@ -91,23 +99,19 @@ export function Home() {
 
   const tieVotes = isTie ? (tallies[winners[0]]?.yes ?? 0) : 0
 
-  /** Une ligne par personne ayant répondu, avec le parcours qu'elle a choisi */
-  const presenceRows = useMemo<PresenceRow[]>(() => {
-    return attendees.map((a) => {
-      // Seuls les présents comptent. Un vote résiduel d'un absent — ou
-      // d'une personne qui n'a jamais répondu — ne doit jamais apparaître
-      // dans le tableau ni peser sur le choix du groupe.
-      const isGoing = a.status === 'going'
-      const chosenId = isGoing ? choiceOf(a.userNumber) : null
-      return {
-        userNumber: a.userNumber,
-        firstName: a.firstName,
-        lastName: a.lastName,
-        status: a.status,
-        parcoursName: chosenId ? (parcoursById.get(chosenId)?.name ?? null) : null,
-      }
-    })
-  }, [attendees, choiceOf, parcoursById])
+  /**
+   * Une ligne par personne du groupe : présents, absents, et sans réponse.
+   * Les choix de parcours ne sont lus que pour ceux qui viennent — un vote
+   * résiduel d'un absent ne doit jamais apparaître ici.
+   */
+  const presenceRows = useMemo<PresenceRow[]>(
+    () =>
+      mergePresenceRows(profiles, attendees, (userNumber) => {
+        const chosenId = choiceOf(userNumber)
+        return chosenId ? (parcoursById.get(chosenId)?.name ?? null) : null
+      }),
+    [profiles, attendees, choiceOf, parcoursById]
+  )
 
   /** Prévision du jour du run à 12h30 ; null si hors couverture API */
   const runForecast = useMemo(() => {

@@ -74,6 +74,7 @@ deux tables mortes supprimées à la fin du fichier (`schema.sql:202-203`).
    Home.tsx ────▶ │ useAttendance  (30 s)  ──▶ attendances   │
      │           │ useParcoursVotes(30 s) ──▶ participations│──▶ Supabase
      │           │ useParcours    (30 s)  ──▶ parcours      │
+     │           │ useProfiles (1 fois)   ──▶ user_profiles │
      │           │ useWeather     (30 min)──▶ Open-Meteo   │
      │           │ useTargetWednesday (30 s, sans réseau)   │
      │           └──────────────────────────────────────────┘
@@ -113,7 +114,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/components/Auth.tsx` | identité / création de compte / saisie PIN | 413 |
 | `src/components/SecurityModal.tsx` | gestion du PIN : ajouter, changer, retirer | 258 |
 | `src/components/ParcoursCard.tsx` | carte parcours en mode gestion (import GPX, actions admin) | 170 |
-| `src/components/ParticipantsTable.tsx` | tableau présence + parcours choisi, tri, avatars | 163 |
+| `src/components/ParticipantsTable.tsx` | tableau du groupe : tout le monde, tri présents → sans réponse → absents, avatars | 165 |
 | `src/components/UserMenu.tsx` | menu utilisateur : nom, édition, Sécurité, déconnexion | 161 |
 | `src/components/WeatherCard.tsx` | météo, deux mises en page (compacte / complète) | 146 |
 | `src/components/MapView.tsx` | carte Leaflet : polyligne + marqueurs départ/arrivée | 123 |
@@ -138,6 +139,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/hooks/useAuth.tsx` | Context d'authentification : identité par nom, PIN, profil, cache | 355 |
 | `src/hooks/useParcoursVotes.ts` | votes + présences, filtre des votants, compteurs, vainqueurs | 268 |
 | `src/hooks/useAttendance.ts` | présence hebdo, polling 30 s, état optimiste | 155 |
+| `src/hooks/useProfiles.ts` | annuaire complet, chargé une fois à la connexion (pas avant) | 52 |
 | `src/hooks/useWeather.ts` | météo, cache par semaine, rafraîchissement 30 min | 149 |
 | `src/hooks/useParcours.ts` | CRUD parcours, parsing GPX, polling 30 s | 80 |
 | `src/hooks/useTargetWednesday.ts` | horloge de semaine cible (tick 30 s, sans réseau) | 56 |
@@ -146,7 +148,8 @@ Toutes les lignes sont sous `running-app/`.
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/services/supabaseService.ts` | toutes les requêtes Supabase | 306 |
+| `src/services/supabaseService.ts` | toutes les requêtes Supabase | 343 |
+| `src/services/presenceRows.ts` | fusion annuaire + réponses : qui vient, qui est absent, qui n'a pas répondu | 50 |
 | `src/services/gpxParser.ts` | parse GPX XML (DOMParser natif) et JSON Strava, distance, dénivelé, simplification | 265 |
 | `src/services/weatherApi.ts` | client Open-Meteo + sélection de la prévision du mercredi 12h30 | 343 |
 | `src/services/storage.ts` | cache localStorage de l'utilisateur (id entier uniquement) | 46 |
@@ -160,14 +163,14 @@ Toutes les lignes sont sous `running-app/`.
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
 | `src/types/supabase.ts` | types des lignes DB en snake_case — **source unique** de `GPXPoint` et `ProfileIdentity` | 118 |
-| `src/types/index.ts` | types applicatifs (`User`, `UserIdentity`) + ré-exports DB | 60 |
+| `src/types/index.ts` | types applicatifs (`User`, `UserIdentity`, `PresenceRow`) + ré-exports DB | 77 |
 | `src/lib/supabase.ts` | instancie le client Supabase | 15 |
 | `src/lib/utils.ts` | `cn()` = `clsx`, **sans fusion Tailwind** | 4 |
 | `src/test/setup.ts` | mock global Vitest + nettoyage | 61 |
 
 ### 2.8 Tests
 
-34 fichiers, 440 tests, ~30 s.
+36 fichiers, 454 tests, ~30 s.
 
 | Fichier | Couvre |
 |---|---|
@@ -194,6 +197,8 @@ Toutes les lignes sont sous `running-app/`.
 | `src/components/ParcoursVoteCard.test.tsx` | bouton de vote |
 | `src/components/LazyMapView.test.tsx` | fallback puis carte, hauteur par défaut |
 | `src/components/ParticipantsTable.test.ts` | tri des lignes |
+| `src/services/presenceRows.test.ts` | fusion annuaire + réponses : tout le monde, sans doublon, absents sans parcours |
+| `src/hooks/useProfiles.test.tsx` | annuaire chargé une fois, repli si la lecture échoue |
 | `src/services/pin.test.ts` | `hashPin` |
 | `src/pages/Home.weather.test.tsx` | météo sur la page d'accueil |
 
@@ -246,6 +251,7 @@ Table de référence pour éviter de corriger une règle à un seul endroit.
 | Un seul choix de présence par semaine | `schema.sql:81` | ✅ tenu par la base |
 | **Un vote ne compte que si la personne vient** | `useParcoursVotes.ts:91-113` (client) | ⚠️ **pas en base**, et **contredit** par `getWeekTallies` (§5.C1) |
 | « Pas aujourd'hui » retire aussi le choix de parcours | `useAttendance` (suppression du vote) | ✅ client |
+| **Le tableau de présence montre tout le groupe** | `useProfiles` (annuaire) + `presenceRows.ts` (fusion) | ✅ une seule fusion, `null` = sans réponse |
 | Statuts de présence `going`/`skip` | `types/supabase.ts:52` + `schema.sql:75` | ✅ |
 | Statut de vote `yes`/`no` | écrit en clair à 5 endroits (`types/supabase.ts:47,57`, `supabaseService.ts:219,241,281`) | ⚠️ pas de type partagé ; `'no'` n'est **jamais écrit** par l'app |
 | Code admin | `src/services/adminCode.ts` + `VITE_ADMIN_CODE` | ✅ mais présent **en clair** dans le bundle (§6) |
@@ -277,6 +283,7 @@ vidé (`useAuth.tsx:98-102`).
 |---|---|---|
 | `useParcours` | `parcours?select=*` | 30 s |
 | `useAttendance` | `attendances` puis `user_profiles` | 30 s |
+| `useProfiles` | `user_profiles` (3 colonnes) | **une fois au montage** |
 | `useParcoursVotes` | `participations` + `attendances` (résultat jeté) + `user_profiles` | 30 s |
 | `useWeather` | Open-Meteo | 30 min |
 
@@ -755,6 +762,7 @@ Légende : `à faire` · `en cours` · `fait`
 | 25 | Une seule définition par concept | C4 : `GPXPoint` unique, `ProfileIdentity` / `UserIdentity`, conversion centralisée | fait |
 | 26 | Finitions de vocabulaire et de mock | C3 : `PresenceRow.status` ; `in`, `ilike`, `maybeSingle` ajoutés au mock Supabase | fait |
 | 27 | Montée d'outillage | H : Vite 8, Vitest 5, plugin-react 6, PWA 2, jsdom 30 ; 8 → 4 vulnérabilités `low` | fait |
+| 28 | Tableau de présence complet (produit) | Tout le groupe visible : présents, absents et **sans réponse** (`useProfiles` + `presenceRows.ts`) | fait |
 
 **Pourquoi cet ordre.** Les tâches 1 à 3 ne touchent aucune donnée et se
 vérifient en une commande : autant commencer par elles. La tâche 4 vient

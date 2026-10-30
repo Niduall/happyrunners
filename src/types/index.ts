@@ -4,11 +4,28 @@
  * `GPXPoint` : une seule définition, dans `types/supabase.ts`.
  */
 export type {
+  AttendanceStatus,
   GPXPoint,
   Parcours,
   ParcoursSummary,
   ProfileIdentity,
 } from './supabase'
+
+import type { AttendanceStatus as Status } from './supabase'
+
+/**
+ * Une ligne du tableau « Qui vient ? ».
+ *
+ * Tout le monde y figure : `status` vaut `null` tant que la personne n'a pas
+ * répondu à la question de la semaine.
+ */
+export interface PresenceRow {
+  userNumber: number
+  firstName: string
+  lastName: string
+  status: Status | null
+  parcoursName: string | null
+}
 
 export interface WeatherData {
   temperature: number

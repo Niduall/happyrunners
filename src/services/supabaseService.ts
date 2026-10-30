@@ -152,6 +152,23 @@ export async function findProfileByName(
   return data || null
 }
 
+/**
+ * Tout l'annuaire, du plus petit au plus grand numéro.
+ *
+ * Trois colonnes seulement : le tableau de présence affiche les noms des
+ * personnes qui n'ont pas encore répondu, sans charger leur PIN ni leurs
+ * dates. `ProfileIdentity` évite de réécrire la forme à la main.
+ */
+export async function getAllProfiles(): Promise<ProfileIdentity[]> {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('user_number,first_name,last_name')
+    .order('user_number')
+
+  if (error) throw error
+  return (data || []) as ProfileIdentity[]
+}
+
 // ===== ATTENDANCES (réponse globale) =====
 
 /** Une réponse "je viens / je ne viens pas", avec le nom affiché */

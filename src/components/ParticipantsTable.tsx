@@ -1,14 +1,11 @@
 import { CheckCircle2, Clock, XCircle } from 'lucide-react'
-import type { AttendanceStatus } from '../services/supabaseService'
+import type { AttendanceStatus, PresenceRow } from '../types'
 import { Card, CardContent } from './ui/Card'
 
-export interface PresenceRow {
-  userNumber: number
-  firstName: string
-  lastName: string
-  status: AttendanceStatus | null
-  parcoursName: string | null
-}
+// Le type de ligne est défini dans `types/index.ts` (partagé avec le service
+// qui fusionne annuaire et réponses) ; on le ré-exporte pour ne pas casser
+// les imports existants.
+export type { PresenceRow }
 
 interface ParticipantsTableProps {
   rows: PresenceRow[]
@@ -69,8 +66,11 @@ function StatusBadge({ status }: { status: AttendanceStatus | null }) {
       </span>
     )
   }
+  // « Pas encore répondu » n'est pas une alerte : c'est l'état par défaut de
+  // la plupart des gens. Gris, sans couleur d'avertissement — l'ambre
+  // attirait l'œil sur dix lignes et volait la vedette aux présents.
   return (
-    <span className="inline-flex items-center gap-1.5 text-amber-600">
+    <span className="inline-flex items-center gap-1.5 text-gray-500">
       <Clock className="w-4 h-4" />
       en attente
     </span>
@@ -121,18 +121,23 @@ export function ParticipantsTable({ rows, currentUserNumber }: ParticipantsTable
               {sorted.map((row) => {
                 const isMe = row.userNumber === currentUserNumber
                 const isAbsent = row.status === 'skip'
+                const isPending = row.status === null
                 return (
                   <tr
                     key={row.userNumber}
                     className={`border-b border-gray-100 last:border-0 ${
                       isAbsent ? 'opacity-50' : ''
-                    } ${isMe ? 'bg-primary/5' : ''}`}
+                    } ${isPending ? 'text-gray-500' : ''} ${isMe ? 'bg-primary/5' : ''}`}
                   >
                     <td className="py-2 pr-4">
                       <div className="flex items-center gap-2">
                         <div
                           className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${
-                            isAbsent ? 'bg-gray-200 text-gray-500' : colorFor(row.userNumber)
+                            isAbsent
+                              ? 'bg-gray-200 text-gray-500'
+                              : isPending
+                                ? 'bg-gray-100 text-gray-400'
+                                : colorFor(row.userNumber)
                           }`}
                         >
                           {initials(row.firstName, row.lastName)}
@@ -146,7 +151,7 @@ export function ParticipantsTable({ rows, currentUserNumber }: ParticipantsTable
                     <td className="py-2 pr-4 whitespace-nowrap">
                       <StatusBadge status={row.status} />
                     </td>
-                    <td className="py-2 text-gray-700">
+                    <td className={`py-2 ${isPending ? '' : 'text-gray-700'}`}>
                       {row.parcoursName || <span className="text-gray-400">—</span>}
                     </td>
                   </tr>
@@ -159,7 +164,7 @@ export function ParticipantsTable({ rows, currentUserNumber }: ParticipantsTable
         {/* Résumé */}
         <div className="mt-4 pt-3 border-t border-gray-100 flex flex-wrap gap-x-4 gap-y-1 text-sm">
           <span className="text-green-700">{going} {going > 1 ? 'viennent' : 'vient'}</span>
-          {pending > 0 && <span className="text-amber-600">{pending} en attente</span>}
+          {pending > 0 && <span className="text-gray-500">{pending} en attente</span>}
           {skip > 0 && <span className="text-red-500">{skip} {skip > 1 ? 'absents' : 'absent'}</span>}
         </div>
       </CardContent>

@@ -57,6 +57,8 @@ npm run build      # 0 erreur TypeScript
 | `src/services/pin.ts` | `hashPin` (hash simple côté client) |
 | `src/hooks/useParcours.ts` | Parcours CRUD + 30s polling |
 | `src/hooks/useParcoursVotes.ts` | Votes hebdo multi-parcours + roster + 30s polling — **source unique** |
+| `src/hooks/useProfiles.ts` | Annuaire complet (une requête au montage), pour afficher aussi les sans-réponse |
+| `src/services/presenceRows.ts` | Fusion annuaire + réponses → lignes du tableau (`status: null` = sans réponse) |
 | `src/services/voteTallies.ts` | Décompte unique des votes (présents seulement), partagé par le hook et `getWeekTallies` |
 | `src/hooks/useWeather.ts` | Météo mercredi 12h30 |
 | `src/services/supabaseService.ts` | API Supabase |
@@ -120,6 +122,9 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - Ne pas remplacer une référence inchangée au polling : comparer les données
   avant `setState` (listes, compteurs, choix). Sinon Home se re-rend toutes
   les 30 s pour rien.
+- `useProfiles` (annuaire) ne se recharge **pas** en boucle : il ne dépend pas
+  de la semaine. Une personne qui s'inscrit apparaît dès qu'elle répond, puis
+  avec tout le monde au rechargement suivant.
 
 ### Cycle : mercredi 14h → mercredi 14h
 - `getCurrentWeekKey()` = date du mercredi cible (`"2026-10-07"`)
@@ -193,6 +198,14 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   aux erreurs.
 - **Un seul titre par bloc** : la carte météo n'a pas de titre (celui de la
   section suffit) ; le tableau de présence a un résumé, pas un second titre.
+- **Le tableau « Qui vient ? » montre tout le groupe** — présents, absents et
+  sans-réponse. Il ne liste jamais seulement ceux qui ont répondu : une
+  personne silencieuse doit rester visible, sinon personne ne peut la relancer.
+  La fusion vit dans `presenceRows.ts`, pas dans `Home`.
+- **« Sans réponse » est un état neutre, pas une alerte** : gris
+  (`text-gray-500`, avatars gris), jamais ambre ni rouge. Dix lignes orange
+  volaient la vedette au seul présent. Le vert reste réservé à « vient », le
+  rouge aux absents et aux actions destructives.
 - **Une seule entrée vers la gestion des parcours** : l'icône de l'en-tête.
   Pas de bouton pleine largeur en bas de page.
 - **Cibles tactiles ≥ 44 px** (`min-h-11` dans `Button`) et **aucun texte

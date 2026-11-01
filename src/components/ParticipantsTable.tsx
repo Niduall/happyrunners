@@ -1,5 +1,4 @@
-import { CheckCircle2, Clock, XCircle } from 'lucide-react'
-import type { AttendanceStatus, PresenceRow } from '../types'
+import type { PresenceRow } from '../types'
 import { Card, CardContent } from './ui/Card'
 
 // Le type de ligne est défini dans `types/index.ts` (partagé avec le service
@@ -33,65 +32,162 @@ const initials = (firstName: string, lastName: string): string => {
 const colorFor = (userNumber: number): string =>
   AVATAR_COLORS[userNumber % AVATAR_COLORS.length]
 
-/** Tri : présents → en attente → absents, alphabétique à l'intérieur de chaque groupe */
-export function sortPresenceRows(rows: PresenceRow[]): PresenceRow[] {
+/**
+ * Tri : présents → absents → sans-réponse, alphabétique à l'intérieur de
+ * chaque groupe. La personne connectée remonte en tête de son groupe : sans
+ * ça, quelqu'un qui n'a pas répondu se cherche au milieu de dix noms.
+ */
+export function sortPresenceRows(
+  rows: PresenceRow[],
+  currentUserNumber?: number
+): PresenceRow[] {
   const rank = (a: PresenceRow): number => {
     if (a.status === 'going') return 0
-    if (a.status === null) return 1
-    return 2 // skip
+    if (a.status === 'skip') return 1
+    return 2 // sans réponse
   }
 
   return [...rows].sort((a, b) => {
     const ra = rank(a)
     const rb = rank(b)
     if (ra !== rb) return ra - rb
+
+    if (currentUserNumber !== undefined) {
+      const aIsMe = a.userNumber === currentUserNumber
+      const bIsMe = b.userNumber === currentUserNumber
+      if (aIsMe !== bIsMe) return aIsMe ? -1 : 1
+    }
+
     return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`, 'fr')
   })
 }
 
-function StatusBadge({ status }: { status: AttendanceStatus | null }) {
-  if (status === 'going') {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-green-700">
-        <CheckCircle2 className="w-4 h-4" />
-        vient
-      </span>
-    )
-  }
-  if (status === 'skip') {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-red-500">
-        <XCircle className="w-4 h-4" />
-        absent
-      </span>
-    )
-  }
-  // « Pas encore répondu » n'est pas une alerte : c'est l'état par défaut de
-  // la plupart des gens. Gris, sans couleur d'avertissement — l'ambre
-  // attirait l'œil sur dix lignes et volait la vedette aux présents.
+/** Pastille du parcours choisi — discrète, elle ne doit pas concurrencer le nom */
+function ParcoursPill({ name }: { name: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-gray-500">
-      <Clock className="w-4 h-4" />
-      en attente
+    <span
+      title={name}
+      className="max-w-[50%] truncate rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700"
+    >
+      {name}
     </span>
   )
 }
 
+function Avatar({
+  row,
+  size = 'md',
+  muted = false,
+}: {
+  row: PresenceRow
+  size?: 'sm' | 'md'
+  muted?: boolean
+}) {
+  const dimension = size === 'md' ? 'w-7 h-7 text-xs' : 'w-5 h-5 text-[10px]'
+  const tone = muted ? 'bg-gray-100 text-gray-500' : colorFor(row.userNumber)
+
+  return (
+    <span
+      aria-hidden="true"
+      className={`${dimension} rounded-full flex items-center justify-center font-semibold flex-shrink-0 ${tone}`}
+    >
+      {initials(row.firstName, row.lastName)}
+    </span>
+  )
+}
+
+function MeMarker({ isMe }: { isMe: boolean }) {
+  return isMe ? <span className="ml-1 text-xs font-normal text-primary">(vous)</span> : null
+}
+
+/**
+ * Les présents gardent une ligne complète : ils ont choisi un parcours, et
+ * c'est l'information qu'on vient chercher.
+ */
+function PresentList({ rows, currentUserNumber }: ParticipantsTableProps) {
+  return (
+    <ul className="space-y-1">
+      {rows.map((row) => {
+        const isMe = row.userNumber === currentUserNumber
+        return (
+          <li
+            key={row.userNumber}
+            className={`flex items-center justify-between gap-3 rounded-lg px-2 py-2 ${
+              isMe ? 'bg-primary/5' : ''
+            }`}
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <Avatar row={row} />
+              <span className="truncate text-gray-900">
+                {row.firstName} {row.lastName}
+                <MeMarker isMe={isMe} />
+              </span>
+            </span>
+            {row.parcoursName ? (
+              <ParcoursPill name={row.parcoursName} />
+            ) : (
+              <span className="text-sm text-gray-400">—</span>
+            )}
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+/**
+ * Les autres n'ont pas de parcours à montrer : une puce compacte suffit.
+ * Dix noms tiennent ainsi en quelques lignes au lieu de dix lignes de tableau.
+ */
+function NameChips({ rows, currentUserNumber }: ParticipantsTableProps) {
+  return (
+    <ul className="flex flex-wrap gap-2">
+      {rows.map((row) => {
+        const isMe = row.userNumber === currentUserNumber
+        return (
+          <li
+            key={row.userNumber}
+            className={`flex items-center gap-1.5 rounded-full py-1 pl-2 pr-2.5 ${
+              isMe ? 'bg-primary/5 ring-1 ring-primary/20' : 'bg-gray-50'
+            }`}
+          >
+            <Avatar row={row} size="sm" muted />
+            <span className="text-sm text-gray-500">
+              {row.firstName} {row.lastName}
+              <MeMarker isMe={isMe} />
+            </span>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+interface Group {
+  key: 'going' | 'pending' | 'skip'
+  label: string
+  dot: string
+  rows: PresenceRow[]
+}
+
+/** Trois groupes, dans l'ordre de lecture : présents, absents, sans-réponse. */
+function groupRows(rows: PresenceRow[]): Group[] {
+  const going = rows.filter((r) => r.status === 'going')
+  const pending = rows.filter((r) => r.status === null)
+  const skip = rows.filter((r) => r.status === 'skip')
+
+  return (
+    [
+      { key: 'going', label: 'Présents', dot: 'bg-green-500', rows: going },
+      { key: 'skip', label: 'Absents', dot: 'bg-red-300', rows: skip },
+      { key: 'pending', label: 'N’ont pas répondu', dot: 'bg-gray-300', rows: pending },
+    ] as Group[]
+  ).filter((group) => group.rows.length > 0)
+}
+
 export function ParticipantsTable({ rows, currentUserNumber }: ParticipantsTableProps) {
-  const sorted = sortPresenceRows(rows)
-
-  const going = sorted.filter((r) => r.status === 'going').length
-  const pending = sorted.filter((r) => r.status === null).length
-  const skip = sorted.filter((r) => r.status === 'skip').length
-
-  /** Résumé qui remplace un second titre « Présence » et le rappel de semaine. */
-  const summary = [
-    `${going} présent${going > 1 ? 's' : ''}`,
-    pending > 0 ? `${pending} en attente` : null,
-    skip > 0 ? `${skip} absent${skip > 1 ? 's' : ''}` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ')
+  const sorted = sortPresenceRows(rows, currentUserNumber)
+  const groups = groupRows(sorted)
 
   if (sorted.length === 0) {
     return (
@@ -106,66 +202,28 @@ export function ParticipantsTable({ rows, currentUserNumber }: ParticipantsTable
   return (
     <Card>
       <CardContent className="p-4">
-        <p className="text-sm text-gray-500 mb-3">{summary}</p>
+        <div className="space-y-4">
+          {groups.map((group) => (
+            <section key={group.key} aria-labelledby={`presence-${group.key}`}>
+              <h3
+                id={`presence-${group.key}`}
+                className="mb-2 flex items-center gap-2 pl-2 text-sm font-semibold text-gray-700"
+              >
+                <span
+                  aria-hidden="true"
+                  className={`h-2 w-2 rounded-full flex-shrink-0 ${group.dot}`}
+                />
+                {group.label}
+                <span className="font-normal text-gray-500">· {group.rows.length}</span>
+              </h3>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th scope="col" className="text-left font-medium text-gray-700 py-2 pr-4">Participant</th>
-                <th scope="col" className="text-left font-medium text-gray-700 py-2 pr-4">Statut</th>
-                <th scope="col" className="text-left font-medium text-gray-700 py-2">Parcours</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((row) => {
-                const isMe = row.userNumber === currentUserNumber
-                const isAbsent = row.status === 'skip'
-                const isPending = row.status === null
-                return (
-                  <tr
-                    key={row.userNumber}
-                    className={`border-b border-gray-100 last:border-0 ${
-                      isAbsent ? 'opacity-50' : ''
-                    } ${isPending ? 'text-gray-500' : ''} ${isMe ? 'bg-primary/5' : ''}`}
-                  >
-                    <td className="py-2 pr-4">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${
-                            isAbsent
-                              ? 'bg-gray-200 text-gray-500'
-                              : isPending
-                                ? 'bg-gray-100 text-gray-400'
-                                : colorFor(row.userNumber)
-                          }`}
-                        >
-                          {initials(row.firstName, row.lastName)}
-                        </div>
-                        <span className="whitespace-nowrap">
-                          {row.firstName} {row.lastName}
-                          {isMe && <span className="ml-1 text-xs text-primary">(vous)</span>}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-2 pr-4 whitespace-nowrap">
-                      <StatusBadge status={row.status} />
-                    </td>
-                    <td className={`py-2 ${isPending ? '' : 'text-gray-700'}`}>
-                      {row.parcoursName || <span className="text-gray-400">—</span>}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Résumé */}
-        <div className="mt-4 pt-3 border-t border-gray-100 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-          <span className="text-green-700">{going} {going > 1 ? 'viennent' : 'vient'}</span>
-          {pending > 0 && <span className="text-gray-500">{pending} en attente</span>}
-          {skip > 0 && <span className="text-red-500">{skip} {skip > 1 ? 'absents' : 'absent'}</span>}
+              {group.key === 'going' ? (
+                <PresentList rows={group.rows} currentUserNumber={currentUserNumber} />
+              ) : (
+                <NameChips rows={group.rows} currentUserNumber={currentUserNumber} />
+              )}
+            </section>
+          ))}
         </div>
       </CardContent>
     </Card>

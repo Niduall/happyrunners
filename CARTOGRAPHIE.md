@@ -114,7 +114,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/components/Auth.tsx` | identité / création de compte / saisie PIN | 413 |
 | `src/components/SecurityModal.tsx` | gestion du PIN : ajouter, changer, retirer | 258 |
 | `src/components/ParcoursCard.tsx` | carte parcours en mode gestion (import GPX, actions admin) | 170 |
-| `src/components/ParticipantsTable.tsx` | tableau du groupe : tout le monde, tri présents → sans réponse → absents, avatars | 165 |
+| `src/components/ParticipantsTable.tsx` | tout le groupe en trois sections : présents en lignes + parcours, sans-réponse et absents en puces | 231 |
 | `src/components/UserMenu.tsx` | menu utilisateur : nom, édition, Sécurité, déconnexion | 161 |
 | `src/components/WeatherCard.tsx` | météo, deux mises en page (compacte / complète) | 146 |
 | `src/components/MapView.tsx` | carte Leaflet : polyligne + marqueurs départ/arrivée | 123 |
@@ -170,7 +170,7 @@ Toutes les lignes sont sous `running-app/`.
 
 ### 2.8 Tests
 
-36 fichiers, 454 tests, ~30 s.
+36 fichiers, 460 tests, ~30 s.
 
 | Fichier | Couvre |
 |---|---|
@@ -196,7 +196,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/components/AttendanceBanner.test.tsx` | aucun bouton rempli sans réponse |
 | `src/components/ParcoursVoteCard.test.tsx` | bouton de vote |
 | `src/components/LazyMapView.test.tsx` | fallback puis carte, hauteur par défaut |
-| `src/components/ParticipantsTable.test.ts` | tri des lignes |
+| `src/components/ParticipantsTable.test.ts` | tri et épinglage, trois sections, parcours des présents |
 | `src/services/presenceRows.test.ts` | fusion annuaire + réponses : tout le monde, sans doublon, absents sans parcours |
 | `src/hooks/useProfiles.test.tsx` | annuaire chargé une fois, repli si la lecture échoue |
 | `src/services/pin.test.ts` | `hashPin` |
@@ -598,7 +598,7 @@ tâche 12).
 - Fermeture par **Échap** sur toutes les modales (`AdminCodeModal`, `ConfirmDeleteModal`, `ParcoursRenameModal`, `SecurityModal`, renommage de `UserMenu`), jamais pendant une écriture.
 - Boutons icône sans texte : `aria-label` sur le `✕` du formulaire de parcours.
 - Erreurs dynamiques annoncées avec `role="alert"` : `Auth`, `Home` (présences, météo, votes), `UserMenu`, `SecurityModal`, formulaire de parcours.
-- En-têtes de `ParticipantsTable` avec `scope="col"`.
+- `ParticipantsTable` n'est plus un `<table>` : trois sections `<section aria-labelledby>` (Présents, Absents, N'ont pas répondu), chacune avec son en-tête `<h3>` qui porte le compte.
 
 ### H. Outillage manquant
 

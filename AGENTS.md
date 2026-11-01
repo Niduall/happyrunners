@@ -70,7 +70,7 @@ npm run build      # 0 erreur TypeScript
 | `src/components/UserMenu.tsx` | menu du profil : nom, sécurité (PIN), déconnexion |
 | `src/components/ParcoursVoteCard.tsx` | Carte parcours + 1 bouton de vote |
 | `src/components/LazyMapView.tsx` | carte Leaflet chargée à la demande — **importer ce composant, pas `MapView`** |
-| `src/components/ParticipantsTable.tsx` | Tableau récapitulatif + avatars |
+| `src/components/ParticipantsTable.tsx` | Tout le groupe : présents en lignes (avec parcours), sans-réponse et absents en puces |
 
 ## Critical Implementation Details
 
@@ -197,11 +197,28 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   semaine » est gris, jamais rouge. Le rouge est réservé aux suppressions et
   aux erreurs.
 - **Un seul titre par bloc** : la carte météo n'a pas de titre (celui de la
-  section suffit) ; le tableau de présence a un résumé, pas un second titre.
+  section suffit) ; le tableau de présence n'a **ni titre ni récapitulatif**
+  au-dessus ou en dessous — ses trois en-têtes de groupe portent le compte
+  (« Présents · 1 »). Ne jamais réintroduire une ligne « 1 présent · 10 en
+  attente » : c'était le même chiffre, écrit deux fois.
 - **Le tableau « Qui vient ? » montre tout le groupe** — présents, absents et
   sans-réponse. Il ne liste jamais seulement ceux qui ont répondu : une
   personne silencieuse doit rester visible, sinon personne ne peut la relancer.
   La fusion vit dans `presenceRows.ts`, pas dans `Home`.
+- **Trois sections, deux présentations** : « Présents » en lignes (avatar
+  coloré, nom, pastille du parcours) parce qu'ils ont quelque chose à montrer ;
+  « Absents » et « N'ont pas répondu » en puces compactes (avatar gris, nom),
+  parce que dix noms identiques ne méritent pas dix lignes. Une section vide
+  disparaît. La personne connectée remonte en tête de son groupe.
+- **Ordre des sections : présents → absents → sans-réponse.** Les deux réponses
+  franches d'abord, le silence ensuite : c'est un état, pas une réponse, et il
+  n'a pas à s'intercaler entre les deux. Ne pas remonter les sans-réponse
+  au-dessus des absents.
+- **Échelle d'espacement : 4 / 8 / 16 px.** Dans une section, 8 px entre
+  l'en-tête et le contenu, 16 px entre deux sections. Les en-têtes (pastille de
+  couleur) et les avatars des deux listes commencent au **même retrait de
+  8 px** : c'est ce qui fait tenir le bloc. Ne pas revenir à `gap-1.5` ni à un
+  en-tête collé au bord de la carte.
 - **« Sans réponse » est un état neutre, pas une alerte** : gris
   (`text-gray-500`, avatars gris), jamais ambre ni rouge. Dix lignes orange
   volaient la vedette au seul présent. Le vert reste réservé à « vient », le

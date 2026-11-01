@@ -45,7 +45,7 @@ npm run build      # 0 erreur TypeScript
 
 ## Architecture (résumé)
 - **SPA**: React 19 + React Router
-- **PWA**: vite-plugin-pwa, autoUpdate ; manifeste dans `src/config/pwaManifest.ts` (nom, `lang: fr`, couleur de marque, icônes PNG testées)
+- **PWA**: vite-plugin-pwa, autoUpdate ; manifeste dans `src/config/pwaManifest.ts` (nom, `lang: fr`, couleur de marque, icônes PNG testées) ; mise à jour surveillée par `src/services/swUpdate.ts`
 - **Auth**: Prénom/Nom → `user_number` (entier attribué par la base, **jamais dérivé du nom**). PIN 4 chiffres hashé stocké en base (`user_profiles.pin_hash`), jamais en localStorage
 - **State**: Supabase = source de vérité. localStorage = cache utilisateur local
 - **Polling**: 30s pour parcours + participations
@@ -125,6 +125,32 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - `useProfiles` (annuaire) ne se recharge **pas** en boucle : il ne dépend pas
   de la semaine. Une personne qui s'inscrit apparaît dès qu'elle répond, puis
   avec tout le monde au rechargement suivant.
+
+### Mise à jour de la PWA
+- Un onglet ouvert **ne se met jamais à jour seul** : il enregistre le service
+  worker une fois, puis exécute le JS déjà chargé. `skipWaiting` +
+  `clientsClaim` font prendre la main au nouveau worker, mais seul un
+  rechargement va chercher le nouveau bundle.
+- `src/services/swUpdate.ts` (appelé depuis `main.tsx`, **en production
+  seulement**) : `register('/sw.js')`, `update()` toutes les 30 min, au retour
+  sur l'onglet (`visibilitychange`) et à la restauration (`pageshow`), puis
+  rechargement différé de 2 s sur `controllerchange`.
+- ⚠️ Le **premier** `controllerchange` ne recharge pas : c'est `clientsClaim`
+  qui prend en charge une page vierge, pas une mise à jour. On ne fige pas
+  l'état au démarrage (`Boolean(controller)`) — un onglet ouvert avant la
+  première activation ne se mettrait alors jamais à jour. C'est le premier
+  événement qui est ignoré, les suivants rechargent.
+- `injectRegister: false` dans `vite.config.ts` : c'est nous qui enregistrons.
+  Sans `injectRegister`, le plugin **n'ajoute plus** `skipWaiting`/
+  `clientsClaim` tout seul → ils sont déclarés explicitement dans `workbox`,
+  sinon la nouvelle version resterait en attente et aucun rechargement
+  n'aurait lieu.
+- Un `update()` sans nouvelle version renvoie un 304 : pas de rechargement,
+  pas de clignotement. Un simple commit de doc change le CSS (Tailwind scanne
+  les `.md`), donc le `sw.js` : les onglets ouverts se rechargent aussi. C'est
+  rare et sans conséquence.
+- Vérifié de bout en bout en `preview` : rebuild à chaud → `visibilitychange`
+  → rechargement automatique en moins de 8 s.
 
 ### Cycle : mercredi 14h → mercredi 14h
 - `getCurrentWeekKey()` = date du mercredi cible (`"2026-10-07"`)
@@ -375,6 +401,10 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
     `useParcoursVotes` recalcule depuis `votesRef`, puis rafraîchit les votes
     seuls en silence. Un refetch complet = écran vidé, `loading`, et deux
     requêtes pour rien.
+7i. **`injectRegister: false` exige `workbox.skipWaiting` + `clientsClaim`
+    explicites** — le plugin ne les ajoute plus tout seul. Sans eux, la
+    nouvelle version reste en attente, aucun `controllerchange` n'arrive et
+    les onglets ouverts ne se mettent jamais à jour.
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

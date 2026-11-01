@@ -157,6 +157,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/services/weatherCode.ts` | codes WMO → emoji / libellé / classes Tailwind | 85 |
 | `src/services/adminCode.ts` | lecture et comparaison du code admin, sans mémorisation | 50 |
 | `src/services/pin.ts` | obfuscation du PIN 4 chiffres | 19 |
+| `src/services/swUpdate.ts` | mise à jour de la PWA : `update()` périodique, retour sur l'onglet, rechargement sur `controllerchange` | 104 |
 
 ### 2.7 Types et utilitaires
 
@@ -170,7 +171,7 @@ Toutes les lignes sont sous `running-app/`.
 
 ### 2.8 Tests
 
-36 fichiers, 460 tests, ~30 s.
+37 fichiers, 472 tests, ~30 s.
 
 | Fichier | Couvre |
 |---|---|
@@ -200,6 +201,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/services/presenceRows.test.ts` | fusion annuaire + réponses : tout le monde, sans doublon, absents sans parcours |
 | `src/hooks/useProfiles.test.tsx` | annuaire chargé une fois, repli si la lecture échoue |
 | `src/services/pin.test.ts` | `hashPin` |
+| `src/services/swUpdate.test.ts` | mise à jour PWA : premier `controllerchange` ignoré, rechargement unique, vérifications périodique/visibilité/pageshow |
 | `src/pages/Home.weather.test.tsx` | météo sur la page d'accueil |
 
 Le parser GPX (`gpxParser.ts`, 265 lignes) est couvert par

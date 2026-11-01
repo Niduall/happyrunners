@@ -9,6 +9,20 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // L'enregistrement est fait par `src/services/swUpdate.ts` : avec
+      // `injectRegister`, le plugin injecterait un `registerSW.js` qui
+      // enregistrerait le worker une seconde fois, sans jamais surveiller les
+      // mises à jour.
+      injectRegister: false,
+      // Explicite : sans `injectRegister`, le plugin n'ajoute plus
+      // `skipWaiting`/`clientsClaim` tout seul. Sans eux, la nouvelle version
+      // resterait en attente jusqu'à la fermeture de tous les onglets — donc
+      // aucun `controllerchange`, donc aucun rechargement.
+      workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+      },
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       // En dev, ne pas enregistrer de service worker : il sert l'ancien bundle
       // en cache et masque les modifications (logs 406 fantômes, code obsolète).

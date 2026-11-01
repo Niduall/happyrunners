@@ -55,32 +55,35 @@ describe('WeatherCard — probabilité de pluie', () => {
 })
 
 describe('WeatherCard — bandeau autour du run', () => {
+  const strip = () => screen.getByRole('group', { name: /Prévisions autour de 12h30/ })
+
   it('affiche les quatre heures de 11h à 14h', () => {
-    const { container } = render(<WeatherCard weather={runForecast} hours={runWindow} />)
+    render(<WeatherCard weather={runForecast} hours={runWindow} />)
 
     expect(screen.getByText('Autour de 12h30')).toBeInTheDocument()
-    const strip = container.querySelector('[data-run]')?.parentElement
-    expect(strip?.children).toHaveLength(4)
-    expect(strip?.textContent).toContain('11h')
-    expect(strip?.textContent).toContain('12h')
-    expect(strip?.textContent).toContain('13h')
-    expect(strip?.textContent).toContain('14h')
+    expect(strip().children).toHaveLength(4)
+    expect(strip().textContent).toContain('11h')
+    expect(strip().textContent).toContain('12h')
+    expect(strip().textContent).toContain('13h')
+    expect(strip().textContent).toContain('14h')
   })
 
-  it('encadre l’heure utilisée pour la prévision du run', () => {
+  it('traite les quatre heures à l’identique, sans encadrer celle du run', () => {
     const { container } = render(<WeatherCard weather={runForecast} hours={runWindow} />)
 
-    const marked = container.querySelectorAll('[data-run]')
-    expect(marked).toHaveLength(1)
-    expect(marked[0].textContent).toContain('12h')
+    // Une seule apparence : plus de case surlignée pour 12h.
+    const classes = new Set([...strip().children].map((cell) => cell.className))
+    expect(classes.size).toBe(1)
+    expect(container.querySelector('[data-run]')).toBeNull()
+    expect(container.querySelector('[aria-current]')).toBeNull()
+    expect(container.querySelector('[title]')).toBeNull()
   })
 
   it('affiche la pluie de chaque heure, même à 0 %', () => {
-    const { container } = render(<WeatherCard weather={runForecast} hours={runWindow} />)
+    render(<WeatherCard weather={runForecast} hours={runWindow} />)
 
-    const strip = container.querySelector('[data-run]')?.parentElement
     // L'espace avant « % » est une espace fine insécable (typographie française).
-    const text = (strip?.textContent ?? '').replace(/\u202f/g, ' ')
+    const text = (strip().textContent ?? '').replace(/\u202f/g, ' ')
     expect(text).toContain('0 %')
     expect(text).toContain('40 %')
     expect(text).toContain('55 %')

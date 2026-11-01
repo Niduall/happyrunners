@@ -41,25 +41,17 @@ function parisHour(dt: number): string {
 
 /**
  * Une heure du bandeau : heure, emoji, température et pluie sur deux lignes.
- * `data-run` marque l'heure réellement utilisée pour la prévision du run.
+ * Les quatre heures sont traitées à l'identique : la prévision du run est
+ * déjà lue juste au-dessus, encadrer une case n'ajoutait qu'un bruit visuel.
  */
-function HourCell({ hour, isRun }: { hour: WeatherData; isRun: boolean }) {
+function HourCell({ hour }: { hour: WeatherData }) {
   const info = getWeatherCodeInfo(hour.weatherCode, hour.isDay !== false)
   const rainPercent = hour.pop != null ? Math.round(hour.pop * 100) : null
 
   return (
-    <div
-      data-run={isRun || undefined}
-      aria-current={isRun ? 'time' : undefined}
-      title={isRun ? 'Heure utilisée pour la prévision du run' : undefined}
-      className={`flex flex-col items-center rounded-lg py-1 ${
-        isRun ? 'bg-primary/10 ring-2 ring-primary' : 'bg-gray-50'
-      }`}
-    >
+    <div className="flex flex-col items-center rounded-lg bg-gray-50 py-1">
       <span className="flex items-center gap-1">
-        <span className={`text-xs ${isRun ? 'font-semibold text-primary' : 'text-gray-500'}`}>
-          {parisHour(hour.dt)}
-        </span>
+        <span className="text-xs text-gray-500">{parisHour(hour.dt)}</span>
         <span role="img" aria-label={info.label} className="text-base leading-none">
           {info.emoji}
         </span>
@@ -107,7 +99,7 @@ export function WeatherCard({ weather, title, hours = [] }: WeatherCardProps) {
               aria-label="Prévisions autour de 12h30"
             >
               {hours.map((hour) => (
-                <HourCell key={hour.dt} hour={hour} isRun={hour.dt === weather.dt} />
+                <HourCell key={hour.dt} hour={hour} />
               ))}
             </div>
           </div>

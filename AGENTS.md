@@ -157,6 +157,10 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   (`getRunWindow`), avec la même tolérance de ±90 min que la sélection du run.
   Ce sont les **heures murales réelles** (`11h`, `12h`…) : ne pas étiqueter
   « 12h30 » une donnée de 12h. Le bandeau disparaît sans prévision du run.
+- Les quatre heures du bandeau sont **traitées à l'identique** : ne pas
+  ré-encadrer celle du run (ni anneau, ni fond, ni titre au survol). La
+  prévision du run est déjà la carte du dessus ; le cadre ne faisait que
+  désigner une case sur quatre.
 - Tolérance de sélection : ±90 min autour de 12h30
 - `isDay` forcé à `true` pour la prévision du run (toujours à 12h30)
 - Icônes via `weatherCode.ts` (mapping WMO → emoji), pas d'images externes

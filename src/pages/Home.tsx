@@ -9,12 +9,14 @@ import { Button } from '../components/ui/Button'
 import { Card, CardContent } from '../components/ui/Card'
 import { LoginForm } from '../components/Auth'
 import { UserMenu } from '../components/UserMenu'
+import { MessagesButton } from '../components/MessagesButton'
 import { useAuth } from '../hooks/useAuth'
 import { useWeather } from '../hooks/useWeather'
 import { useParcours } from '../hooks/useParcours'
 import { useParcoursVotes } from '../hooks/useParcoursVotes'
 import { useAttendance } from '../hooks/useAttendance'
 import { useProfiles } from '../hooks/useProfiles'
+import { useUnreadMessages } from '../hooks/useUnreadMessages'
 import { mergePresenceRows } from '../services/presenceRows'
 import { getRunForecast, getRunWindow, daysUntilRun } from '../services/weatherApi'
 import { useTargetWednesday } from '../hooks/useTargetWednesday'
@@ -57,6 +59,9 @@ export function Home() {
    * pas répondu. Échec silencieux → on retombe sur les seules réponses.
    */
   const { profiles } = useProfiles(isAuthenticated)
+
+  /** Pastille du chat : un simple comptage, sans charger les messages. */
+  const unreadMessages = useUnreadMessages()
 
   /**
    * Qui a dit « je viens ». Passe aux votes pour qu'un choix d'un absent
@@ -165,6 +170,7 @@ export function Home() {
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
           <h1 className="text-xl font-bold text-primary shrink-0">HappyRunners</h1>
           <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+            <MessagesButton unreadCount={unreadMessages} />
             {isAuthenticated && (
               <Button
                 variant="accent"

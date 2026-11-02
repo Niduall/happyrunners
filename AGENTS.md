@@ -71,6 +71,10 @@ npm run build      # 0 erreur TypeScript
 | `src/components/ParcoursVoteCard.tsx` | Carte parcours + 1 bouton de vote |
 | `src/components/LazyMapView.tsx` | carte Leaflet chargée à la demande — **importer ce composant, pas `MapView`** |
 | `src/components/ParticipantsTable.tsx` | Tout le groupe : présents en lignes (avec parcours), sans-réponse et absents en puces |
+| `src/pages/Chat.tsx` | fil de discussion `/messages` : jours, auto-défilement, noms en double |
+| `src/components/ChatComposer.tsx` | saisie du chat (Entrée envoie, Maj+Entrée à la ligne) |
+| `src/components/ChatMessageBubble.tsx` | bulle, état d'envoi, suppression par l'auteur |
+| `src/components/MessagesButton.tsx` | entrée Messages de l'en-tête + pastille de non-lus |
 
 ## Critical Implementation Details
 
@@ -151,6 +155,20 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - **Non-lus** : `lastReadAt` en `localStorage`, par appareil. Sans valeur
   (première visite), la pastille reste à zéro : on n'annonce pas 30 jours de
   messages comme non lus.
+- **La pastille ne charge pas les messages** : `useUnreadMessages` fait un
+  `count` toutes les 30 s, au retour sur l'onglet et quand un autre onglet
+  change la dernière lecture. Ne pas y brancher `getRecentMessages`.
+- **Le chat ouvert vaut lecture** : `Chat` appelle `markAllRead()` après
+  chargement. Revenir à l'accueil doit éteindre la pastille sans action.
+- **Un vrai fil, pas une liste inversée** : le plus ancien en haut, arrivée en
+  bas. Si la personne lisait plus haut, ne pas lui voler son défilement :
+  afficher « Nouveau message », sauf pour son propre envoi.
+- **Deux prénoms identiques** : ajouter l'initiale du nom (« Julie D. »,
+  « Julie M. ») uniquement quand le prénom est en double. Ne pas afficher le
+  nom complet en permanence : le groupe se connaît.
+- **Un message ne s'édite pas.** Suppression immédiate par son auteur, sans
+  confirmation, bouton discret à gauche de la bulle. Le rouge reste réservé à
+  cette action et aux erreurs.
 
 ### Mise à jour de la PWA
 - Un onglet ouvert **ne se met jamais à jour seul** : il enregistre le service
@@ -390,6 +408,10 @@ Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour l
 | `src/services/schema.test.ts` | `schema.sql` rejouable et à jour |
 | `src/services/storage.test.ts` | cache utilisateur local |
 | `src/services/gpxParser.test.ts` | XML/JSON GPX, distance, dénivelé, simplification, bounds |
+| `src/services/messages.test.ts` | fenêtre 30 j, validation, regroupement par jour, non-lus |
+| `src/hooks/useMessages.test.tsx` | polling, envoi optimiste, échec, purge, course polling/envoi |
+| `src/hooks/useUnreadMessages.test.tsx` | pastille : première visite, 30 s, retour d'onglet |
+| `src/pages/Chat.test.tsx` | lecture ouverte, fil, marquage lu, prénoms en double |
 | `src/test/setup.ts` | mock Supabase global + cleanup |
 
 Ajouter un test pour toute nouvelle logique d'auth ou d'identification.

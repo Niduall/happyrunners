@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Home } from './pages/Home'
 import { ParcoursList } from './pages/ParcoursList'
+import { Chat } from './pages/Chat'
 import './index.css'
 
 function App() {
@@ -9,6 +10,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/parcours" element={<ParcoursList />} />
+        <Route path="/messages" element={<Chat />} />
       </Routes>
     </BrowserRouter>
   )

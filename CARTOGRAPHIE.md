@@ -9,8 +9,8 @@
 > et une liste de dette classée par gravité.
 >
 > **Chaque affirmation porte une référence `fichier:ligne`.** Ce qui n'a pas pu
-> être vérifié est marqué « à confirmer ». Dernière passe : 19 octobre 2026,
-> commit `0c554e1`.
+> être vérifié est marqué « à confirmer ». Dernière passe : 2 novembre 2026,
+> après le socle du chat (`f2cb0e5`) et son interface.
 
 ## Sommaire
 
@@ -53,12 +53,12 @@ Une seule règle, source unique : `src/services/weekKey.ts:34-76`.
 Bascule le **mercredi à 14h** (le run est à 12h30), sans cron : c'est l'horloge
 locale qui décide. Clé de semaine = date du mercredi cible, `YYYY-MM-DD`.
 
-### Les quatre tables
+### Les cinq tables
 
 `schema.sql` est la source de vérité. RLS activée mais **entièrement ouverte**
-(`USING (true)` sur les 4 tables, `schema.sql:161-194`) : l'identité est côté
-client, c'est une dissuasion, pas une sécurité. Quatre tables vivantes plus
-deux tables mortes supprimées à la fin du fichier (`schema.sql:202-203`).
+(`USING (true)` sur les tables, `schema.sql`) : l'identité est côté
+client, c'est une dissuasion, pas une sécurité. Cinq tables vivantes plus
+deux tables mortes supprimées à la fin du fichier (`schema.sql`).
 
 | Table | Clé | Contrainte structurante |
 |---|---|---|
@@ -66,6 +66,7 @@ deux tables mortes supprimées à la fin du fichier (`schema.sql:202-203`).
 | `parcours` | `id` uuid | `points` jsonb = tracé GPX |
 | `attendances` | `UNIQUE(week_key, user_number)` | `going` \| `skip` |
 | `participations` | `UNIQUE(user_number, week_key)` | un seul parcours par personne et par semaine |
+| `messages` | `id` uuid | chat, fenêtre glissante de 30 jours, **pas de `week_key`** |
 
 ### Le tracé des données
 
@@ -75,15 +76,21 @@ deux tables mortes supprimées à la fin du fichier (`schema.sql:202-203`).
      │           │ useParcoursVotes(30 s) ──▶ participations│──▶ Supabase
      │           │ useParcours    (30 s)  ──▶ parcours      │
      │           │ useProfiles (1 fois)   ──▶ user_profiles │
+     │           │ useUnreadMessages(30 s)──▶ messages      │
      │           │ useWeather     (30 min)──▶ Open-Meteo   │
      │           │ useTargetWednesday (30 s, sans réseau)   │
      │           └──────────────────────────────────────────┘
-     └──▶ composants (AttendanceBanner, ParcoursVoteCard,
-          ParticipantsTable, WeatherCard)
+     ├──▶ composants (AttendanceBanner, ParcoursVoteCard,
+     │    ParticipantsTable, WeatherCard, MessagesButton)
+     │
+   Chat.tsx ────▶ useMessages (5 s visible / 30 s caché) ──▶ messages
+                  ├─ useProfiles (annuaire, une fois)
+                  └─ groupMessagesByDay + purge 30 j
 ```
 
 `localStorage` ne sert plus que de **secours** pour l'utilisateur
-(`running_user`) et de cache météo par semaine (`weather_cache_<weekKey>`).
+(`running_user`), de cache météo par semaine (`weather_cache_<weekKey>`) et de
+repère de dernière lecture du chat (`happyrunners_messages_last_read`).
 Supabase gagne toujours quand il répond.
 
 ---
@@ -97,15 +104,16 @@ Toutes les lignes sont sous `running-app/`.
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
 | `src/main.tsx` | point d'entrée **réel** : monte `App` sous `StrictMode` + `AuthProvider` | 12 |
-| `src/App.tsx` | routeur : `/` → `Home`, `/parcours` → `ParcoursList` | 17 |
+| `src/App.tsx` | routeur : `/` → `Home`, `/parcours` → `ParcoursList`, `/messages` → `Chat` | 19 |
 | `index.html` | hôte, `lang="fr"`, monte `#root` | 19 |
 
 ### 2.2 Pages
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/pages/Home.tsx` | page principale : auth, présence, météo, vote, tableau des participants | 360 |
+| `src/pages/Home.tsx` | page principale : auth, présence, météo, vote, tableau des participants, entrée du chat | 360 |
 | `src/pages/ParcoursList.tsx` | gestion : liste, import GPX, suppression, verrou admin | 316 |
+| `src/pages/Chat.tsx` | fil de discussion : groupes par jour, auto-défilement, envoi, suppression, noms désambiguïsés | 205 |
 
 ### 2.3 Composants métier
 
@@ -123,6 +131,9 @@ Toutes les lignes sont sous `running-app/`.
 | `src/components/ParcoursVoteCard.tsx` | carte parcours en mode vote (1 bouton, compteur, badge vainqueur) | 103 |
 | `src/components/ConfirmDeleteModal.tsx` | confirmation de suppression + annonce des votes perdus | 97 |
 | `src/components/AttendanceBanner.tsx` | encadré « Tu viens ? » + deux boutons de présence | 70 |
+| `src/components/ChatComposer.tsx` | zone de saisie du chat : Entrée envoie, Maj+Entrée saut de ligne, compteur 500 | 119 |
+| `src/components/ChatMessageBubble.tsx` | bulle du fil : auteur, heure, états `sending`/`failed`, suppression par l'auteur | 95 |
+| `src/components/MessagesButton.tsx` | entrée « Messages » de l'en-tête + pastille de non-lus (plafond « 99+ ») | 44 |
 
 ### 2.4 Composants génériques
 
@@ -143,7 +154,8 @@ Toutes les lignes sont sous `running-app/`.
 | `src/hooks/useWeather.ts` | météo, cache par semaine, rafraîchissement 30 min | 149 |
 | `src/hooks/useParcours.ts` | CRUD parcours, parsing GPX, polling 30 s | 80 |
 | `src/hooks/useTargetWednesday.ts` | horloge de semaine cible (tick 30 s, sans réseau) | 56 |
-| `src/hooks/useMessages.ts` | chat : polling 5 s / 30 s, envoi optimiste, suppression, non-lus, purge 30 j | 266 |
+| `src/hooks/useMessages.ts` | chat : polling 5 s / 30 s, envoi optimiste, suppression, purge 30 j | 266 |
+| `src/hooks/useUnreadMessages.ts` | pastille : comptage des messages depuis la dernière lecture, 30 s + focus/visibilité | 69 |
 
 ### 2.6 Services
 
@@ -173,7 +185,7 @@ Toutes les lignes sont sous `running-app/`.
 
 ### 2.8 Tests
 
-39 fichiers, 516 tests, ~35 s.
+44 fichiers, 549 tests, ~40 s.
 
 | Fichier | Couvre |
 |---|---|
@@ -198,6 +210,11 @@ Toutes les lignes sont sous `running-app/`.
 | `src/hooks/useTargetWednesday.test.ts` | horloge de semaine |
 | `src/services/messages.test.ts` | fenêtre de 30 j, validation, regroupement par jour, non-lus |
 | `src/hooks/useMessages.test.tsx` | polling 5 s / 30 s, envoi optimiste, échec, purge, course polling/envoi |
+| `src/hooks/useUnreadMessages.test.tsx` | pastille : première visite, période 30 s, retour d'onglet, erreur silencieuse |
+| `src/pages/Chat.test.tsx` | lecture ouverte, connexion pour écrire, fil vide, marquage lu, prénoms en double |
+| `src/components/ChatComposer.test.tsx` | Entrée / Maj+Entrée / composition d'accent, compteur, lecture sans identité |
+| `src/components/ChatMessageBubble.test.tsx` | auteur, regroupement, états d'envoi, suppression du sien |
+| `src/components/MessagesButton.test.tsx` | pastille absente à zéro, accord singulier/pluriel, plafond 99+ |
 | `src/components/AttendanceBanner.test.tsx` | aucun bouton rempli sans réponse |
 | `src/components/ParcoursVoteCard.test.tsx` | bouton de vote |
 | `src/components/LazyMapView.test.tsx` | fallback puis carte, hauteur par défaut |
@@ -264,6 +281,11 @@ Table de référence pour éviter de corriger une règle à un seul endroit.
 | Verrou admin = une page, une personne | `ParcoursList.tsx` (`useState`) | ✅ et verrouillé par 11 tests |
 | PIN 4 chiffres | `src/services/pin.ts` + `user_profiles.pin_hash` | ⚠️ obfuscation, pas un vrai hash |
 | Météo = prochaine sortie, 12h30, avec les heures 11h → 14h | `weatherApi.ts` (`getRunForecast`, `getRunWindow`) | ✅ |
+| Fenêtre du chat = 30 jours glissants | `messages.ts` (`MESSAGE_RETENTION_DAYS`, `retentionCutoff`) | ✅ lue et purgée avec la même borne |
+| Longueur d'un message = 1 à 500 | `schema.sql` (`CHECK`) + `messages.ts` (validation) | ✅ tenue par la base |
+| Lecture du chat ouverte, écriture identifiée | `useMessages(null)` refuse l'envoi ; `ChatComposer` propose de se connecter | ✅ |
+| Non-lus = messages depuis la dernière lecture | `messages.ts` (`readLastRead`, `writeLastRead`) + `useUnreadMessages` | ✅ localStorage, par appareil |
+| Deux prénoms identiques → « Julie D. » / « Julie M. » | `Chat.tsx` (`names`) | ✅ l'initiale n'apparaît qu'en cas de doublon |
 
 ---
 
@@ -318,6 +340,26 @@ L'import GPX reste ouvert à tous.
 Une fois déverrouillé, le crayon ouvre `ParcoursRenameModal` (nom seul) et le
 bouton « Remplacer le GPX » de chaque carte remplace le tracé sans toucher au
 nom (`editParcours` dans `useParcours`, `updateParcours` dans le service).
+
+### 4.5 Chat
+
+```
+/messages ─▶ Chat
+              ├─ useMessages → getRecentMessages (30 j) + purgeOldMessages
+              │    └─ polling 5 s si l'onglet est visible, 30 s sinon
+              ├─ useProfiles → prénoms (désambiguïsés si doublon)
+              └─ ChatComposer → sendMessage → envoi optimiste `pending-…`
+                                  └─ échec → `failed` + « Réessayer »
+```
+
+La page marque le fil comme lu après chargement (`markAllRead`) : la pastille
+de l'accueil s'éteint au retour. `MessagesButton` ne charge pas les messages,
+il ne fait qu'un `count` toutes les 30 s, au retour sur l'onglet et quand un
+autre onglet change la dernière lecture.
+
+Un message **ne s'édite jamais** : la seule action est la suppression par son
+auteur, appliquée immédiatement, sans confirmation. Les messages de plus de
+30 jours sont purgés à l'ouverture du chat, pas par une tâche planifiée.
 
 ---
 

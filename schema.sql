@@ -125,6 +125,28 @@ CREATE INDEX IF NOT EXISTS idx_participations_parcours
   ON participations USING btree (parcours_id);
 
 -- ---------------------------------------------------------------------------
+-- Table : messages
+-- ---------------------------------------------------------------------------
+-- Fil de discussion du groupe.
+--
+-- ⚠️ Pas de `week_key` : la fenêtre de lecture est GLISSANTE (30 jours) et
+--    calculée côté client à partir de `created_at`. Un message du mercredi
+--    précédent reste donc visible le mardi suivant, puis sort tout seul.
+--    Aucune suppression planifiée côté serveur : les clients purgent ce qui a
+--    plus de 30 jours au chargement du chat.
+--
+-- Pas de `updated_at` : un message ne s'édite pas (aucune politique UPDATE).
+CREATE TABLE IF NOT EXISTS messages (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_number integer NOT NULL REFERENCES user_profiles(user_number) ON DELETE CASCADE,
+  body        text    NOT NULL CHECK (char_length(body) BETWEEN 1 AND 500),
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_messages_created
+  ON messages USING btree (created_at DESC);
+
+-- ---------------------------------------------------------------------------
 -- Règle métier : un vote exige une présence « going »
 -- ---------------------------------------------------------------------------
 -- La règle était purement côté client : un vote pouvait exister sans présence
@@ -260,6 +282,7 @@ ALTER TABLE user_profiles  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE parcours       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attendances    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE participations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages       ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS profils_lire      ON user_profiles;
 DROP POLICY IF EXISTS profils_inserer   ON user_profiles;
@@ -300,6 +323,16 @@ CREATE POLICY participations_lire      ON participations FOR SELECT USING (true)
 CREATE POLICY participations_inserer   ON participations FOR INSERT WITH CHECK (true);
 CREATE POLICY participations_modifier  ON participations FOR UPDATE USING (true);
 CREATE POLICY participations_supprimer ON participations FOR DELETE USING (true);
+
+-- Messages : lire, écrire, supprimer — mais JAMAIS modifier. L'absence de
+-- politique UPDATE rend un message immuable, pas seulement dans l'interface.
+DROP POLICY IF EXISTS messages_lire      ON messages;
+DROP POLICY IF EXISTS messages_inserer   ON messages;
+DROP POLICY IF EXISTS messages_supprimer ON messages;
+
+CREATE POLICY messages_lire      ON messages FOR SELECT USING (true);
+CREATE POLICY messages_inserer   ON messages FOR INSERT WITH CHECK (true);
+CREATE POLICY messages_supprimer ON messages FOR DELETE USING (true);
 
 -- =============================================================================
 -- Tables héritées à supprimer

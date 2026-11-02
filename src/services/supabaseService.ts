@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { goingSet, summarizeVotes } from './voteTallies'
+import { normalizeMessageBody } from './messages'
 import type {
   Parcours,
   ParcoursSummary,
@@ -12,6 +13,7 @@ import type {
   UserProfileUpdate,
   ProfileIdentity,
   GPXPoint,
+  Message,
 } from '../types/supabase'
 
 export type { AttendanceStatus }
@@ -338,6 +340,87 @@ export async function deleteWeekVote(
     .delete()
     .eq('user_number', userNumber)
     .eq('week_key', weekKey)
+
+  if (error) throw error
+}
+
+// ===== MESSAGES (fil de discussion) =====
+
+/** Colonnes utiles : `body` peut faire 500 caractères, rien d'autre à charger. */
+const MESSAGE_COLUMNS = 'id,user_number,body,created_at'
+
+/**
+ * Messages de la fenêtre courante, du plus ancien au plus récent.
+ *
+ * `since` vient de `retentionCutoff()` : la même borne sert à la lecture et à
+ * la purge, elles ne peuvent pas diverger. `limit` protège d'un fil anormal ;
+ * 500 messages couvrent largement 30 jours pour un groupe de cette taille.
+ */
+export async function getRecentMessages(
+  since: string,
+  limit = 500
+): Promise<Message[]> {
+  const { data, error } = await supabase
+    .from('messages')
+    .select(MESSAGE_COLUMNS)
+    .gte('created_at', since)
+    .order('created_at', { ascending: true })
+    .limit(limit)
+
+  if (error) throw error
+  return (data || []) as Message[]
+}
+
+/** Compte léger pour la pastille de non-lus : aucun corps de message chargé. */
+export async function countMessagesSince(since: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .gt('created_at', since)
+
+  if (error) throw error
+  return count ?? 0
+}
+
+/**
+ * Envoie un message et renvoie la ligne créée (avec son `id` et son
+ * `created_at` serveur, qui font foi).
+ */
+export async function sendMessage(params: {
+  userNumber: number
+  body: string
+}): Promise<Message> {
+  const body = normalizeMessageBody(params.body)
+
+  const { data, error } = await supabase
+    .from('messages')
+    .insert({ user_number: params.userNumber, body })
+    .select(MESSAGE_COLUMNS)
+    .single()
+
+  if (error) throw error
+  return data as Message
+}
+
+/** Suppression : l'interface ne la propose qu'à l'auteur du message. */
+export async function deleteMessage(id: string): Promise<void> {
+  const { error } = await supabase.from('messages').delete().eq('id', id)
+
+  if (error) throw error
+}
+
+/**
+ * Purge les messages sortis de la fenêtre de rétention.
+ *
+ * Appelée par le client au chargement du chat : il n'y a ni cron ni fonction
+ * planifiée dans ce projet. Si personne n'ouvre le chat, rien n'est purgé —
+ * sans conséquence, la lecture filtre de toute façon par la même borne.
+ */
+export async function purgeOldMessages(cutoff: string): Promise<void> {
+  const { error } = await supabase
+    .from('messages')
+    .delete()
+    .lt('created_at', cutoff)
 
   if (error) throw error
 }

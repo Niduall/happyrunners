@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest'
 // pour un seul test (le typage vient déjà de vite/client).
 import schema from '../../schema.sql?raw'
 import migration from '../../migrations/2026-10-25_tache17.sql?raw'
+import chatMigration from '../../migrations/2026-11-02_tache29_chat.sql?raw'
 
 /**
  * schema.sql est la source de vérité de la structure de la base.
@@ -15,8 +16,14 @@ import migration from '../../migrations/2026-10-25_tache17.sql?raw'
  */
 
 describe('schema.sql — structure', () => {
-  it('déclare les 4 tables utilisées par l\'app', () => {
-    for (const table of ['user_profiles', 'parcours', 'attendances', 'participations']) {
+  it('déclare les 5 tables utilisées par l\'app', () => {
+    for (const table of [
+      'user_profiles',
+      'parcours',
+      'attendances',
+      'participations',
+      'messages',
+    ]) {
       expect(schema).toMatch(new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\b`))
     }
   })
@@ -39,12 +46,13 @@ describe('schema.sql — structure', () => {
 
   it('ne déclare que les clés étrangères réellement présentes en prod', () => {
     const refs = [...schema.matchAll(/REFERENCES\s+(\w+)/g)].map((m) => m[1])
-    // Vérifié contre information_schema : 3 FK, toutes en CASCADE.
+    // Vérifié contre information_schema : 4 FK, toutes en CASCADE.
     // `parcours.created_by` n'en a volontairement pas (colonne jamais lue).
     expect(refs).toEqual([
       'user_profiles', // attendances.user_number
       'parcours',      // participations.parcours_id
       'user_profiles', // participations.user_number
+      'user_profiles', // messages.user_number
     ])
   })
 
@@ -106,14 +114,29 @@ describe('schema.sql — structure', () => {
     expect(schema).toMatch(/pin_hash\s+text,/)
   })
 
-  it('active RLS et ouvre les 4 tables', () => {
-    for (const table of ['user_profiles', 'parcours', 'attendances', 'participations']) {
+  it('active RLS et ouvre les 5 tables', () => {
+    for (const table of [
+      'user_profiles',
+      'parcours',
+      'attendances',
+      'participations',
+      'messages',
+    ]) {
       expect(schema).toMatch(
         new RegExp(`ALTER TABLE ${table}\\s+ENABLE ROW LEVEL SECURITY`)
       )
     }
-    // 4 tables x 4 politiques
-    expect([...schema.matchAll(/CREATE POLICY/g)]).toHaveLength(16)
+    // 4 tables × 4 politiques + messages × 3 (pas d'UPDATE)
+    expect([...schema.matchAll(/CREATE POLICY/g)]).toHaveLength(19)
+  })
+
+  it('rend un message immuable : aucune politique UPDATE', () => {
+    // L'absence de politique est volontaire : un message ne s'édite pas, même
+    // avec la clé anon. Seule la suppression est permise.
+    expect(schema).not.toMatch(/CREATE POLICY \w+\s+ON messages FOR UPDATE/)
+    expect(schema).toMatch(/CREATE POLICY messages_lire\s+ON messages FOR SELECT/)
+    expect(schema).toMatch(/CREATE POLICY messages_inserer\s+ON messages FOR INSERT/)
+    expect(schema).toMatch(/CREATE POLICY messages_supprimer\s+ON messages FOR DELETE/)
   })
 
   it('documente que la sécurité RLS est ouverte', () => {
@@ -154,6 +177,56 @@ describe('schema.sql — structure', () => {
     // L'index unique (week_key, user_number) couvre déjà les lectures par
     // semaine : un second index sur la seule première colonne ne sert à rien.
     expect(schema).not.toMatch(/CREATE INDEX IF NOT EXISTS idx_attendances_week/)
+  })
+})
+
+describe('migration 2026-11-02 (tâche 29)', () => {
+  it('reprend la table et ses politiques', () => {
+    expect(chatMigration).toMatch(/CREATE TABLE IF NOT EXISTS messages/)
+    expect(chatMigration).toMatch(
+      /CHECK \(char_length\(body\) BETWEEN 1 AND 500\)/
+    )
+    expect(chatMigration).toMatch(/CREATE INDEX IF NOT EXISTS idx_messages_created/)
+
+    for (const policy of [
+      'messages_lire',
+      'messages_inserer',
+      'messages_supprimer',
+    ]) {
+      expect(chatMigration).toMatch(new RegExp(`CREATE POLICY ${policy}`))
+    }
+  })
+
+  it('est rejouable et ne supprime aucune donnée', () => {
+    expect(chatMigration).toMatch(/CREATE TABLE IF NOT EXISTS/)
+    expect(chatMigration).toMatch(/DROP POLICY IF EXISTS/)
+    // `ON DELETE CASCADE` est une clause de clé étrangère, pas une suppression.
+    expect(chatMigration).not.toMatch(/DELETE FROM|TRUNCATE|DROP TABLE/)
+  })
+
+  it('applique tout ou rien', () => {
+    expect(chatMigration).toMatch(/^BEGIN;/m)
+    expect(chatMigration.trimEnd().endsWith('COMMIT;')).toBe(true)
+  })
+})
+
+describe('table messages', () => {
+  it('borne la longueur en base, pas seulement dans l’interface', () => {
+    expect(schema).toMatch(/CHECK \(char_length\(body\) BETWEEN 1 AND 500\)/)
+  })
+
+  it('indexe la lecture par date décroissante', () => {
+    expect(schema).toMatch(
+      /CREATE INDEX IF NOT EXISTS idx_messages_created[\s\S]*?created_at DESC/
+    )
+  })
+
+  it('n’a pas de updated_at : un message ne s’édite pas', () => {
+    const start = schema.indexOf('CREATE TABLE IF NOT EXISTS messages')
+    const end = schema.indexOf('idx_messages_created')
+    const table = schema.slice(start, end)
+
+    expect(table).not.toMatch(/updated_at/)
   })
 })
 

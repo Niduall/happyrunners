@@ -116,3 +116,17 @@ export interface UserProfileUpdate {
   last_name?: string
   pin_hash?: string | null
 }
+
+/**
+ * Message du fil de discussion.
+ *
+ * Pas de `week_key` : la fenêtre de lecture est glissante (30 jours) et
+ * calculée côté client à partir de `created_at`. Pas de `updated_at` non
+ * plus : un message ne s'édite pas.
+ */
+export interface Message {
+  id: string
+  user_number: number
+  body: string
+  created_at: string
+}

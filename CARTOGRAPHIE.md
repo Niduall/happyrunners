@@ -143,12 +143,14 @@ Toutes les lignes sont sous `running-app/`.
 | `src/hooks/useWeather.ts` | météo, cache par semaine, rafraîchissement 30 min | 149 |
 | `src/hooks/useParcours.ts` | CRUD parcours, parsing GPX, polling 30 s | 80 |
 | `src/hooks/useTargetWednesday.ts` | horloge de semaine cible (tick 30 s, sans réseau) | 56 |
+| `src/hooks/useMessages.ts` | chat : polling 5 s / 30 s, envoi optimiste, suppression, non-lus, purge 30 j | 266 |
 
 ### 2.6 Services
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/services/supabaseService.ts` | toutes les requêtes Supabase | 343 |
+| `src/services/supabaseService.ts` | toutes les requêtes Supabase | 426 |
+| `src/services/messages.ts` | chat : fenêtre de 30 j, validation, regroupement par jour, non-lus, dernière lecture | 160 |
 | `src/services/presenceRows.ts` | fusion annuaire + réponses : qui vient, qui est absent, qui n'a pas répondu | 50 |
 | `src/services/gpxParser.ts` | parse GPX XML (DOMParser natif) et JSON Strava, distance, dénivelé, simplification | 265 |
 | `src/services/weatherApi.ts` | client Open-Meteo + sélection de la prévision du mercredi 12h30 | 343 |
@@ -163,15 +165,15 @@ Toutes les lignes sont sous `running-app/`.
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/types/supabase.ts` | types des lignes DB en snake_case — **source unique** de `GPXPoint` et `ProfileIdentity` | 118 |
+| `src/types/supabase.ts` | types des lignes DB en snake_case — **source unique** de `GPXPoint` et `ProfileIdentity` | 132 |
 | `src/types/index.ts` | types applicatifs (`User`, `UserIdentity`, `PresenceRow`) + ré-exports DB | 77 |
 | `src/lib/supabase.ts` | instancie le client Supabase | 15 |
 | `src/lib/utils.ts` | `cn()` = `clsx`, **sans fusion Tailwind** | 4 |
-| `src/test/setup.ts` | mock global Vitest + nettoyage | 61 |
+| `src/test/setup.ts` | mock global Vitest + nettoyage | 64 |
 
 ### 2.8 Tests
 
-37 fichiers, 472 tests, ~30 s.
+39 fichiers, 516 tests, ~35 s.
 
 | Fichier | Couvre |
 |---|---|
@@ -194,6 +196,8 @@ Toutes les lignes sont sous `running-app/`.
 | `src/services/weatherCode.test.ts` | mapping des 28 codes WMO |
 | `src/services/adminCode.test.ts` | verrou admin, ne mémorise rien |
 | `src/hooks/useTargetWednesday.test.ts` | horloge de semaine |
+| `src/services/messages.test.ts` | fenêtre de 30 j, validation, regroupement par jour, non-lus |
+| `src/hooks/useMessages.test.tsx` | polling 5 s / 30 s, envoi optimiste, échec, purge, course polling/envoi |
 | `src/components/AttendanceBanner.test.tsx` | aucun bouton rempli sans réponse |
 | `src/components/ParcoursVoteCard.test.tsx` | bouton de vote |
 | `src/components/LazyMapView.test.tsx` | fallback puis carte, hauteur par défaut |

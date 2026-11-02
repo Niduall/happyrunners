@@ -126,6 +126,32 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   de la semaine. Une personne qui s'inscrit apparaît dès qu'elle répond, puis
   avec tout le monde au rechargement suivant.
 
+### Fil de discussion (chat)
+- Table `messages` : **pas de `week_key`**. La fenêtre est **glissante de
+  30 jours** (`MESSAGE_RETENTION_DAYS`), calculée depuis `created_at`. Un
+  message du mercredi reste donc visible le mardi suivant, puis sort seul.
+- **Lecture ouverte à tous, écriture identifiée** : `useMessages(null)` lit
+  mais refuse l'envoi. Un message doit avoir un auteur.
+- **Pas de Realtime.** Le plan gratuit est instable (piège 7) et tout le projet
+  fonctionne au polling. `useMessages` interroge toutes les **5 s** quand le
+  chat est visible, **30 s** en arrière-plan, et immédiatement au retour sur
+  l'onglet. Ne pas réintroduire de websocket pour « faire plus vivant ».
+- **Aucune politique UPDATE** : un message ne s'édite pas, même avec la clé
+  anon. La longueur (1 à 500) est un `CHECK` en base, pas seulement côté UI.
+- **Purge** : `purgeOldMessages()` au chargement du chat, avec la **même
+  borne** que la lecture (`retentionCutoff()`). Pas de cron, pas de fonction
+  planifiée ; si personne n'ouvre le chat, rien n'est purgé et ce n'est pas
+  grave — la lecture filtre déjà.
+- **Envoi optimiste** : le message apparaît en local (`pending-…`), puis est
+  remplacé par la ligne serveur. En cas d'échec il reste affiché en `failed`
+  avec un réessai — le polling ne doit jamais l'effacer.
+- Un polling **parti avant** une écriture locale est ignoré (`mutationRef`) :
+  sa réponse ne connaît pas le message qu'on vient d'envoyer et le ferait
+  disparaître.
+- **Non-lus** : `lastReadAt` en `localStorage`, par appareil. Sans valeur
+  (première visite), la pastille reste à zéro : on n'annonce pas 30 jours de
+  messages comme non lus.
+
 ### Mise à jour de la PWA
 - Un onglet ouvert **ne se met jamais à jour seul** : il enregistre le service
   worker une fois, puis exécute le JS déjà chargé. `skipWaiting` +
@@ -279,13 +305,14 @@ base vide. Ne jamais décrire le schéma dans la prose ci-dessous : c'est ainsi
 que ce document avait fini par annoncer un `participations(local_user_id)`
 qui n'existait plus depuis la migration `user_number`.
 
-### Les 4 tables
+### Les 5 tables
 | Table | Clé | Particularité |
 |---|---|---|
 | `user_profiles` | `user_number` (SEQUENCE) | identifiant **stable**, indépendant du nom |
 | `parcours` | `id` uuid | `points` jsonb = tracé GPX |
 | `attendances` | `UNIQUE(week_key, user_number)` | `going` \| `skip` |
 | `participations` | `UNIQUE(user_number, week_key)` | **un seul parcours par personne et par semaine** |
+| `messages` | `id` uuid | fil de discussion, fenêtre glissante de 30 jours |
 
 ### Points non négociables
 - `participations.parcours_id` est en **`ON DELETE CASCADE`** : supprimer un
@@ -405,6 +432,9 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
     explicites** — le plugin ne les ajoute plus tout seul. Sans eux, la
     nouvelle version reste en attente, aucun `controllerchange` n'arrive et
     les onglets ouverts ne se mettent jamais à jour.
+7j. **Le chat n'utilise pas Realtime** — polling 5 s visible / 30 s caché.
+    Et une réponse de polling partie avant un envoi doit être **ignorée** :
+    elle ne contient pas le message optimiste et le ferait disparaître.
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

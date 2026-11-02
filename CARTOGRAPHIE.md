@@ -185,7 +185,7 @@ Toutes les lignes sont sous `running-app/`.
 
 ### 2.8 Tests
 
-44 fichiers, 549 tests, ~40 s.
+45 fichiers, 551 tests, ~40 s.
 
 | Fichier | Couvre |
 |---|---|
@@ -247,6 +247,7 @@ vides/invalides, conversion des coordonnées, distance, dénivelé (dont A8),
 | `tsconfig.json` | TypeScript | `strict` activé (tâche 12) ; `noUnusedLocals` et `noUnusedParameters` aussi |
 | `.github/workflows/ci.yml` | CI GitHub Actions | `npm ci` + lint + tests + build sur push `main` et PR (tâche 24) |
 | `postcss.config.js` | `@tailwindcss/postcss` + autoprefixer | `autoprefixer` est redondant avec v4, sans effet |
+| `vercel.json` | repli SPA : toute route inconnue → `index.html` | Vercel sert d'abord les fichiers statiques ; sans ce repli, `/messages` et `/parcours` en lien direct renvoient 404 (couvert par `src/config/vercelConfig.test.ts`) |
 | `.env` | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_ADMIN_CODE` | non versionné ✅ |
 
 #### Le manifeste PWA correspond à l'application — corrigé (tâche 15)

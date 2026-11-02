@@ -412,6 +412,7 @@ Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour l
 | `src/hooks/useMessages.test.tsx` | polling, envoi optimiste, échec, purge, course polling/envoi |
 | `src/hooks/useUnreadMessages.test.tsx` | pastille : première visite, 30 s, retour d'onglet |
 | `src/pages/Chat.test.tsx` | lecture ouverte, fil, marquage lu, prénoms en double |
+| `src/config/vercelConfig.test.ts` | repli SPA de Vercel : toute route inconnue → `index.html` |
 | `src/test/setup.ts` | mock Supabase global + cleanup |
 
 Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
@@ -457,6 +458,10 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
 7j. **Le chat n'utilise pas Realtime** — polling 5 s visible / 30 s caché.
     Et une réponse de polling partie avant un envoi doit être **ignorée** :
     elle ne contient pas le message optimiste et le ferait disparaître.
+7k. **Vercel a besoin d'un repli SPA** (`vercel.json`) — sans lui, ouvrir
+    `/messages` ou `/parcours` directement renvoie 404, même si la navigation
+    interne fonctionne. Les fichiers statiques sont servis avant la
+    réécriture : ne pas restreindre la règle aux seuls assets sans raison.
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

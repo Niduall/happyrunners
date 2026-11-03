@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { User as UserIcon, LogOut, ChevronDown, Pencil, ShieldCheck } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { User as UserIcon, LogOut, ChevronDown, Pencil, ShieldCheck, Settings } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
 import { SecurityModal } from './SecurityModal'
@@ -17,7 +18,8 @@ function isDuplicateNameError(err: unknown): boolean {
 }
 
 export function UserMenu() {
-  const { user, logout, updateName, isAuthenticated } = useAuth()
+  const { user, logout, updateName, isAuthenticated, adminLockEnabled } = useAuth()
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [securityOpen, setSecurityOpen] = useState(false)
@@ -120,6 +122,18 @@ export function UserMenu() {
                 <ShieldCheck className="w-4 h-4" />
                 Sécurité (PIN)
               </button>
+              {adminLockEnabled && (
+                <button
+                  onClick={() => {
+                    setOpen(false)
+                    navigate('/admin')
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
+                >
+                  <Settings className="w-4 h-4" />
+                  Administration
+                </button>
+              )}
             </div>
 
             <div className="border-t border-gray-100">

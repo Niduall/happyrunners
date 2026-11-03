@@ -7,7 +7,11 @@ import {
   getWeekTallies,
   getWeekAttendances,
   getAllProfiles,
+  getProfilesWithPinStatus,
+  resetUserPin,
+  removeUserPin,
 } from './supabaseService'
+import { hashPin } from './pin'
 import { supabase } from '../lib/supabase'
 
 /** Lignes renvoyées par PostgREST (snake_case, comme la vraie API) */
@@ -142,6 +146,72 @@ describe('getAllProfiles — l’annuaire complet', () => {
     mockProfiles.mockReturnValue(null)
 
     await expect(getAllProfiles()).resolves.toEqual([])
+  })
+})
+
+describe('getProfilesWithPinStatus — console admin', () => {
+  it('ne renvoie qu’un booléen, jamais le hash', async () => {
+    mockProfiles.mockReturnValue([
+      { user_number: 9, first_name: 'Julie', last_name: 'Dalla Valle', pin_hash: 'pin_abc' },
+      { user_number: 14, first_name: 'Julie', last_name: 'Moudin', pin_hash: null },
+    ])
+
+    const list = await getProfilesWithPinStatus()
+
+    expect(mockSelectColumns).toHaveBeenLastCalledWith(
+      'user_number,first_name,last_name,pin_hash'
+    )
+    expect(list).toEqual([
+      { user_number: 9, first_name: 'Julie', last_name: 'Dalla Valle', hasPin: true },
+      { user_number: 14, first_name: 'Julie', last_name: 'Moudin', hasPin: false },
+    ])
+    // Le hash reste dans le service : aucun composant ne doit le recevoir.
+    expect(list[0]).not.toHaveProperty('pin_hash')
+  })
+
+  it('déduit l’absence de PIN d’une valeur nulle', async () => {
+    mockProfiles.mockReturnValue([
+      { user_number: 3, first_name: 'Paulin', last_name: 'Claudin', pin_hash: null },
+    ])
+
+    await expect(getProfilesWithPinStatus()).resolves.toEqual([
+      { user_number: 3, first_name: 'Paulin', last_name: 'Claudin', hasPin: false },
+    ])
+  })
+
+  it('propage une erreur de lecture', async () => {
+    mockProfilesError.mockReturnValue(new Error('lecture refusée'))
+
+    await expect(getProfilesWithPinStatus()).rejects.toThrow('lecture refusée')
+  })
+})
+
+describe('réinitialisation du PIN — console admin', () => {
+  it('écrit le hash du PIN provisoire, jamais le code en clair', async () => {
+    mockProfiles.mockReturnValue({ user_number: 9 })
+
+    await resetUserPin(9, '1234')
+
+    const written = mockUpdateValues.mock.calls[0][0] as { pin_hash: string }
+    expect(written.pin_hash).toBe(hashPin('1234'))
+    expect(written.pin_hash).not.toContain('1234')
+  })
+
+  it('retire le PIN en écrivant null', async () => {
+    mockProfiles.mockReturnValue({ user_number: 9 })
+
+    await removeUserPin(9)
+
+    expect(mockUpdateValues).toHaveBeenCalledWith(
+      expect.objectContaining({ pin_hash: null })
+    )
+  })
+
+  it('propage une erreur d’écriture', async () => {
+    mockProfiles.mockReturnValue({ user_number: 9 })
+    mockProfilesError.mockReturnValue(new Error('écriture refusée'))
+
+    await expect(resetUserPin(9, '1234')).rejects.toThrow('écriture refusée')
   })
 })
 

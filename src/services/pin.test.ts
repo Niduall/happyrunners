@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hashPin } from './pin'
+import { hashPin, isValidPin } from './pin'
 
 describe('hashPin', () => {
   it('produit le même hash pour le même PIN', () => {
@@ -34,5 +34,25 @@ describe('hashPin', () => {
     const a = hashPin('4242')
     const b = hashPin('4242')
     expect(a).toBe(b)
+  })
+})
+
+describe('isValidPin', () => {
+  it('accepte exactement quatre chiffres', () => {
+    for (const pin of ['0000', '1234', '9999']) {
+      expect(isValidPin(pin)).toBe(true)
+    }
+  })
+
+  it('refuse les longueurs autres que quatre', () => {
+    for (const pin of ['', '123', '12345']) {
+      expect(isValidPin(pin)).toBe(false)
+    }
+  })
+
+  it('refuse tout caractère non numérique', () => {
+    for (const pin of ['12a4', '12 4', '１２３４', '-123']) {
+      expect(isValidPin(pin)).toBe(false)
+    }
   })
 })

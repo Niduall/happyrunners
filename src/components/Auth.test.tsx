@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { LoginForm } from './Auth'
 import { AuthProvider } from '../hooks/useAuth'
 import {
@@ -510,10 +511,12 @@ describe('UserMenu — accès aux options du profil', () => {
 
     function Both() {
       return (
-        <AuthProvider>
-          <LoginForm />
-          <UserMenu />
-        </AuthProvider>
+        <MemoryRouter>
+          <AuthProvider>
+            <LoginForm />
+            <UserMenu />
+          </AuthProvider>
+        </MemoryRouter>
       )
     }
     void React

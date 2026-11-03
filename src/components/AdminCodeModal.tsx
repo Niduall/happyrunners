@@ -5,6 +5,8 @@ import { Button } from './ui/Button'
 interface AdminCodeModalProps {
   onUnlock: (code: string) => boolean
   onCancel: () => void
+  /** Texte d'introduction ; par défaut, celui de la gestion des parcours. */
+  description?: string
 }
 
 /**
@@ -14,7 +16,11 @@ interface AdminCodeModalProps {
  * L'état de déverrouillage vit dans la page de gestion (ParcoursList) et n'est
  * mémorisé nulle part : cette modale ne fait que recueillir le code.
  */
-export function AdminCodeModal({ onUnlock, onCancel }: AdminCodeModalProps) {
+export function AdminCodeModal({
+  onUnlock,
+  onCancel,
+  description = "Supprimer ou modifier un parcours demande le code. L'accès reste ouvert tant que tu restes sur cet écran.",
+}: AdminCodeModalProps) {
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
 
@@ -71,8 +77,7 @@ export function AdminCodeModal({ onUnlock, onCancel }: AdminCodeModalProps) {
         </div>
 
         <p className="text-sm text-gray-600">
-          Supprimer ou modifier un parcours demande le code. L'accès reste
-          ouvert tant que tu restes sur cet écran.
+          {description}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

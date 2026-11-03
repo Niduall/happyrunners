@@ -17,3 +17,8 @@ export function hashPin(pin: string): string {
   }
   return 'pin_' + Math.abs(hash).toString(36)
 }
+
+/** Un PIN valide : exactement quatre chiffres, rien d'autre. */
+export function isValidPin(pin: string): boolean {
+  return /^\d{4}$/.test(pin)
+}

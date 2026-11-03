@@ -75,6 +75,8 @@ npm run build      # 0 erreur TypeScript
 | `src/components/ChatComposer.tsx` | saisie du chat (Entrée envoie, Maj+Entrée à la ligne) |
 | `src/components/ChatMessageBubble.tsx` | bulle, état d'envoi, suppression par l'auteur |
 | `src/components/MessagesButton.tsx` | entrée Messages de l'en-tête + pastille de non-lus |
+| `src/pages/Admin.tsx` | console admin : réinitialiser ou retirer le PIN d'une personne |
+| `src/components/AdminPinResetModal.tsx` | PIN provisoire ou retrait, sans jamais afficher le hash |
 
 ## Critical Implementation Details
 
@@ -257,6 +259,27 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   déverrouillage saisi pendant le chargement (course couverte par un test).
 - Conséquence assumée : un **rechargement de page redemande le code**.
 
+### Console d'administration (PIN)
+- `/admin` sert à **réinitialiser un PIN oublié**, pas à consulter un code :
+  `getProfilesWithPinStatus` lit `pin_hash` uniquement pour renvoyer
+  `hasPin: boolean`. **Ne jamais faire remonter le hash** dans un composant,
+  un log ou un test.
+- Accès protégé par le **même code** que la gestion des parcours
+  (`VITE_ADMIN_CODE`), redemandé à chaque visite et jamais stocké. La page
+  refuse aussi l'accès direct si le code n'est pas configuré.
+- Deux actions : **PIN provisoire** (4 chiffres saisis deux fois, affiché une
+  seule fois dans la confirmation pour transmission) ou **retrait** du PIN.
+  Aucune des deux ne demande l'ancien code — c'est tout l'intérêt.
+- **Aucune migration** : `user_profiles.pin_hash` et sa politique `UPDATE`
+  existent déjà. `resetUserPin` réutilise `updateUserProfile`, donc
+  `updated_at` suit la règle habituelle.
+- La personne réinitialisée garde sa session en cours : le nouveau PIN lui est
+  demandé à la prochaine connexion. Le retrait la laisse se connecter sans
+  code jusqu'à ce qu'elle en définisse un.
+- ⚠️ Ce n'est **pas une authentification forte** : le code admin est dans le
+  bundle et la RLS est ouverte. Cela empêche une erreur ou une curiosité, pas
+  une attaque délibérée. Ne pas le présenter autrement.
+
 ### Accessibilité (tâche 16)
 - Toute modale : `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, et fermeture par **Échap** — sauf pendant une écriture en cours.
 - Tout champ a un `<label htmlFor>` ; sinon un `aria-label` explicite.
@@ -413,6 +436,8 @@ Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour l
 | `src/hooks/useUnreadMessages.test.tsx` | pastille : première visite, 30 s, retour d'onglet |
 | `src/pages/Chat.test.tsx` | lecture ouverte, fil, marquage lu, prénoms en double |
 | `src/config/vercelConfig.test.ts` | repli SPA de Vercel : toute route inconnue → `index.html` |
+| `src/pages/Admin.test.tsx` | code admin, recherche, réinitialisation et retrait du PIN |
+| `src/components/AdminPinResetModal.test.tsx` | validation du PIN, confirmation, retrait, panne |
 | `src/test/setup.ts` | mock Supabase global + cleanup |
 
 Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
@@ -462,6 +487,9 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
     `/messages` ou `/parcours` directement renvoie 404, même si la navigation
     interne fonctionne. Les fichiers statiques sont servis avant la
     réécriture : ne pas restreindre la règle aux seuls assets sans raison.
+7l. **Le hash du PIN ne sort jamais du service** — `getProfilesWithPinStatus`
+    le convertit en `hasPin`. Ne pas renvoyer `pin_hash` à l'écran admin :
+    il n'en a aucun besoin, et un hash affiché finit dans une capture d'écran.
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

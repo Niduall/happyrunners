@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase'
 import { goingSet, summarizeVotes } from './voteTallies'
 import { normalizeMessageBody } from './messages'
+import { hashPin } from './pin'
 import type {
   Parcours,
   ParcoursSummary,
@@ -169,6 +170,46 @@ export async function getAllProfiles(): Promise<ProfileIdentity[]> {
 
   if (error) throw error
   return (data || []) as ProfileIdentity[]
+}
+
+/**
+ * Annuaire pour la console d'administration : identité + présence d'un PIN.
+ *
+ * ⚠️ Le `pin_hash` est lu uniquement pour en déduire un booléen. Il ne sort
+ * jamais de cette fonction : ni les composants, ni les tests, ni l'écran ne
+ * manipulent le hash.
+ */
+export interface ProfileWithPinStatus extends ProfileIdentity {
+  hasPin: boolean
+}
+
+export async function getProfilesWithPinStatus(): Promise<ProfileWithPinStatus[]> {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('user_number,first_name,last_name,pin_hash')
+    .order('last_name')
+    .order('first_name')
+
+  if (error) throw error
+
+  return ((data || []) as Array<ProfileIdentity & { pin_hash: string | null }>).map(
+    ({ user_number, first_name, last_name, pin_hash }) => ({
+      user_number,
+      first_name,
+      last_name,
+      hasPin: Boolean(pin_hash),
+    })
+  )
+}
+
+/** Remplace le PIN d'une personne (console admin, sans connaître l'ancien). */
+export async function resetUserPin(userNumber: number, pin: string): Promise<void> {
+  await updateUserProfile(userNumber, { pin_hash: hashPin(pin) })
+}
+
+/** Retire la protection du profil : la personne se connecte sans code. */
+export async function removeUserPin(userNumber: number): Promise<void> {
+  await updateUserProfile(userNumber, { pin_hash: null })
 }
 
 // ===== ATTENDANCES (réponse globale) =====

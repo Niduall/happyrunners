@@ -1,4 +1,4 @@
-import { format, isSameDay, isYesterday } from 'date-fns'
+import { format, isSameDay, startOfDay, subDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import type { Message } from '../types/supabase'
 
@@ -105,7 +105,9 @@ export function groupMessagesByDay(
 /** Libellé d'un séparateur de jour. */
 export function dayLabel(date: Date, now: Date = new Date()): string {
   if (isSameDay(date, now)) return 'Aujourd’hui'
-  if (isYesterday(date)) return 'Hier'
+  // « Hier » se calcule par rapport à `now`, pas à l'horloge réelle :
+  // sinon le libellé change selon le jour où les tests tournent.
+  if (isSameDay(date, subDays(startOfDay(now), 1))) return 'Hier'
 
   const label = format(date, 'EEEE d MMMM', { locale: fr })
   return label.charAt(0).toUpperCase() + label.slice(1)

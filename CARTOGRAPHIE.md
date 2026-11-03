@@ -9,8 +9,8 @@
 > et une liste de dette classée par gravité.
 >
 > **Chaque affirmation porte une référence `fichier:ligne`.** Ce qui n'a pas pu
-> être vérifié est marqué « à confirmer ». Dernière passe : 2 novembre 2026,
-> après le socle du chat (`f2cb0e5`) et son interface.
+> être vérifié est marqué « à confirmer ». Dernière passe : 4 novembre 2026,
+> après le socle du chat (`f2cb0e5`), son interface et la console d'administration.
 
 ## Sommaire
 
@@ -104,7 +104,7 @@ Toutes les lignes sont sous `running-app/`.
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
 | `src/main.tsx` | point d'entrée **réel** : monte `App` sous `StrictMode` + `AuthProvider` | 12 |
-| `src/App.tsx` | routeur : `/` → `Home`, `/parcours` → `ParcoursList`, `/messages` → `Chat` | 19 |
+| `src/App.tsx` | routeur : `/` → `Home`, `/parcours` → `ParcoursList`, `/messages` → `Chat`, `/admin` → `Admin` | 21 |
 | `index.html` | hôte, `lang="fr"`, monte `#root` | 19 |
 
 ### 2.2 Pages
@@ -114,6 +114,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/pages/Home.tsx` | page principale : auth, présence, météo, vote, tableau des participants, entrée du chat | 360 |
 | `src/pages/ParcoursList.tsx` | gestion : liste, import GPX, suppression, verrou admin | 316 |
 | `src/pages/Chat.tsx` | fil de discussion : groupes par jour, auto-défilement, envoi, suppression, noms désambiguïsés | 205 |
+| `src/pages/Admin.tsx` | console admin : liste des profils, recherche, réinitialisation ou retrait du PIN | 283 |
 
 ### 2.3 Composants métier
 
@@ -127,13 +128,14 @@ Toutes les lignes sont sous `running-app/`.
 | `src/components/WeatherCard.tsx` | météo, deux mises en page (compacte / complète) | 146 |
 | `src/components/MapView.tsx` | carte Leaflet : polyligne + marqueurs départ/arrivée | 123 |
 | `src/components/LazyMapView.tsx` | carte chargée à la demande (`lazy` + `Suspense`), fallback à la même hauteur | 39 |
-| `src/components/AdminCodeModal.tsx` | saisie du code administrateur | 110 |
+| `src/components/AdminCodeModal.tsx` | saisie du code administrateur | 123 |
 | `src/components/ParcoursVoteCard.tsx` | carte parcours en mode vote (1 bouton, compteur, badge vainqueur) | 103 |
 | `src/components/ConfirmDeleteModal.tsx` | confirmation de suppression + annonce des votes perdus | 97 |
 | `src/components/AttendanceBanner.tsx` | encadré « Tu viens ? » + deux boutons de présence | 70 |
 | `src/components/ChatComposer.tsx` | zone de saisie du chat : Entrée envoie, Maj+Entrée saut de ligne, compteur 500 | 119 |
 | `src/components/ChatMessageBubble.tsx` | bulle du fil : auteur, heure, états `sending`/`failed`, suppression par l'auteur | 95 |
 | `src/components/MessagesButton.tsx` | entrée « Messages » de l'en-tête + pastille de non-lus (plafond « 99+ ») | 44 |
+| `src/components/AdminPinResetModal.tsx` | réinitialisation d'un PIN : code provisoire ou retrait, sans jamais afficher le hash | 260 |
 
 ### 2.4 Composants génériques
 
@@ -161,7 +163,7 @@ Toutes les lignes sont sous `running-app/`.
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/services/supabaseService.ts` | toutes les requêtes Supabase | 426 |
+| `src/services/supabaseService.ts` | toutes les requêtes Supabase | 467 |
 | `src/services/messages.ts` | chat : fenêtre de 30 j, validation, regroupement par jour, non-lus, dernière lecture | 160 |
 | `src/services/presenceRows.ts` | fusion annuaire + réponses : qui vient, qui est absent, qui n'a pas répondu | 50 |
 | `src/services/gpxParser.ts` | parse GPX XML (DOMParser natif) et JSON Strava, distance, dénivelé, simplification | 265 |
@@ -170,7 +172,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/services/weekKey.ts` | règle du cycle hebdomadaire et formatage | 87 |
 | `src/services/weatherCode.ts` | codes WMO → emoji / libellé / classes Tailwind | 85 |
 | `src/services/adminCode.ts` | lecture et comparaison du code admin, sans mémorisation | 50 |
-| `src/services/pin.ts` | obfuscation du PIN 4 chiffres | 19 |
+| `src/services/pin.ts` | obfuscation du PIN 4 chiffres + validation `isValidPin` | 24 |
 | `src/services/swUpdate.ts` | mise à jour de la PWA : `update()` périodique, retour sur l'onglet, rechargement sur `controllerchange` | 104 |
 
 ### 2.7 Types et utilitaires
@@ -185,7 +187,7 @@ Toutes les lignes sont sous `running-app/`.
 
 ### 2.8 Tests
 
-45 fichiers, 551 tests, ~40 s.
+47 fichiers, 577 tests, ~45 s.
 
 | Fichier | Couvre |
 |---|---|
@@ -215,6 +217,8 @@ Toutes les lignes sont sous `running-app/`.
 | `src/components/ChatComposer.test.tsx` | Entrée / Maj+Entrée / composition d'accent, compteur, lecture sans identité |
 | `src/components/ChatMessageBubble.test.tsx` | auteur, regroupement, états d'envoi, suppression du sien |
 | `src/components/MessagesButton.test.tsx` | pastille absente à zéro, accord singulier/pluriel, plafond 99+ |
+| `src/pages/Admin.test.tsx` | code admin, liste, recherche sans accents, réinit./retrait, erreur de chargement |
+| `src/components/AdminPinResetModal.test.tsx` | validation 4 chiffres, confirmation, retrait, panne réseau |
 | `src/components/AttendanceBanner.test.tsx` | aucun bouton rempli sans réponse |
 | `src/components/ParcoursVoteCard.test.tsx` | bouton de vote |
 | `src/components/LazyMapView.test.tsx` | fallback puis carte, hauteur par défaut |
@@ -287,6 +291,8 @@ Table de référence pour éviter de corriger une règle à un seul endroit.
 | Lecture du chat ouverte, écriture identifiée | `useMessages(null)` refuse l'envoi ; `ChatComposer` propose de se connecter | ✅ |
 | Non-lus = messages depuis la dernière lecture | `messages.ts` (`readLastRead`, `writeLastRead`) + `useUnreadMessages` | ✅ localStorage, par appareil |
 | Deux prénoms identiques → « Julie D. » / « Julie M. » | `Chat.tsx` (`names`) | ✅ l'initiale n'apparaît qu'en cas de doublon |
+| Réinitialiser un PIN sans connaître l'ancien | `supabaseService.ts` (`resetUserPin`, `removeUserPin`) | ⚠️ protégé par le code admin, pas une auth forte |
+| Le hash du PIN ne sort jamais du service | `getProfilesWithPinStatus` → `hasPin: boolean` | ✅ ni l'écran ni les tests ne manipulent `pin_hash` |
 
 ---
 
@@ -361,6 +367,27 @@ autre onglet change la dernière lecture.
 Un message **ne s'édite jamais** : la seule action est la suppression par son
 auteur, appliquée immédiatement, sans confirmation. Les messages de plus de
 30 jours sont purgés à l'ouverture du chat, pas par une tâche planifiée.
+
+### 4.6 Console d'administration
+
+```
+/admin ─▶ Admin
+           ├─ AdminCodeModal (même code que /parcours, jamais mémorisé)
+           ├─ getProfilesWithPinStatus → noms + « PIN actif » / « Sans PIN »
+           └─ ligne « Gérer le PIN »
+                 ├─ PIN provisoire (4 chiffres, saisis deux fois)
+                 │    → resetUserPin → updateUserProfile({ pin_hash })
+                 └─ retrait → removeUserPin → pin_hash = null
+```
+
+Aucune migration : `user_profiles.pin_hash` et sa politique `UPDATE` existent
+déjà. Le code provisoire n'est affiché qu'une fois, dans la confirmation, pour
+que l'administrateur puisse le transmettre. La personne le change ensuite via
+« Sécurité (PIN) » ; le retrait lui permet de se connecter sans code.
+
+L'entrée « Administration » du menu utilisateur n'apparaît que si
+`VITE_ADMIN_CODE` est configuré. La page refuse aussi l'accès direct sans code
+configuré, plutôt que d'ouvrir une console non protégée.
 
 ---
 

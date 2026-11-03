@@ -276,6 +276,10 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - La personne réinitialisée garde sa session en cours : le nouveau PIN lui est
   demandé à la prochaine connexion. Le retrait la laisse se connecter sans
   code jusqu'à ce qu'elle en définisse un.
+- **L'écran de connexion n'a plus de bouton « J'ai oublié mon PIN »** : il
+  affiche la marche à suivre (demander à un administrateur). Ne pas
+  réintroduire un bouton qui déconnecte en laissant croire que le PIN est
+  définitif — c'était faux depuis l'ajout de la console.
 - ⚠️ Ce n'est **pas une authentification forte** : le code admin est dans le
   bundle et la RLS est ouverte. Cela empêche une erreur ou une curiosité, pas
   une attaque délibérée. Ne pas le présenter autrement.

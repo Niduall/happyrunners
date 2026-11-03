@@ -120,8 +120,8 @@ Toutes les lignes sont sous `running-app/`.
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/components/Auth.tsx` | identité / création de compte / saisie PIN | 413 |
-| `src/components/SecurityModal.tsx` | gestion du PIN : ajouter, changer, retirer | 258 |
+| `src/components/Auth.tsx` | identité / création de compte / saisie PIN | 415 |
+| `src/components/SecurityModal.tsx` | gestion du PIN : ajouter, changer, retirer | 276 |
 | `src/components/ParcoursCard.tsx` | carte parcours en mode gestion (import GPX, actions admin) | 170 |
 | `src/components/ParticipantsTable.tsx` | tout le groupe en trois sections : présents en lignes + parcours, sans-réponse et absents en puces | 231 |
 | `src/components/UserMenu.tsx` | menu utilisateur : nom, édition, Sécurité, déconnexion | 161 |
@@ -388,6 +388,10 @@ que l'administrateur puisse le transmettre. La personne le change ensuite via
 L'entrée « Administration » du menu utilisateur n'apparaît que si
 `VITE_ADMIN_CODE` est configuré. La page refuse aussi l'accès direct sans code
 configuré, plutôt que d'ouvrir une console non protégée.
+
+Symétriquement, l'écran de connexion par PIN ne propose plus de « mot de passe
+oublié » : il indique de demander à un administrateur. Un PIN ne se réinitialise
+pas depuis l'écran de connexion, et laisser croire le contraire était faux.
 
 ---
 

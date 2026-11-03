@@ -70,7 +70,6 @@ export function LoginForm() {
     pendingUser,
     loading,
     resetToIdentity,
-    logout,
   } = useAuth()
 
   // 'identity' | 'setup' (création) | 'pin' (vérification)
@@ -231,8 +230,8 @@ export function LoginForm() {
             )}
 
             <p className="text-sm text-gray-600">
-              Un PIN empêche les autres de voter à ta place sur ton téléphone. Personne ne
-              peut le réinitialiser — si tu l'oublies, tu perds l'accès à ce profil.
+              Un PIN empêche les autres de voter à ta place sur ton téléphone. Si
+              tu l'oublies, un administrateur peut le réinitialiser.
             </p>
 
             <PinField
@@ -314,7 +313,15 @@ export function LoginForm() {
             </Button>
           </form>
 
-          <div className="mt-4 flex items-center justify-between">
+          <div className="mt-4 space-y-3">
+            <p className="flex items-start gap-2 text-sm text-gray-600">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
+              <span>
+                PIN oublié ? Demande à un administrateur de le réinitialiser : il
+                te donnera un code provisoire, que tu pourras changer ensuite dans
+                « Sécurité (PIN) ».
+              </span>
+            </p>
             <button
               type="button"
               onClick={handleBack}
@@ -322,14 +329,6 @@ export function LoginForm() {
             >
               <ArrowLeft className="w-4 h-4" />
               Changer de nom
-            </button>
-            <button
-              type="button"
-              onClick={logout}
-              className="text-sm text-gray-500 hover:text-gray-900"
-              title="Le PIN ne peut pas être réinitialisé. Déconnexion puis nouveau compte."
-            >
-              J'ai oublié mon PIN
             </button>
           </div>
         </CardContent>

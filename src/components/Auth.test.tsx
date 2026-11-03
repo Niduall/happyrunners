@@ -237,11 +237,13 @@ describe('LoginForm — écran de création', () => {
     )
   })
 
-  it('avertit qu’un PIN oublié est définitif', async () => {
+  it('indique qu’un administrateur peut réinitialiser le PIN', async () => {
     const user = userEvent.setup()
     await goToSignup(user)
 
-    expect(screen.getByText(/Personne ne peut le réinitialiser/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/un administrateur peut le réinitialiser/)
+    ).toBeInTheDocument()
   })
 
   it('« Changer de nom » revient à l’identité en gardant le nom', async () => {
@@ -439,7 +441,7 @@ describe('LoginForm — bouton retour', () => {
     )
   })
 
-  it('« J’ai oublié mon PIN » déconnecte proprement', async () => {
+  it('explique quoi faire quand le PIN est oublié', async () => {
     const user = userEvent.setup()
     mockFind.mockResolvedValue(profile({ user_number: 3, pin_hash: hashPin('1234') }))
 
@@ -449,9 +451,17 @@ describe('LoginForm — bouton retour', () => {
     await user.click(screen.getByRole('button', { name: /Continuer/ }))
     await screen.findByLabelText('PIN à 4 chiffres')
 
-    await user.click(screen.getByRole('button', { name: /J'ai oublié mon PIN/ }))
+    // Plus de bouton « J'ai oublié » : la marche à suivre est affichée.
+    expect(
+      screen.getByText(/Demande à un administrateur de le réinitialiser/)
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /J'ai oublié mon PIN/ })
+    ).not.toBeInTheDocument()
 
-    // On retombe sur l'écran identité, déconnecté
+    await user.click(screen.getByRole('button', { name: /Changer de nom/ }))
+
+    // On retombe sur l'écran identité
     expect(await screen.findByLabelText('Prénom')).toBeInTheDocument()
     expect(screen.queryByLabelText('PIN à 4 chiffres')).not.toBeInTheDocument()
   })

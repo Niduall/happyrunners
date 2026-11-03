@@ -204,8 +204,8 @@ export function SecurityModal({ onClose }: SecurityModalProps) {
         {!done && action === 'add' && (
           <>
             <p className="text-sm text-gray-600">
-              Un PIN empêche les autres de voter à ta place sur ton téléphone. Personne ne
-              peut le réinitialiser — si tu l'oublies, tu perds l'accès à ce profil.
+              Un PIN empêche les autres de voter à ta place sur ton téléphone. Si
+              tu l'oublies, un administrateur peut le réinitialiser.
             </p>
             {pinField('add-pin', newPin, setNewPin, 'PIN à 4 chiffres', true)}
             {pinField('add-pin-confirm', confirmPin, setConfirmPin, 'Confirmer le PIN')}

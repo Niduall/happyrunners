@@ -7,6 +7,7 @@ import {
   findProfileByName,
 } from '../services/supabaseService'
 import { hashPin } from '../services/pin'
+import { forgetDevice, isDeviceTrusted, trustDevice } from '../services/pinTrust'
 import { isAdminLockEnabled } from '../services/adminCode'
 import type { ProfileIdentity, UserIdentity } from '../types'
 
@@ -117,7 +118,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return
         }
         if (profile.pin_hash) {
-          requestPin(profile)
+          // Appareil déjà vérifié récemment : ne pas redemander le PIN à
+          // chaque ouverture. Au-delà de 30 jours, on le redemande.
+          if (isDeviceTrusted(profile.user_number)) {
+            connect(profile)
+          } else {
+            requestPin(profile)
+          }
         } else {
           connect(profile)
         }
@@ -182,6 +189,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           last_name: trimmedLast,
           pin_hash: pin ? hashPin(pin) : null,
         })
+        // Le PIN vient d'être choisi sur cet appareil : on le mémorise.
+        if (pin) trustDevice(created.user_number)
         connect(created)
         return true
       } catch (err) {
@@ -221,6 +230,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (!profile.pin_hash || profile.pin_hash === hashPin(pin)) {
+          // Le PIN vient d'être prouvé : cet appareil n'aura plus à le
+          // redemander avant 30 jours (ou une déconnexion).
+          trustDevice(profile.user_number)
           connect(profile)
           return true
         }
@@ -280,6 +292,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         await updateUserProfile(user.id, { pin_hash: hashPin(newPin) })
+        // Le PIN vient d'être prouvé (ou choisi) sur cet appareil.
+        trustDevice(user.id)
         return true
       } catch (err) {
         console.error('[AUTH] Erreur changement de PIN:', err)
@@ -317,6 +331,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     clearUser()
+    // Se déconnecter, c'est aussi retirer la confiance : sur un appareil
+    // partagé, la personne suivante devra saisir son PIN.
+    forgetDevice()
     setUser(null)
     setPendingUser(null)
     setMode('first_login')

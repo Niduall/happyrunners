@@ -80,7 +80,7 @@ describe('Home — chat réservé aux personnes connectées', () => {
 
     expect(screen.queryByRole('button', { name: /Messages/ })).not.toBeInTheDocument()
     // Aucune requête de comptage ne doit partir sans identité.
-    expect(mockUnread).toHaveBeenCalledWith(false)
+    expect(mockUnread).toHaveBeenCalledWith(false, null)
   })
 
   it('montre Messages une fois connecté', () => {
@@ -92,6 +92,6 @@ describe('Home — chat réservé aux personnes connectées', () => {
     renderHome()
 
     expect(screen.getByRole('button', { name: 'Messages' })).toBeInTheDocument()
-    expect(mockUnread).toHaveBeenCalledWith(true)
+    expect(mockUnread).toHaveBeenCalledWith(true, 14)
   })
 })

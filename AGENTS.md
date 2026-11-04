@@ -165,6 +165,11 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - **La pastille ne charge pas les messages** : `useUnreadMessages` fait un
   `count` toutes les 30 s, au retour sur l'onglet et quand un autre onglet
   change la dernière lecture. Ne pas y brancher `getRecentMessages`.
+- **Ses propres messages ne comptent jamais** : `countMessagesSince(since, me)`
+  ajoute `.neq('user_number', me)`. À l'envoi, on enregistre le `created_at`
+  **serveur** du message enregistré : l'heure locale du message optimiste peut
+  être en retard de quelques centaines de millisecondes et rallumait la
+  pastille après chaque envoi.
 - **Le chat ouvert vaut lecture** : `Chat` appelle `markAllRead()` après
   chargement. Revenir à l'accueil doit éteindre la pastille sans action.
 - **Un vrai fil, pas une liste inversée** : le plus ancien en haut, arrivée en
@@ -281,13 +286,28 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - **Aucune migration** : `user_profiles.pin_hash` et sa politique `UPDATE`
   existent déjà. `resetUserPin` réutilise `updateUserProfile`, donc
   `updated_at` suit la règle habituelle.
-- La personne réinitialisée garde sa session en cours : le nouveau PIN lui est
-  demandé à la prochaine connexion. Le retrait la laisse se connecter sans
-  code jusqu'à ce qu'elle en définisse un.
+- La personne réinitialisée garde sa session en cours. Le nouveau PIN lui est
+  demandé à la prochaine ouverture **si** son appareil n'est pas déjà de
+  confiance ; le retrait la laisse se connecter sans code jusqu'à ce qu'elle
+  en définisse un.
 - **L'écran de connexion n'a plus de bouton « J'ai oublié mon PIN »** : il
   affiche la marche à suivre (demander à un administrateur). Ne pas
   réintroduire un bouton qui déconnecte en laissant croire que le PIN est
   définitif — c'était faux depuis l'ajout de la console.
+
+### PIN et appareil de confiance
+- Un PIN saisi n'est **pas redemandé à chaque ouverture**. `pinTrust.ts`
+  mémorise `{ userNumber, verifiedAt }` dans `localStorage` pendant
+  **30 jours** (`PIN_TRUST_DAYS`).
+- Au démarrage, `useAuth` ne demande le PIN que si le profil en a un **et**
+  que l'appareil n'est pas de confiance. `trustDevice` est posé après une
+  vérification réussie, une création de profil avec PIN, ou l'ajout d'un PIN
+  depuis « Sécurité (PIN) ».
+- La confiance est **liée au `user_number`** : un autre profil sur le même
+  téléphone doit saisir son propre PIN. `logout()` appelle `forgetDevice()`.
+- ⚠️ C'est un compromis explicite : au-delà de 30 jours (ou après une
+  déconnexion), le PIN est redemandé. Ne pas le rendre éternel sans rediscuter
+  du risque « téléphone perdu ».
 - ⚠️ Ce n'est **pas une authentification forte** : le code admin est dans le
   bundle et la RLS est ouverte. Cela empêche une erreur ou une curiosité, pas
   une attaque délibérée. Ne pas le présenter autrement.
@@ -435,6 +455,7 @@ Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour l
 | `src/services/weatherApi.test.ts` | parsing Open-Meteo, couverture 16 j |
 | `src/services/weatherCode.test.ts` | mapping des 28 codes WMO, jour/nuit |
 | `src/services/pin.test.ts` | `hashPin` |
+| `src/services/pinTrust.test.ts` | appareil de confiance : 30 jours, autre profil, repère illisible, oubli |
 | `src/hooks/useAuth.integration.test.tsx` | flux auth complet + partage d'état |
 | `src/hooks/useParcoursVotes.test.tsx` | votes hebdo, tri, pendingCount, optimisme |
 | `src/hooks/useParcoursVotes.attendance.test.tsx` | un vote sans présence ne compte pas |

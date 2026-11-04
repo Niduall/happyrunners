@@ -122,7 +122,7 @@ Toutes les lignes sont sous `running-app/`.
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
 | `src/components/Auth.tsx` | identité / création de compte / saisie PIN | 415 |
-| `src/components/SecurityModal.tsx` | gestion du PIN : ajouter, changer, retirer | 276 |
+| `src/components/SecurityModal.tsx` | gestion du PIN : ajouter, changer, retirer ; rappelle la confiance de 30 jours | 277 |
 | `src/components/ParcoursCard.tsx` | carte parcours en mode gestion (import GPX, actions admin) | 170 |
 | `src/components/ParticipantsTable.tsx` | tout le groupe en trois sections : présents en lignes + parcours, sans-réponse et absents en puces | 231 |
 | `src/components/UserMenu.tsx` | menu utilisateur : nom, édition, Sécurité, déconnexion | 161 |
@@ -151,21 +151,21 @@ Toutes les lignes sont sous `running-app/`.
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/hooks/useAuth.tsx` | Context d'authentification : identité par nom, PIN, profil, cache | 355 |
+| `src/hooks/useAuth.tsx` | Context d'authentification : identité par nom, PIN, appareil de confiance, profil, cache | 388 |
 | `src/hooks/useParcoursVotes.ts` | votes + présences, filtre des votants, compteurs, vainqueurs | 268 |
 | `src/hooks/useAttendance.ts` | présence hebdo, polling 30 s, état optimiste | 155 |
 | `src/hooks/useProfiles.ts` | annuaire complet, chargé une fois à la connexion (pas avant) | 52 |
 | `src/hooks/useWeather.ts` | météo, cache par semaine, rafraîchissement 30 min | 149 |
 | `src/hooks/useParcours.ts` | CRUD parcours, parsing GPX, polling 30 s | 80 |
 | `src/hooks/useTargetWednesday.ts` | horloge de semaine cible (tick 30 s, sans réseau) | 56 |
-| `src/hooks/useMessages.ts` | chat : polling 5 s / 30 s, envoi optimiste, suppression, purge 30 j | 266 |
-| `src/hooks/useUnreadMessages.ts` | pastille : comptage des messages depuis la dernière lecture, 30 s + focus/visibilité | 69 |
+| `src/hooks/useMessages.ts` | chat : polling 5 s / 30 s, envoi optimiste, lecture serveur, suppression, purge 30 j | 285 |
+| `src/hooks/useUnreadMessages.ts` | pastille : comptage des messages des autres, 30 s + focus/visibilité | 72 |
 
 ### 2.6 Services
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/services/supabaseService.ts` | toutes les requêtes Supabase | 467 |
+| `src/services/supabaseService.ts` | toutes les requêtes Supabase | 482 |
 | `src/services/messages.ts` | chat : fenêtre de 30 j, validation, regroupement par jour, non-lus, dernière lecture | 160 |
 | `src/services/presenceRows.ts` | fusion annuaire + réponses : qui vient, qui est absent, qui n'a pas répondu | 50 |
 | `src/services/gpxParser.ts` | parse GPX XML (DOMParser natif) et JSON Strava, distance, dénivelé, simplification | 265 |
@@ -175,6 +175,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/services/weatherCode.ts` | codes WMO → emoji / libellé / classes Tailwind | 85 |
 | `src/services/adminCode.ts` | lecture et comparaison du code admin, sans mémorisation | 50 |
 | `src/services/pin.ts` | obfuscation du PIN 4 chiffres + validation `isValidPin` | 24 |
+| `src/services/pinTrust.ts` | appareil de confiance : 30 jours, lié au `user_number`, oublié à la déconnexion | 88 |
 | `src/services/swUpdate.ts` | mise à jour de la PWA : `update()` périodique, retour sur l'onglet, rechargement sur `controllerchange` | 104 |
 
 ### 2.7 Types et utilitaires
@@ -189,11 +190,11 @@ Toutes les lignes sont sous `running-app/`.
 
 ### 2.8 Tests
 
-49 fichiers, 582 tests, ~45 s.
+50 fichiers, 597 tests, ~50 s.
 
 | Fichier | Couvre |
 |---|---|
-| `src/hooks/useAuth.integration.test.tsx` | flux auth complet + partage d'état (602 l.) |
+| `src/hooks/useAuth.integration.test.tsx` | flux auth complet, appareil de confiance, partage d'état (739 l.) |
 | `src/components/Auth.test.tsx` | écrans d'identité et de PIN (516 l.) |
 | `src/hooks/useParcoursVotes.test.tsx` | votes hebdo, tri, pendingCount, optimisme |
 | `src/hooks/useParcoursVotes.attendance.test.tsx` | un vote sans présence ne compte pas |
@@ -204,6 +205,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/services/supabaseService.test.ts` | requêtes et mapping |
 | `src/services/schema.test.ts` | `schema.sql` rejouable et à jour |
 | `src/components/SecurityModal.test.tsx` | gestion du PIN |
+| `src/services/pinTrust.test.ts` | appareil de confiance : 30 jours, autre profil, repère illisible, oubli |
 | `src/hooks/useParcours.test.tsx` | CRUD parcours |
 | `src/hooks/useWeather.test.tsx` | cache et rafraîchissement |
 | `src/hooks/useAttendance.test.tsx` | présence hebdo |
@@ -213,8 +215,8 @@ Toutes les lignes sont sous `running-app/`.
 | `src/services/adminCode.test.ts` | verrou admin, ne mémorise rien |
 | `src/hooks/useTargetWednesday.test.ts` | horloge de semaine |
 | `src/services/messages.test.ts` | fenêtre de 30 j, validation, regroupement par jour, non-lus |
-| `src/hooks/useMessages.test.tsx` | polling 5 s / 30 s, envoi optimiste, échec, purge, course polling/envoi |
-| `src/hooks/useUnreadMessages.test.tsx` | pastille : première visite, période 30 s, retour d'onglet, erreur silencieuse |
+| `src/hooks/useMessages.test.tsx` | polling 5 s / 30 s, envoi optimiste, lecture serveur, échec, purge, course polling/envoi |
+| `src/hooks/useUnreadMessages.test.tsx` | pastille : première visite, période 30 s, retour d'onglet, exclusion de soi, erreur silencieuse |
 | `src/pages/Chat.test.tsx` | lecture ouverte, connexion pour écrire, fil vide, marquage lu, prénoms en double |
 | `src/components/RequireUser.test.tsx` | visiteur redirigé, connecté autorisé, attente du chargement |
 | `src/pages/Home.messages.test.tsx` | Messages absent sans identité, présent une fois connecté |
@@ -294,7 +296,8 @@ Table de référence pour éviter de corriger une règle à un seul endroit.
 | Longueur d'un message = 1 à 500 | `schema.sql` (`CHECK`) + `messages.ts` (validation) | ✅ tenue par la base |
 | Lecture du chat réservée aux connectés | `RequireUser` autour de `/messages` ; `MessagesButton` et `useUnreadMessages(isAuthenticated)` sur l'accueil | ✅ un visiteur ne voit ni le bouton ni le fil |
 | Saisie du chat sans zoom iOS | `ChatComposer.tsx` (`text-base sm:text-sm`) | ✅ 16 px sous 640 px de large |
-| Non-lus = messages depuis la dernière lecture | `messages.ts` (`readLastRead`, `writeLastRead`) + `useUnreadMessages` | ✅ localStorage, par appareil |
+| Non-lus = messages des autres depuis la dernière lecture | `messages.ts` (`readLastRead`, `writeLastRead`) + `countMessagesSince(since, me)` | ✅ ses propres messages ne comptent jamais, heure serveur retenue |
+| PIN mémorisé 30 jours par appareil | `pinTrust.ts` + `useAuth.tsx` | ✅ lié au `user_number`, oublié à la déconnexion |
 | Deux prénoms identiques → « Julie D. » / « Julie M. » | `Chat.tsx` (`names`) | ✅ l'initiale n'apparaît qu'en cas de doublon |
 | Réinitialiser un PIN sans connaître l'ancien | `supabaseService.ts` (`resetUserPin`, `removeUserPin`) | ⚠️ protégé par le code admin, pas une auth forte |
 | Le hash du PIN ne sort jamais du service | `getProfilesWithPinStatus` → `hasPin: boolean` | ✅ ni l'écran ni les tests ne manipulent `pin_hash` |
@@ -308,8 +311,10 @@ Table de référence pour éviter de corriger une règle à un seul endroit.
 ```
 main.tsx → AuthProvider
   ├─ localStorage vide ─────────────────▶ first_login  → LoginForm
-  ├─ cache présent → getUserProfile() ──▶ pin_hash ? → pin_verification
-  │                                   └─ pas de PIN  → authenticated
+  ├─ cache présent → getUserProfile() ──▶ pas de PIN ─────────▶ authenticated
+  │                                   └─ PIN + appareil de
+  │                                      confiance (< 30 j) ──▶ authenticated
+  │                                   └─ PIN sans confiance ──▶ pin_verification
   └─ erreur réseau ─────────────────────▶ authenticated avec le **cache**
 ```
 

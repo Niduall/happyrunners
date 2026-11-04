@@ -9,6 +9,7 @@ import {
   findProfileByName,
 } from '../services/supabaseService'
 import { hashPin } from '../services/pin'
+import { isDeviceTrusted, trustDevice } from '../services/pinTrust'
 import { getUser } from '../services/storage'
 
 vi.mock('../services/supabaseService', () => ({
@@ -207,6 +208,67 @@ describe('useAuth — user_number stable', () => {
 
       expect(result.current.isAuthenticated).toBe(true)
       expect(result.current.user?.id).toBe(1)
+    })
+
+    it('ne redemande pas le PIN sur un appareil de confiance', async () => {
+      seedLocalUser(1)
+      trustDevice(1)
+      mockGetProfile.mockResolvedValue(
+        profile({ user_number: 1, pin_hash: hashPin('1234') }) as never
+      )
+
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      expect(result.current.isAuthenticated).toBe(true)
+      expect(result.current.needsPin).toBe(false)
+    })
+
+    it('redemande le PIN quand la confiance a expiré', async () => {
+      seedLocalUser(1)
+      // Confiance posée il y a 31 jours : au-delà de la fenêtre de 30 jours.
+      trustDevice(1, new Date(Date.now() - 31 * 86_400_000))
+      mockGetProfile.mockResolvedValue(
+        profile({ user_number: 1, pin_hash: hashPin('1234') }) as never
+      )
+
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      expect(result.current.needsPin).toBe(true)
+    })
+
+    it('mémorise l’appareil après une vérification réussie', async () => {
+      seedLocalUser(1)
+      mockGetProfile.mockResolvedValue(
+        profile({ user_number: 1, pin_hash: hashPin('1234') }) as never
+      )
+
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+      expect(result.current.needsPin).toBe(true)
+
+      await act(async () => {
+        await result.current.verifyUserPin('1234')
+      })
+
+      expect(result.current.isAuthenticated).toBe(true)
+      expect(isDeviceTrusted(1)).toBe(true)
+    })
+
+    it('oublie l’appareil à la déconnexion', async () => {
+      seedLocalUser(1)
+      trustDevice(1)
+      mockGetProfile.mockResolvedValue(profile({ user_number: 1 }) as never)
+
+      const { result } = renderHook(() => useAuth(), { wrapper })
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      act(() => {
+        result.current.logout()
+      })
+
+      expect(isDeviceTrusted(1)).toBe(false)
     })
 
     it('retombe en first_login si le profil a disparu', async () => {

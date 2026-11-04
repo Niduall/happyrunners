@@ -11,7 +11,7 @@ import { MESSAGES_LAST_READ_KEY, readLastRead } from '../services/messages'
  */
 const UNREAD_POLL_MS = 30000
 
-export function useUnreadMessages(enabled = true): number {
+export function useUnreadMessages(enabled = true, me: number | null = null): number {
   const [unreadCount, setUnreadCount] = useState(0)
   const mountedRef = useRef(true)
 
@@ -25,12 +25,15 @@ export function useUnreadMessages(enabled = true): number {
     }
 
     try {
-      const count = await countMessagesSince(lastReadAt)
+      // Ses propres messages ne comptent jamais comme non lus : sans cela,
+      // un décalage d'horloge appareil/serveur rallume la pastille après
+      // chaque envoi.
+      const count = await countMessagesSince(lastReadAt, me)
       if (mountedRef.current) setUnreadCount(count)
     } catch {
       // Hors ligne : on garde la dernière valeur connue, sans alerter.
     }
-  }, [])
+  }, [me])
 
   useEffect(() => {
     if (!enabled) return

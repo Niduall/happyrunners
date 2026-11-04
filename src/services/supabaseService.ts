@@ -412,12 +412,27 @@ export async function getRecentMessages(
   return (data || []) as Message[]
 }
 
-/** Compte léger pour la pastille de non-lus : aucun corps de message chargé. */
-export async function countMessagesSince(since: string): Promise<number> {
-  const { count, error } = await supabase
+/**
+ * Compte léger pour la pastille de non-lus : aucun corps de message chargé.
+ *
+ * `excludeUserNumber` retire les messages de la personne elle-même : écrire
+ * ne doit jamais allumer sa propre pastille, même avec un décalage d'horloge
+ * entre l'appareil et le serveur.
+ */
+export async function countMessagesSince(
+  since: string,
+  excludeUserNumber?: number | null
+): Promise<number> {
+  let query = supabase
     .from('messages')
     .select('id', { count: 'exact', head: true })
     .gt('created_at', since)
+
+  if (excludeUserNumber != null) {
+    query = query.neq('user_number', excludeUserNumber)
+  }
+
+  const { count, error } = await query
 
   if (error) throw error
   return count ?? 0

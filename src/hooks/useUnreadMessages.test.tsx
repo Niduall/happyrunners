@@ -47,10 +47,11 @@ describe('useUnreadMessages — pastille', () => {
     localStorage.setItem(MESSAGES_LAST_READ_KEY, '2026-11-02T09:00:00.000Z')
     mockCount.mockResolvedValue(3)
 
-    const { result } = renderHook(() => useUnreadMessages())
+    const { result } = renderHook(() => useUnreadMessages(true, 14))
     await flush()
 
-    expect(mockCount).toHaveBeenCalledWith('2026-11-02T09:00:00.000Z')
+    // Le numéro exclu évite de compter ses propres messages.
+    expect(mockCount).toHaveBeenCalledWith('2026-11-02T09:00:00.000Z', 14)
     expect(result.current).toBe(3)
   })
 

@@ -144,6 +144,21 @@ export function useMessages(
     }
   }, [load])
 
+  /**
+   * Avance la dernière lecture sans jamais la reculer.
+   *
+   * On enregistre l'heure **serveur** du message enregistré : l'horloge de
+   * l'appareil peut être en retard de quelques centaines de millisecondes, et
+   * comparer cette heure locale au `created_at` serveur rallumait la pastille
+   * après chaque envoi.
+   */
+  const markReadAt = useCallback((iso: string) => {
+    const current = readLastRead()
+    if (current && Date.parse(current) >= Date.parse(iso)) return
+    writeLastRead(iso)
+    setLastReadAt(iso)
+  }, [])
+
   const send = useCallback(
     async (raw: string): Promise<boolean> => {
       const body = normalizeMessageBody(raw)
@@ -167,6 +182,9 @@ export function useMessages(
         setMessages((prev) =>
           sortByCreatedAt(prev.map((m) => (m.id === temp.id ? saved : m)))
         )
+        // Envoyer un message, c'est l'avoir lu : la pastille de l'accueil ne
+        // doit pas s'allumer pour son propre message.
+        markReadAt(saved.created_at)
         return true
       } catch {
         setMessages((prev) =>
@@ -175,7 +193,7 @@ export function useMessages(
         return false
       }
     },
-    [userNumber]
+    [userNumber, markReadAt]
   )
 
   /** Renvoie un message en échec. Sans effet sur un message déjà parti. */
@@ -198,6 +216,7 @@ export function useMessages(
       setMessages((prev) =>
         sortByCreatedAt(prev.map((m) => (m.id === id ? saved : m)))
       )
+      markReadAt(saved.created_at)
       return true
     } catch {
       setMessages((prev) =>
@@ -205,7 +224,7 @@ export function useMessages(
       )
       return false
     }
-  }, [])
+  }, [markReadAt])
 
   /**
    * Supprime un message. Retiré tout de suite de l'écran ; restauré à sa place

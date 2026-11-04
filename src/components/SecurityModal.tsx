@@ -128,7 +128,7 @@ export function SecurityModal({ onClose }: SecurityModalProps) {
           setConfirmPin('')
           setDone({
             title: 'PIN activé',
-            detail: 'Il te sera demandé à chaque connexion.',
+            detail: 'Il te sera redemandé dans 30 jours, ou après une déconnexion.',
           })
         } else {
           setError('Impossible d’activer le PIN')
@@ -205,7 +205,8 @@ export function SecurityModal({ onClose }: SecurityModalProps) {
           <>
             <p className="text-sm text-gray-600">
               Un PIN empêche les autres de voter à ta place sur ton téléphone. Si
-              tu l'oublies, un administrateur peut le réinitialiser.
+              tu l'oublies, un administrateur peut le réinitialiser. Cet appareil
+              le mémorisera <strong>30 jours</strong>.
             </p>
             {pinField('add-pin', newPin, setNewPin, 'PIN à 4 chiffres', true)}
             {pinField('add-pin-confirm', confirmPin, setConfirmPin, 'Confirmer le PIN')}

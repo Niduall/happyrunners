@@ -10,6 +10,7 @@ import {
   getProfilesWithPinStatus,
   resetUserPin,
   removeUserPin,
+  countMessagesSince,
 } from './supabaseService'
 import { hashPin } from './pin'
 import { supabase } from '../lib/supabase'
@@ -23,6 +24,9 @@ const mockError = vi.fn()
 const mockAttendanceError = vi.fn()
 const mockSelectColumns = vi.fn()
 const mockUpdateValues = vi.fn()
+const mockGt = vi.fn()
+const mockNeq = vi.fn()
+const mockCount = vi.fn()
 
 /**
  * Chaque table a sa propre source de données. `from(table)` capture le nom
@@ -43,6 +47,14 @@ vi.mock('../lib/supabase', () => ({
       }
       q.not = () => q
       q.in = () => q
+      q.gt = (column?: string, value?: unknown) => {
+        mockGt(column, value)
+        return q
+      }
+      q.neq = (column?: string, value?: unknown) => {
+        mockNeq(column, value)
+        return q
+      }
       q.order = () => q
       q.limit = () => q
       q.single = () => q
@@ -57,7 +69,11 @@ vi.mock('../lib/supabase', () => ({
             error: mockAttendanceError(),
           }).then(resolve)
         }
-        return Promise.resolve({ data: mockRows(), error: mockError() }).then(resolve)
+        return Promise.resolve({
+          data: mockRows(),
+          error: mockError(),
+          count: mockCount(),
+        }).then(resolve)
       }
       return q
     },
@@ -75,6 +91,9 @@ beforeEach(() => {
   mockAttendanceError.mockReset()
   mockSelectColumns.mockReset()
   mockUpdateValues.mockReset()
+  mockGt.mockReset()
+  mockNeq.mockReset()
+  mockCount.mockReset()
 
   mockRows.mockReturnValue([])
   mockProfiles.mockReturnValue([])
@@ -82,6 +101,7 @@ beforeEach(() => {
   mockAttendanceRows.mockReturnValue([])
   mockError.mockReturnValue(null)
   mockAttendanceError.mockReturnValue(null)
+  mockCount.mockReturnValue(0)
 })
 
 const VOTE_ROWS = [
@@ -212,6 +232,35 @@ describe('réinitialisation du PIN — console admin', () => {
     mockProfilesError.mockReturnValue(new Error('écriture refusée'))
 
     await expect(resetUserPin(9, '1234')).rejects.toThrow('écriture refusée')
+  })
+})
+
+describe('countMessagesSince — pastille de non-lus', () => {
+  it('exclut les messages de la personne elle-même', async () => {
+    mockCount.mockReturnValue(2)
+
+    const total = await countMessagesSince('2026-11-02T09:00:00.000Z', 14)
+
+    expect(total).toBe(2)
+    expect(mockGt).toHaveBeenCalledWith('created_at', '2026-11-02T09:00:00.000Z')
+    expect(mockNeq).toHaveBeenCalledWith('user_number', 14)
+  })
+
+  it('ne filtre personne quand aucun numéro n’est fourni', async () => {
+    mockCount.mockReturnValue(3)
+
+    const total = await countMessagesSince('2026-11-02T09:00:00.000Z')
+
+    expect(total).toBe(3)
+    expect(mockNeq).not.toHaveBeenCalled()
+  })
+
+  it('propage une erreur de comptage', async () => {
+    mockError.mockReturnValue(new Error('comptage refusé'))
+
+    await expect(
+      countMessagesSince('2026-11-02T09:00:00.000Z', 14)
+    ).rejects.toThrow('comptage refusé')
   })
 })
 

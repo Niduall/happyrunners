@@ -285,6 +285,27 @@ describe('useMessages — non-lus et purge', () => {
     )
   })
 
+  it('avance la dernière lecture à l’heure serveur après un envoi', async () => {
+    // L'heure locale du message optimiste peut précéder de quelques
+    // centaines de millisecondes le created_at serveur. Si on garde la
+    // première, la pastille compte son propre message comme non lu.
+    localStorage.setItem(MESSAGES_LAST_READ_KEY, '2026-11-02T10:00:00.000Z')
+    mockGet.mockResolvedValue([])
+    mockSend.mockResolvedValue(message('s1', '2026-11-02T10:00:05.000Z', 1))
+
+    const { result } = renderHook(() => useMessages(1))
+    await flush()
+
+    await act(async () => {
+      await result.current.send('coucou')
+    })
+
+    expect(localStorage.getItem(MESSAGES_LAST_READ_KEY)).toBe(
+      '2026-11-02T10:00:05.000Z'
+    )
+    expect(result.current.unreadCount).toBe(0)
+  })
+
   it('purge ce qui est sorti de la fenêtre au chargement', async () => {
     renderHook(() => useMessages(1))
     await flush()

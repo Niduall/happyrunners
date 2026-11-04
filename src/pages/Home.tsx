@@ -61,7 +61,7 @@ export function Home() {
   const { profiles } = useProfiles(isAuthenticated)
 
   /** Pastille du chat : un simple comptage, sans charger les messages. */
-  const unreadMessages = useUnreadMessages()
+  const unreadMessages = useUnreadMessages(isAuthenticated)
 
   /**
    * Qui a dit « je viens ». Passe aux votes pour qu'un choix d'un absent
@@ -170,7 +170,7 @@ export function Home() {
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
           <h1 className="text-xl font-bold text-primary shrink-0">HappyRunners</h1>
           <div className="flex items-center gap-1 sm:gap-2 min-w-0">
-            <MessagesButton unreadCount={unreadMessages} />
+            {isAuthenticated && <MessagesButton unreadCount={unreadMessages} />}
             {isAuthenticated && (
               <Button
                 variant="accent"

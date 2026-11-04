@@ -75,6 +75,7 @@ npm run build      # 0 erreur TypeScript
 | `src/components/ChatComposer.tsx` | saisie du chat (Entrée envoie, Maj+Entrée à la ligne) |
 | `src/components/ChatMessageBubble.tsx` | bulle, état d'envoi, suppression par l'auteur |
 | `src/components/MessagesButton.tsx` | entrée Messages de l'en-tête + pastille de non-lus |
+| `src/components/RequireUser.tsx` | réserve une route aux personnes connectées (redirige vers `/`) |
 | `src/pages/Admin.tsx` | console admin : réinitialiser ou retirer le PIN d'une personne |
 | `src/components/AdminPinResetModal.tsx` | PIN provisoire ou retrait, sans jamais afficher le hash |
 
@@ -136,8 +137,12 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - Table `messages` : **pas de `week_key`**. La fenêtre est **glissante de
   30 jours** (`MESSAGE_RETENTION_DAYS`), calculée depuis `created_at`. Un
   message du mercredi reste donc visible le mardi suivant, puis sort seul.
-- **Lecture ouverte à tous, écriture identifiée** : `useMessages(null)` lit
-  mais refuse l'envoi. Un message doit avoir un auteur.
+- **Le chat est réservé aux personnes connectées** : la route `/messages` est
+  enveloppée par `RequireUser`, qui redirige vers `/` (et empêche le montage,
+  donc les requêtes) sans identité. L'entrée « Messages » et la pastille
+  n'apparaissent que si `isAuthenticated` ; `useUnreadMessages(enabled)` ne
+  compte rien pour un visiteur. `useMessages(null)` continue de refuser
+  l'envoi : un message doit avoir un auteur.
 - **Pas de Realtime.** Le plan gratuit est instable (piège 7) et tout le projet
   fonctionne au polling. `useMessages` interroge toutes les **5 s** quand le
   chat est visible, **30 s** en arrière-plan, et immédiatement au retour sur
@@ -168,6 +173,9 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - **Deux prénoms identiques** : ajouter l'initiale du nom (« Julie D. »,
   « Julie M. ») uniquement quand le prénom est en double. Ne pas afficher le
   nom complet en permanence : le groupe se connaît.
+- **La saisie du chat est à 16 px sur mobile** (`text-base sm:text-sm`) :
+  en dessous, Safari iOS zoome automatiquement sur le champ et la page reste
+  agrandie. Ne pas repasser le champ en `text-sm` sans le préfixe responsive.
 - **Un message ne s'édite pas.** Suppression immédiate par son auteur, sans
   confirmation, bouton discret à gauche de la bulle. Le rouge reste réservé à
   cette action et aux erreurs.
@@ -439,6 +447,8 @@ Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour l
 | `src/hooks/useMessages.test.tsx` | polling, envoi optimiste, échec, purge, course polling/envoi |
 | `src/hooks/useUnreadMessages.test.tsx` | pastille : première visite, 30 s, retour d'onglet |
 | `src/pages/Chat.test.tsx` | lecture ouverte, fil, marquage lu, prénoms en double |
+| `src/components/RequireUser.test.tsx` | visiteur redirigé, connecté autorisé, attente du chargement |
+| `src/pages/Home.messages.test.tsx` | Messages absent sans identité, présent une fois connecté |
 | `src/config/vercelConfig.test.ts` | repli SPA de Vercel : toute route inconnue → `index.html` |
 | `src/pages/Admin.test.tsx` | code admin, recherche, réinitialisation et retrait du PIN |
 | `src/components/AdminPinResetModal.test.tsx` | validation du PIN, confirmation, retrait, panne |

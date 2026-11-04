@@ -76,16 +76,17 @@ deux tables mortes supprimées à la fin du fichier (`schema.sql`).
      │           │ useParcoursVotes(30 s) ──▶ participations│──▶ Supabase
      │           │ useParcours    (30 s)  ──▶ parcours      │
      │           │ useProfiles (1 fois)   ──▶ user_profiles │
-     │           │ useUnreadMessages(30 s)──▶ messages      │
+     │           │ useUnreadMessages(30 s, si connecté) ──▶ messages │
      │           │ useWeather     (30 min)──▶ Open-Meteo   │
      │           │ useTargetWednesday (30 s, sans réseau)   │
      │           └──────────────────────────────────────────┘
      ├──▶ composants (AttendanceBanner, ParcoursVoteCard,
      │    ParticipantsTable, WeatherCard, MessagesButton)
      │
-   Chat.tsx ────▶ useMessages (5 s visible / 30 s caché) ──▶ messages
-                  ├─ useProfiles (annuaire, une fois)
-                  └─ groupMessagesByDay + purge 30 j
+   /messages ─▶ RequireUser ─▶ Chat.tsx
+                  └─▶ useMessages (5 s visible / 30 s caché) ──▶ messages
+                       ├─ useProfiles (annuaire, une fois)
+                       └─ groupMessagesByDay + purge 30 j
 ```
 
 `localStorage` ne sert plus que de **secours** pour l'utilisateur
@@ -104,14 +105,14 @@ Toutes les lignes sont sous `running-app/`.
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
 | `src/main.tsx` | point d'entrée **réel** : monte `App` sous `StrictMode` + `AuthProvider` | 12 |
-| `src/App.tsx` | routeur : `/` → `Home`, `/parcours` → `ParcoursList`, `/messages` → `Chat`, `/admin` → `Admin` | 21 |
+| `src/App.tsx` | routeur : `/` → `Home`, `/parcours` → `ParcoursList`, `/messages` → `Chat` (via `RequireUser`), `/admin` → `Admin` | 29 |
 | `index.html` | hôte, `lang="fr"`, monte `#root` | 19 |
 
 ### 2.2 Pages
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/pages/Home.tsx` | page principale : auth, présence, météo, vote, tableau des participants, entrée du chat | 360 |
+| `src/pages/Home.tsx` | page principale : auth, présence, météo, vote, tableau des participants, entrée du chat (connectés seulement) | 367 |
 | `src/pages/ParcoursList.tsx` | gestion : liste, import GPX, suppression, verrou admin | 316 |
 | `src/pages/Chat.tsx` | fil de discussion : groupes par jour, auto-défilement, envoi, suppression, noms désambiguïsés | 205 |
 | `src/pages/Admin.tsx` | console admin : liste des profils, recherche, réinitialisation ou retrait du PIN | 283 |
@@ -132,9 +133,10 @@ Toutes les lignes sont sous `running-app/`.
 | `src/components/ParcoursVoteCard.tsx` | carte parcours en mode vote (1 bouton, compteur, badge vainqueur) | 103 |
 | `src/components/ConfirmDeleteModal.tsx` | confirmation de suppression + annonce des votes perdus | 97 |
 | `src/components/AttendanceBanner.tsx` | encadré « Tu viens ? » + deux boutons de présence | 70 |
-| `src/components/ChatComposer.tsx` | zone de saisie du chat : Entrée envoie, Maj+Entrée saut de ligne, compteur 500 | 119 |
+| `src/components/ChatComposer.tsx` | zone de saisie du chat : Entrée envoie, Maj+Entrée saut de ligne, compteur 500, 16 px sur mobile | 119 |
 | `src/components/ChatMessageBubble.tsx` | bulle du fil : auteur, heure, états `sending`/`failed`, suppression par l'auteur | 95 |
 | `src/components/MessagesButton.tsx` | entrée « Messages » de l'en-tête + pastille de non-lus (plafond « 99+ ») | 44 |
+| `src/components/RequireUser.tsx` | garde de route : redirige un visiteur vers `/`, attend le chargement | 26 |
 | `src/components/AdminPinResetModal.tsx` | réinitialisation d'un PIN : code provisoire ou retrait, sans jamais afficher le hash | 260 |
 
 ### 2.4 Composants génériques
@@ -187,7 +189,7 @@ Toutes les lignes sont sous `running-app/`.
 
 ### 2.8 Tests
 
-47 fichiers, 577 tests, ~45 s.
+49 fichiers, 582 tests, ~45 s.
 
 | Fichier | Couvre |
 |---|---|
@@ -214,6 +216,8 @@ Toutes les lignes sont sous `running-app/`.
 | `src/hooks/useMessages.test.tsx` | polling 5 s / 30 s, envoi optimiste, échec, purge, course polling/envoi |
 | `src/hooks/useUnreadMessages.test.tsx` | pastille : première visite, période 30 s, retour d'onglet, erreur silencieuse |
 | `src/pages/Chat.test.tsx` | lecture ouverte, connexion pour écrire, fil vide, marquage lu, prénoms en double |
+| `src/components/RequireUser.test.tsx` | visiteur redirigé, connecté autorisé, attente du chargement |
+| `src/pages/Home.messages.test.tsx` | Messages absent sans identité, présent une fois connecté |
 | `src/components/ChatComposer.test.tsx` | Entrée / Maj+Entrée / composition d'accent, compteur, lecture sans identité |
 | `src/components/ChatMessageBubble.test.tsx` | auteur, regroupement, états d'envoi, suppression du sien |
 | `src/components/MessagesButton.test.tsx` | pastille absente à zéro, accord singulier/pluriel, plafond 99+ |
@@ -288,7 +292,8 @@ Table de référence pour éviter de corriger une règle à un seul endroit.
 | Météo = prochaine sortie, 12h30, avec les heures 11h → 14h | `weatherApi.ts` (`getRunForecast`, `getRunWindow`) | ✅ |
 | Fenêtre du chat = 30 jours glissants | `messages.ts` (`MESSAGE_RETENTION_DAYS`, `retentionCutoff`) | ✅ lue et purgée avec la même borne |
 | Longueur d'un message = 1 à 500 | `schema.sql` (`CHECK`) + `messages.ts` (validation) | ✅ tenue par la base |
-| Lecture du chat ouverte, écriture identifiée | `useMessages(null)` refuse l'envoi ; `ChatComposer` propose de se connecter | ✅ |
+| Lecture du chat réservée aux connectés | `RequireUser` autour de `/messages` ; `MessagesButton` et `useUnreadMessages(isAuthenticated)` sur l'accueil | ✅ un visiteur ne voit ni le bouton ni le fil |
+| Saisie du chat sans zoom iOS | `ChatComposer.tsx` (`text-base sm:text-sm`) | ✅ 16 px sous 640 px de large |
 | Non-lus = messages depuis la dernière lecture | `messages.ts` (`readLastRead`, `writeLastRead`) + `useUnreadMessages` | ✅ localStorage, par appareil |
 | Deux prénoms identiques → « Julie D. » / « Julie M. » | `Chat.tsx` (`names`) | ✅ l'initiale n'apparaît qu'en cas de doublon |
 | Réinitialiser un PIN sans connaître l'ancien | `supabaseService.ts` (`resetUserPin`, `removeUserPin`) | ⚠️ protégé par le code admin, pas une auth forte |
@@ -351,13 +356,18 @@ nom (`editParcours` dans `useParcours`, `updateParcours` dans le service).
 ### 4.5 Chat
 
 ```
-/messages ─▶ Chat
-              ├─ useMessages → getRecentMessages (30 j) + purgeOldMessages
-              │    └─ polling 5 s si l'onglet est visible, 30 s sinon
-              ├─ useProfiles → prénoms (désambiguïsés si doublon)
-              └─ ChatComposer → sendMessage → envoi optimiste `pending-…`
-                                  └─ échec → `failed` + « Réessayer »
+/messages ─▶ RequireUser (sans identité → accueil)
+              └─ Chat
+                   ├─ useMessages → getRecentMessages (30 j) + purgeOldMessages
+                   │    └─ polling 5 s si l'onglet est visible, 30 s sinon
+                   ├─ useProfiles → prénoms (désambiguïsés si doublon)
+                   └─ ChatComposer → sendMessage → envoi optimiste `pending-…`
+                                       └─ échec → `failed` + « Réessayer »
 ```
+
+Le chat n'est plus lisible par un visiteur : la route est gardée par
+`RequireUser`, et l'accueil ne montre ni « Messages » ni la pastille sans
+identité. Le garde empêche aussi le montage de `Chat`, donc ses requêtes.
 
 La page marque le fil comme lu après chargement (`markAllRead`) : la pastille
 de l'accueil s'éteint au retour. `MessagesButton` ne charge pas les messages,

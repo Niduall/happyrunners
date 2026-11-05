@@ -125,7 +125,8 @@ Toutes les lignes sont sous `running-app/`.
 | `src/components/SecurityModal.tsx` | gestion du PIN : ajouter, changer, retirer ; rappelle la confiance de 30 jours | 277 |
 | `src/components/ParcoursCard.tsx` | carte parcours en mode gestion (import GPX, actions admin) | 170 |
 | `src/components/ParticipantsTable.tsx` | tout le groupe en trois sections : présents en lignes + parcours, sans-réponse et absents en puces | 231 |
-| `src/components/UserMenu.tsx` | menu utilisateur : nom, édition, Sécurité, déconnexion | 161 |
+| `src/components/UserMenu.tsx` | menu utilisateur : nom, édition, Sécurité, Notifications, déconnexion (retire l'abonnement push) | 268 |
+| `src/components/NotificationsModal.tsx` | abonnement de l'appareil, deux catégories, états iPhone/navigateur | 279 |
 | `src/components/WeatherCard.tsx` | météo, deux mises en page (compacte / complète) | 146 |
 | `src/components/MapView.tsx` | carte Leaflet : polyligne + marqueurs départ/arrivée | 123 |
 | `src/components/LazyMapView.tsx` | carte chargée à la demande (`lazy` + `Suspense`), fallback à la même hauteur | 39 |
@@ -160,12 +161,13 @@ Toutes les lignes sont sous `running-app/`.
 | `src/hooks/useTargetWednesday.ts` | horloge de semaine cible (tick 30 s, sans réseau) | 56 |
 | `src/hooks/useMessages.ts` | chat : polling 5 s / 30 s, envoi optimiste, lecture serveur, suppression, purge 30 j | 285 |
 | `src/hooks/useUnreadMessages.ts` | pastille : comptage des messages des autres, 30 s + focus/visibilité | 72 |
+| `src/hooks/usePushNotifications.ts` | statut push, activation/désactivation de l'appareil, préférences par personne | 161 |
 
 ### 2.6 Services
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/services/supabaseService.ts` | toutes les requêtes Supabase | 482 |
+| `src/services/supabaseService.ts` | toutes les requêtes Supabase | 562 |
 | `src/services/messages.ts` | chat : fenêtre de 30 j, validation, regroupement par jour, non-lus, dernière lecture | 160 |
 | `src/services/presenceRows.ts` | fusion annuaire + réponses : qui vient, qui est absent, qui n'a pas répondu | 50 |
 | `src/services/gpxParser.ts` | parse GPX XML (DOMParser natif) et JSON Strava, distance, dénivelé, simplification | 265 |
@@ -176,13 +178,14 @@ Toutes les lignes sont sous `running-app/`.
 | `src/services/adminCode.ts` | lecture et comparaison du code admin, sans mémorisation | 50 |
 | `src/services/pin.ts` | obfuscation du PIN 4 chiffres + validation `isValidPin` | 24 |
 | `src/services/pinTrust.ts` | appareil de confiance : 30 jours, lié au `user_number`, oublié à la déconnexion | 88 |
+| `src/services/push.ts` | Web Push navigateur : support, permission, abonnement, clé VAPID | 166 |
 | `src/services/swUpdate.ts` | mise à jour de la PWA : `update()` périodique, retour sur l'onglet, rechargement sur `controllerchange` | 104 |
 
 ### 2.7 Types et utilitaires
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/types/supabase.ts` | types des lignes DB en snake_case — **source unique** de `GPXPoint` et `ProfileIdentity` | 132 |
+| `src/types/supabase.ts` | types des lignes DB en snake_case — **source unique** de `GPXPoint`, `ProfileIdentity`, `NotificationPreferences` | 144 |
 | `src/types/index.ts` | types applicatifs (`User`, `UserIdentity`, `PresenceRow`) + ré-exports DB | 77 |
 | `src/lib/supabase.ts` | instancie le client Supabase | 15 |
 | `src/lib/utils.ts` | `cn()` = `clsx`, **sans fusion Tailwind** | 4 |
@@ -190,7 +193,7 @@ Toutes les lignes sont sous `running-app/`.
 
 ### 2.8 Tests
 
-50 fichiers, 597 tests, ~50 s.
+53 fichiers, 661 tests, ~55 s.
 
 | Fichier | Couvre |
 |---|---|
@@ -206,6 +209,9 @@ Toutes les lignes sont sous `running-app/`.
 | `src/services/schema.test.ts` | `schema.sql` rejouable et à jour |
 | `src/components/SecurityModal.test.tsx` | gestion du PIN |
 | `src/services/pinTrust.test.ts` | appareil de confiance : 30 jours, autre profil, repère illisible, oubli |
+| `src/services/push.test.ts` | support, iOS/standalone, permission, abonnement/désabonnement |
+| `src/hooks/usePushNotifications.test.tsx` | états, activation, préférences, retour arrière |
+| `src/components/NotificationsModal.test.tsx` | catégories, états iPhone/navigateur, fermeture |
 | `src/hooks/useParcours.test.tsx` | CRUD parcours |
 | `src/hooks/useWeather.test.tsx` | cache et rafraîchissement |
 | `src/hooks/useAttendance.test.tsx` | présence hebdo |
@@ -245,9 +251,12 @@ vides/invalides, conversion des coordonnées, distance, dénivelé (dont A8),
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `schema.sql` | structure complète, rejouable : tables, index, RLS, purge des tables mortes | 202 |
+| `schema.sql` | structure complète, rejouable : 7 tables, index, RLS, triggers, purge des tables mortes | 410 |
 | `backup.py` | `save` / `list` / `restore` de la prod, via l'API REST | 449 |
 | `public/` | `favicon.svg`, 4 PNG (192, 512, maskable 512, Apple 180) aux bonnes dimensions | — |
+| `public/push-handler.js` | écouteurs `push` et `notificationclick` importés par le service worker généré | 74 |
+| `supabase/functions/send-push/index.ts` | Edge Function : secret, préférences, envoi VAPID, nettoyage 404/410 | 194 |
+| `migrations/2026-11-04_tache31_notifications_push.sql` | `push_subscriptions`, `notification_preferences`, RLS et triggers | 87 |
 
 ### 2.10 Configuration
 
@@ -258,7 +267,7 @@ vides/invalides, conversion des coordonnées, distance, dénivelé (dont A8),
 | `.github/workflows/ci.yml` | CI GitHub Actions | `npm ci` + lint + tests + build sur push `main` et PR (tâche 24) |
 | `postcss.config.js` | `@tailwindcss/postcss` + autoprefixer | `autoprefixer` est redondant avec v4, sans effet |
 | `vercel.json` | repli SPA : toute route inconnue → `index.html` | Vercel sert d'abord les fichiers statiques ; sans ce repli, `/messages` et `/parcours` en lien direct renvoient 404 (couvert par `src/config/vercelConfig.test.ts`) |
-| `.env` | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_ADMIN_CODE` | non versionné ✅ |
+| `.env` | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_ADMIN_CODE`, `VITE_VAPID_PUBLIC_KEY` | non versionné ✅ ; la clé VAPID privée reste dans les secrets Supabase |
 
 #### Le manifeste PWA correspond à l'application — corrigé (tâche 15)
 
@@ -300,6 +309,10 @@ Table de référence pour éviter de corriger une règle à un seul endroit.
 | PIN mémorisé 30 jours par appareil | `pinTrust.ts` + `useAuth.tsx` | ✅ lié au `user_number`, oublié à la déconnexion |
 | Deux prénoms identiques → « Julie D. » / « Julie M. » | `Chat.tsx` (`names`) | ✅ l'initiale n'apparaît qu'en cas de doublon |
 | Réinitialiser un PIN sans connaître l'ancien | `supabaseService.ts` (`resetUserPin`, `removeUserPin`) | ⚠️ protégé par le code admin, pas une auth forte |
+| Un abonnement push par appareil | `push_subscriptions.endpoint` unique + `savePushSubscription` (`onConflict: endpoint`) | ✅ se réabonner remplace la ligne |
+| Préférences par personne, défaut activé | `notification_preferences` + `getNotificationPreferences` | ✅ ligne absente = `{ messages: true, runReminder: true }` |
+| L'auteur d'un message n'est pas notifié | Edge Function `send-push` (`user_number=neq.auteur`) | ✅ filtre serveur, pas seulement client |
+| Déconnexion = plus de notifications sur l'appareil | `UserMenu` (`disable()` avant `logout()`) | ✅ `unsubscribe` navigateur + suppression de la ligne |
 | Le hash du PIN ne sort jamais du service | `getProfilesWithPinStatus` → `hasPin: boolean` | ✅ ni l'écran ni les tests ne manipulent `pin_hash` |
 
 ---
@@ -383,7 +396,35 @@ Un message **ne s'édite jamais** : la seule action est la suppression par son
 auteur, appliquée immédiatement, sans confirmation. Les messages de plus de
 30 jours sont purgés à l'ouverture du chat, pas par une tâche planifiée.
 
-### 4.6 Console d'administration
+### 4.6 Notifications push
+
+```
+Menu utilisateur ─▶ NotificationsModal
+                      ├─ usePushNotifications → statut de l'appareil
+                      ├─ « Activer » → subscribeToPush → savePushSubscription
+                      └─ interrupteurs → saveNotificationPreferences
+```
+
+`messages` (INSERT) ─▶ webhook Supabase ─▶ Edge Function `send-push`
+                                           ├─ exclut l'auteur et les préférences `false`
+                                           ├─ webpush.sendNotification
+                                           └─ supprime les endpoints 404/410
+
+Supabase Cron (mardi) ─▶ `send-push` { type: "run_reminder" }
+                         ├─ calcule le mercredi cible (bascule 14h, Paris)
+                         ├─ exclut les personnes ayant déjà répondu
+                         │  et celles qui ont coupé `run_reminder`
+                         └─ même envoi, même nettoyage 404/410
+
+L'abonnement est **par appareil** (`push_subscriptions.endpoint` unique), les
+préférences sont **par personne** (`notification_preferences`). Une ligne de
+préférences absente vaut « tout activé ». Le service worker généré importe
+`public/push-handler.js`, qui affiche la notification et ouvre `/messages` au
+clic (ou `/` pour le rappel). Sur iPhone, l'app doit être installée
+(iOS 16.4+) ; sur Android, le navigateur suffit. Le rappel part le mardi soir
+et ne relance que les personnes sans `attendances` pour la semaine.
+
+### 4.7 Console d'administration
 
 ```
 /admin ─▶ Admin

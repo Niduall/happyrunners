@@ -130,3 +130,15 @@ export interface Message {
   body: string
   created_at: string
 }
+
+/**
+ * Ce que chaque personne accepte de recevoir.
+ *
+ * Les lignes sont créées à la première modification ; en leur absence, les
+ * deux catégories sont considérées comme actives. L'abonnement push lui-même
+ * reste un geste explicite sur chaque appareil.
+ */
+export interface NotificationPreferences {
+  messages: boolean
+  runReminder: boolean
+}

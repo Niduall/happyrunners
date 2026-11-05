@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest'
 import schema from '../../schema.sql?raw'
 import migration from '../../migrations/2026-10-25_tache17.sql?raw'
 import chatMigration from '../../migrations/2026-11-02_tache29_chat.sql?raw'
+import pushMigration from '../../migrations/2026-11-04_tache31_notifications_push.sql?raw'
 
 /**
  * schema.sql est la source de vérité de la structure de la base.
@@ -16,13 +17,15 @@ import chatMigration from '../../migrations/2026-11-02_tache29_chat.sql?raw'
  */
 
 describe('schema.sql — structure', () => {
-  it('déclare les 5 tables utilisées par l\'app', () => {
+  it('déclare les 7 tables utilisées par l\'app', () => {
     for (const table of [
       'user_profiles',
       'parcours',
       'attendances',
       'participations',
       'messages',
+      'push_subscriptions',
+      'notification_preferences',
     ]) {
       expect(schema).toMatch(new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\b`))
     }
@@ -53,6 +56,8 @@ describe('schema.sql — structure', () => {
       'parcours',      // participations.parcours_id
       'user_profiles', // participations.user_number
       'user_profiles', // messages.user_number
+      'user_profiles', // push_subscriptions.user_number
+      'user_profiles', // notification_preferences.user_number
     ])
   })
 
@@ -114,20 +119,22 @@ describe('schema.sql — structure', () => {
     expect(schema).toMatch(/pin_hash\s+text,/)
   })
 
-  it('active RLS et ouvre les 5 tables', () => {
+  it('active RLS et ouvre les 7 tables', () => {
     for (const table of [
       'user_profiles',
       'parcours',
       'attendances',
       'participations',
       'messages',
+      'push_subscriptions',
+      'notification_preferences',
     ]) {
       expect(schema).toMatch(
         new RegExp(`ALTER TABLE ${table}\\s+ENABLE ROW LEVEL SECURITY`)
       )
     }
-    // 4 tables × 4 politiques + messages × 3 (pas d'UPDATE)
-    expect([...schema.matchAll(/CREATE POLICY/g)]).toHaveLength(19)
+    // 6 tables × 4 politiques + messages × 3 (pas d'UPDATE)
+    expect([...schema.matchAll(/CREATE POLICY/g)]).toHaveLength(27)
   })
 
   it('rend un message immuable : aucune politique UPDATE', () => {
@@ -145,13 +152,19 @@ describe('schema.sql — structure', () => {
     expect(schema).toMatch(/aucune authentification serveur/i)
   })
 
-  it('met à jour updated_at automatiquement sur les 3 tables', () => {
+  it('met à jour updated_at automatiquement sur les 5 tables', () => {
     // Sans trigger, re-voter ou changer de présence laissait updated_at
     // figée à la date de création (les upserts ne l'écrivent pas).
     expect(schema).toMatch(/CREATE OR REPLACE FUNCTION touch_updated_at\(\)/)
     expect(schema).toMatch(/NEW\.updated_at = now\(\)/)
 
-    for (const table of ['parcours', 'attendances', 'participations']) {
+    for (const table of [
+      'parcours',
+      'attendances',
+      'participations',
+      'push_subscriptions',
+      'notification_preferences',
+    ]) {
       expect(schema).toMatch(new RegExp(`DROP TRIGGER IF EXISTS trg_${table}_touch ON ${table}`))
       expect(schema).toMatch(
         new RegExp(
@@ -177,6 +190,34 @@ describe('schema.sql — structure', () => {
     // L'index unique (week_key, user_number) couvre déjà les lectures par
     // semaine : un second index sur la seule première colonne ne sert à rien.
     expect(schema).not.toMatch(/CREATE INDEX IF NOT EXISTS idx_attendances_week/)
+  })
+})
+
+describe('migration 2026-11-04 (tâche 31)', () => {
+  it('reprend les tables et leurs politiques', () => {
+    expect(pushMigration).toMatch(/CREATE TABLE IF NOT EXISTS push_subscriptions/)
+    expect(pushMigration).toMatch(/CREATE TABLE IF NOT EXISTS notification_preferences/)
+    expect(pushMigration).toMatch(/endpoint\s+text NOT NULL UNIQUE/)
+    expect(pushMigration).toMatch(/idx_push_subscriptions_user/)
+
+    for (const table of ['push_subscriptions', 'notification_preferences']) {
+      for (const action of ['lire', 'inserer', 'modifier', 'supprimer']) {
+        expect(pushMigration).toMatch(
+          new RegExp(`CREATE POLICY ${table}_${action}`)
+        )
+      }
+    }
+  })
+
+  it('est rejouable et ne supprime aucune donnée', () => {
+    expect(pushMigration).toMatch(/CREATE TABLE IF NOT EXISTS/)
+    expect(pushMigration).toMatch(/DROP POLICY IF EXISTS/)
+    expect(pushMigration).not.toMatch(/DELETE FROM|TRUNCATE|DROP TABLE/)
+  })
+
+  it('applique tout ou rien', () => {
+    expect(pushMigration).toMatch(/^BEGIN;/m)
+    expect(pushMigration.trimEnd().endsWith('COMMIT;')).toBe(true)
   })
 })
 

@@ -147,6 +147,39 @@ CREATE INDEX IF NOT EXISTS idx_messages_created
   ON messages USING btree (created_at DESC);
 
 -- ---------------------------------------------------------------------------
+-- Table : push_subscriptions
+-- ---------------------------------------------------------------------------
+-- Un abonnement Web Push par appareil. `endpoint` est unique : se réabonner
+-- sur le même téléphone met à jour la ligne au lieu d'en empiler une seconde.
+-- Les clés `p256dh` et `auth` sont fournies par le navigateur ; elles ne
+-- permettent pas de lire les messages, seulement de chiffrer la notification.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_number  integer NOT NULL REFERENCES user_profiles(user_number) ON DELETE CASCADE,
+  endpoint     text NOT NULL UNIQUE,
+  p256dh       text NOT NULL,
+  auth         text NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user
+  ON push_subscriptions USING btree (user_number);
+
+-- ---------------------------------------------------------------------------
+-- Table : notification_preferences
+-- ---------------------------------------------------------------------------
+-- Une ligne par personne, un booléen par catégorie. Une ligne absente vaut
+-- « tout activé » : l'abonnement push reste le vrai consentement, ces
+-- réglages servent à couper une catégorie précise.
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  user_number  integer PRIMARY KEY REFERENCES user_profiles(user_number) ON DELETE CASCADE,
+  messages     boolean NOT NULL DEFAULT true,
+  run_reminder boolean NOT NULL DEFAULT true,
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+
+-- ---------------------------------------------------------------------------
 -- Règle métier : un vote exige une présence « going »
 -- ---------------------------------------------------------------------------
 -- La règle était purement côté client : un vote pouvait exister sans présence
@@ -266,6 +299,16 @@ CREATE TRIGGER trg_participations_touch
   BEFORE UPDATE ON participations
   FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 
+DROP TRIGGER IF EXISTS trg_push_subscriptions_touch ON push_subscriptions;
+CREATE TRIGGER trg_push_subscriptions_touch
+  BEFORE UPDATE ON push_subscriptions
+  FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+DROP TRIGGER IF EXISTS trg_notification_preferences_touch ON notification_preferences;
+CREATE TRIGGER trg_notification_preferences_touch
+  BEFORE UPDATE ON notification_preferences
+  FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
 -- =============================================================================
 -- Row Level Security
 -- =============================================================================
@@ -278,11 +321,13 @@ CREATE TRIGGER trg_participations_touch
 --    l'app sort du groupe (cf. README § Sécurité).
 -- =============================================================================
 
-ALTER TABLE user_profiles  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE parcours       ENABLE ROW LEVEL SECURITY;
-ALTER TABLE attendances    ENABLE ROW LEVEL SECURITY;
-ALTER TABLE participations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE messages       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_profiles            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE parcours                 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE attendances              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE participations           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages                 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE push_subscriptions       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_preferences ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS profils_lire      ON user_profiles;
 DROP POLICY IF EXISTS profils_inserer   ON user_profiles;
@@ -333,6 +378,28 @@ DROP POLICY IF EXISTS messages_supprimer ON messages;
 CREATE POLICY messages_lire      ON messages FOR SELECT USING (true);
 CREATE POLICY messages_inserer   ON messages FOR INSERT WITH CHECK (true);
 CREATE POLICY messages_supprimer ON messages FOR DELETE USING (true);
+
+-- Abonnements push : aucune donnée sensible pour le groupe, mais la clé
+-- privée VAPID et le secret du webhook ne sont PAS dans ces lignes.
+DROP POLICY IF EXISTS push_subscriptions_lire      ON push_subscriptions;
+DROP POLICY IF EXISTS push_subscriptions_inserer   ON push_subscriptions;
+DROP POLICY IF EXISTS push_subscriptions_modifier  ON push_subscriptions;
+DROP POLICY IF EXISTS push_subscriptions_supprimer ON push_subscriptions;
+
+CREATE POLICY push_subscriptions_lire      ON push_subscriptions FOR SELECT USING (true);
+CREATE POLICY push_subscriptions_inserer   ON push_subscriptions FOR INSERT WITH CHECK (true);
+CREATE POLICY push_subscriptions_modifier  ON push_subscriptions FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY push_subscriptions_supprimer ON push_subscriptions FOR DELETE USING (true);
+
+DROP POLICY IF EXISTS notification_preferences_lire      ON notification_preferences;
+DROP POLICY IF EXISTS notification_preferences_inserer   ON notification_preferences;
+DROP POLICY IF EXISTS notification_preferences_modifier  ON notification_preferences;
+DROP POLICY IF EXISTS notification_preferences_supprimer ON notification_preferences;
+
+CREATE POLICY notification_preferences_lire      ON notification_preferences FOR SELECT USING (true);
+CREATE POLICY notification_preferences_inserer   ON notification_preferences FOR INSERT WITH CHECK (true);
+CREATE POLICY notification_preferences_modifier  ON notification_preferences FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY notification_preferences_supprimer ON notification_preferences FOR DELETE USING (true);
 
 -- =============================================================================
 -- Tables héritées à supprimer

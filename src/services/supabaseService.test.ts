@@ -11,6 +11,10 @@ import {
   resetUserPin,
   removeUserPin,
   countMessagesSince,
+  savePushSubscription,
+  deletePushSubscription,
+  getNotificationPreferences,
+  saveNotificationPreferences,
 } from './supabaseService'
 import { hashPin } from './pin'
 import { supabase } from '../lib/supabase'
@@ -27,6 +31,11 @@ const mockUpdateValues = vi.fn()
 const mockGt = vi.fn()
 const mockNeq = vi.fn()
 const mockCount = vi.fn()
+const mockUpsertValues = vi.fn()
+const mockUpsertOptions = vi.fn()
+const mockEq = vi.fn()
+const mockMaybeSingle = vi.fn()
+const mockMaybeSingleError = vi.fn()
 
 /**
  * Chaque table a sa propre source de données. `from(table)` capture le nom
@@ -40,11 +49,20 @@ vi.mock('../lib/supabase', () => ({
         mockSelectColumns(columns)
         return q
       }
-      q.eq = () => q
+      q.eq = (column?: string, value?: unknown) => {
+        mockEq(column, value)
+        return q
+      }
       q.update = (values?: unknown) => {
         mockUpdateValues(values)
         return q
       }
+      q.upsert = (values?: unknown, options?: unknown) => {
+        mockUpsertValues(values)
+        mockUpsertOptions(options)
+        return q
+      }
+      q.delete = () => q
       q.not = () => q
       q.in = () => q
       q.gt = (column?: string, value?: unknown) => {
@@ -58,7 +76,11 @@ vi.mock('../lib/supabase', () => ({
       q.order = () => q
       q.limit = () => q
       q.single = () => q
-      q.maybeSingle = () => Promise.resolve({ data: null, error: null })
+      q.maybeSingle = () =>
+        Promise.resolve({
+          data: mockMaybeSingle(),
+          error: mockMaybeSingleError(),
+        })
       q.then = (resolve: (v: unknown) => unknown) => {
         if (table === 'user_profiles') {
           return Promise.resolve({ data: mockProfiles(), error: mockProfilesError() }).then(resolve)
@@ -94,6 +116,11 @@ beforeEach(() => {
   mockGt.mockReset()
   mockNeq.mockReset()
   mockCount.mockReset()
+  mockUpsertValues.mockReset()
+  mockUpsertOptions.mockReset()
+  mockEq.mockReset()
+  mockMaybeSingle.mockReset()
+  mockMaybeSingleError.mockReset()
 
   mockRows.mockReturnValue([])
   mockProfiles.mockReturnValue([])
@@ -102,6 +129,8 @@ beforeEach(() => {
   mockError.mockReturnValue(null)
   mockAttendanceError.mockReturnValue(null)
   mockCount.mockReturnValue(0)
+  mockMaybeSingle.mockReturnValue(null)
+  mockMaybeSingleError.mockReturnValue(null)
 })
 
 const VOTE_ROWS = [
@@ -451,5 +480,96 @@ describe('getWeekAttendances — les noms viennent du JOIN', () => {
     expect(warn).toHaveBeenCalled()
 
     warn.mockRestore()
+  })
+})
+
+describe('abonnements push', () => {
+  it('enregistre un abonnement en remplaçant l’endpoint existant', async () => {
+    await savePushSubscription(14, {
+      endpoint: 'https://push.example/abc',
+      p256dh: 'p256dh-key',
+      auth: 'auth-key',
+    })
+
+    expect(mockUpsertValues).toHaveBeenCalledWith({
+      user_number: 14,
+      endpoint: 'https://push.example/abc',
+      p256dh: 'p256dh-key',
+      auth: 'auth-key',
+    })
+    expect(mockUpsertOptions).toHaveBeenCalledWith({ onConflict: 'endpoint' })
+  })
+
+  it('propage l’erreur d’enregistrement', async () => {
+    mockError.mockReturnValue(new Error('abonnement refusé'))
+
+    await expect(
+      savePushSubscription(14, {
+        endpoint: 'https://push.example/abc',
+        p256dh: 'p',
+        auth: 'a',
+      })
+    ).rejects.toThrow('abonnement refusé')
+  })
+
+  it('supprime l’abonnement par son endpoint', async () => {
+    await deletePushSubscription('https://push.example/abc')
+
+    expect(mockEq).toHaveBeenLastCalledWith(
+      'endpoint',
+      'https://push.example/abc'
+    )
+  })
+})
+
+describe('préférences de notification', () => {
+  it('renvoie tout activé en l’absence de ligne', async () => {
+    mockMaybeSingle.mockReturnValue(null)
+
+    await expect(getNotificationPreferences(14)).resolves.toEqual({
+      messages: true,
+      runReminder: true,
+    })
+  })
+
+  it('relit les deux catégories enregistrées', async () => {
+    mockMaybeSingle.mockReturnValue({ messages: false, run_reminder: true })
+
+    await expect(getNotificationPreferences(14)).resolves.toEqual({
+      messages: false,
+      runReminder: true,
+    })
+    expect(mockSelectColumns).toHaveBeenLastCalledWith('messages,run_reminder')
+    expect(mockEq).toHaveBeenLastCalledWith('user_number', 14)
+  })
+
+  it('propage une erreur de lecture', async () => {
+    mockMaybeSingleError.mockReturnValue(new Error('lecture refusée'))
+
+    await expect(getNotificationPreferences(14)).rejects.toThrow('lecture refusée')
+  })
+
+  it('enregistre les préférences au premier réglage', async () => {
+    await saveNotificationPreferences(14, {
+      messages: false,
+      runReminder: true,
+    })
+
+    expect(mockUpsertValues).toHaveBeenCalledWith({
+      user_number: 14,
+      messages: false,
+      run_reminder: true,
+    })
+    expect(mockUpsertOptions).toHaveBeenCalledWith({
+      onConflict: 'user_number',
+    })
+  })
+
+  it('propage une erreur d’enregistrement', async () => {
+    mockError.mockReturnValue(new Error('réglage refusé'))
+
+    await expect(
+      saveNotificationPreferences(14, { messages: true, runReminder: false })
+    ).rejects.toThrow('réglage refusé')
   })
 })

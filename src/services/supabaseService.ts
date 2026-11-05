@@ -15,7 +15,9 @@ import type {
   ProfileIdentity,
   GPXPoint,
   Message,
+  NotificationPreferences,
 } from '../types/supabase'
+import type { PushSubscriptionRecord } from './push'
 
 export type { AttendanceStatus }
 
@@ -477,6 +479,84 @@ export async function purgeOldMessages(cutoff: string): Promise<void> {
     .from('messages')
     .delete()
     .lt('created_at', cutoff)
+
+  if (error) throw error
+}
+
+// ===== NOTIFICATIONS =====
+
+/**
+ * Enregistre (ou met à jour) l'abonnement push de cet appareil.
+ *
+ * L'endpoint est unique : se réabonner sur le même téléphone remplace la
+ * ligne au lieu d'en empiler une seconde. Le trigger `touch_updated_at`
+ * s'occupe de `updated_at`.
+ */
+export async function savePushSubscription(
+  userNumber: number,
+  record: PushSubscriptionRecord
+): Promise<void> {
+  const { error } = await supabase.from('push_subscriptions').upsert(
+    {
+      user_number: userNumber,
+      endpoint: record.endpoint,
+      p256dh: record.p256dh,
+      auth: record.auth,
+    },
+    { onConflict: 'endpoint' }
+  )
+
+  if (error) throw error
+}
+
+/** Retire un abonnement (déconnexion, appareil qui révoque la permission). */
+export async function deletePushSubscription(endpoint: string): Promise<void> {
+  const { error } = await supabase
+    .from('push_subscriptions')
+    .delete()
+    .eq('endpoint', endpoint)
+
+  if (error) throw error
+}
+
+/**
+ * Préférences de notification d'une personne.
+ *
+ * Une ligne absente vaut « tout activé » : on n'oblige personne à ouvrir
+ * l'écran avant de pouvoir recevoir quoi que ce soit, et l'abonnement push
+ * reste le vrai consentement.
+ */
+export async function getNotificationPreferences(
+  userNumber: number
+): Promise<NotificationPreferences> {
+  const { data, error } = await supabase
+    .from('notification_preferences')
+    .select('messages,run_reminder')
+    .eq('user_number', userNumber)
+    .maybeSingle()
+
+  if (error) throw error
+
+  const row = data as { messages?: boolean; run_reminder?: boolean } | null
+  return {
+    messages: row?.messages ?? true,
+    runReminder: row?.run_reminder ?? true,
+  }
+}
+
+/** Enregistre les préférences (création de la ligne au premier réglage). */
+export async function saveNotificationPreferences(
+  userNumber: number,
+  preferences: NotificationPreferences
+): Promise<void> {
+  const { error } = await supabase.from('notification_preferences').upsert(
+    {
+      user_number: userNumber,
+      messages: preferences.messages,
+      run_reminder: preferences.runReminder,
+    },
+    { onConflict: 'user_number' }
+  )
 
   if (error) throw error
 }

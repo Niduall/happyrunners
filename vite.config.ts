@@ -22,6 +22,10 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
+        // `public/push-handler.js` ajoute les écouteurs `push` et
+        // `notificationclick` au service worker généré. Workbox ne sait pas
+        // les produire lui-même.
+        importScripts: ['push-handler.js'],
       },
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       // En dev, ne pas enregistrer de service worker : il sert l'ancien bundle

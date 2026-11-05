@@ -312,6 +312,88 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   bundle et la RLS est ouverte. Cela empêche une erreur ou une curiosité, pas
   une attaque délibérée. Ne pas le présenter autrement.
 
+### Notifications push (tâche 31)
+- **Web Push standard**, sans service tiers : le service worker généré par
+  Workbox importe `public/push-handler.js` (`workbox.importScripts`). Ce
+  fichier porte les écouteurs `push` et `notificationclick` ; ne pas le
+  déplacer hors de `public/`, Workbox le copie à la racine de `dist/`.
+- **Un abonnement par appareil** (`push_subscriptions`, endpoint unique) et
+  **des préférences par personne** (`notification_preferences`). Une ligne de
+  préférences absente vaut « tout activé ».
+- `src/services/push.ts` ne fait que le navigateur (support, permission,
+  abonnement). `usePushNotifications` fait le lien avec la base et expose
+  `status` : `unsupported`, `unconfigured`, `needs-install`, `denied`,
+  `subscribed`, `available`.
+- **iPhone : iOS 16.4+ et application installée sur l'écran d'accueil.**
+  Dans Safari, `PushManager` peut exister mais l'abonnement échoue : le hook
+  renvoie `needs-install` avant même de demander la permission. Ne pas
+  contourner ce garde-fou.
+- **La demande de permission part d'un clic** (`NotificationsModal`), jamais
+  au chargement : iOS l'exige.
+- **Se déconnecter retire l'abonnement de l'appareil** (`UserMenu` appelle
+  `disable()` avant `logout()`), sinon le téléphone continuerait à recevoir
+  les notifications du profil précédent.
+- **Le service worker est désactivé en développement** (`devOptions.enabled:
+  false`) : tester le push avec `npm run build && npm run preview`, ou sur le
+  déploiement Vercel. En dev, `subscribeToPush` demande de recharger plutôt
+  que d'attendre indéfiniment `navigator.serviceWorker.ready`.
+- Le webhook Supabase appelle l'Edge Function `send-push` avec l'en-tête
+  `x-push-secret`. La fonction utilise la clé de service **uniquement côté
+  serveur**, exclut l'auteur du message, respecte la préférence `messages`,
+  et supprime les abonnements révoqués (404/410).
+- **Rappel du mardi** : la même fonction répond aussi à
+  `{ "type": "run_reminder" }`. Elle calcule le mercredi cible (bascule 14h,
+  fuseau `Europe/Paris`), ne garde que les appareils des personnes **sans
+  ligne `attendances`** pour cette semaine et respecte `run_reminder`. Une
+  personne qui a répondu « pas cette semaine » a répondu : elle n'est pas
+  relancée.
+- ⚠️ **Un `\n` en fin de `VAPID_SUBJECT` fait répondre `403 BadJwtToken`**
+  aux serveurs de push (Apple). La fonction nettoie les secrets
+  (`cleanSecret`), mais garder chaque valeur sur une seule ligne.
+
+#### Déploiement des notifications (dashboard)
+1. **SQL** : appliquer `migrations/2026-11-04_tache31_notifications_push.sql`
+   dans le SQL Editor, d'abord sur la base de test, puis sur la prod.
+2. **Vercel** : ajouter `VITE_VAPID_PUBLIC_KEY` (Settings → Environment
+   Variables) puis redéployer. Sans elle, l'écran affiche « non configuré ».
+3. **Secrets Supabase** (Edge Functions → Secrets) :
+   `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (ex.
+   `mailto:admin@happyrunners.fr`), `PUSH_WEBHOOK_SECRET`.
+   Les valeurs générées localement sont dans `backups/vapid-keys.txt`
+   (non versionné). **Ne jamais committer la clé privée ni le secret.**
+4. **Edge Function** : Dashboard → Edge Functions → Deploy a new function →
+   via l'éditeur, nom `send-push`, coller
+   `supabase/functions/send-push/index.ts`. **Désactiver la vérification JWT**
+   (le webhook ne présente pas de JWT ; l'authentification se fait par
+   `x-push-secret`).
+5. **Webhook** : Database → Webhooks → Create, table `messages`, événement
+   `INSERT`, type HTTP, méthode `POST`, URL
+   `https://<ref>.supabase.co/functions/v1/send-push`, en-têtes
+   `Content-Type: application/json` et `x-push-secret: <secret>`.
+6. **Rappel du mardi** : Integrations → Cron → Create job, nom
+   `send-run-reminder`, planification `0 17 * * 2` (mardi 18h Paris l'hiver,
+   19h l'été : pg_cron raisonne en UTC). Cible « SQL snippet », car
+   `x-push-secret` doit être fourni :
+
+   ```sql
+   select net.http_post(
+     url := 'https://<ref>.supabase.co/functions/v1/send-push',
+     headers := jsonb_build_object(
+       'Content-Type', 'application/json',
+       'x-push-secret', '<secret>'
+     ),
+     body := '{"type":"run_reminder"}'::jsonb,
+     timeout_milliseconds := 10000
+   );
+   ```
+
+   Activer l'extension `pg_net` (Database → Extensions) si le job le
+   réclame. Un projet gratuit **mis en pause** n'exécute pas ses jobs.
+7. **Test** : Android fonctionne depuis le navigateur ; iPhone depuis l'icône
+   de l'écran d'accueil uniquement. Le premier envoi peut demander quelques
+   secondes (cold start de la fonction). Le rappel se teste sans attendre
+   mardi : même appel que le job, avec le corps `{"type":"run_reminder"}`.
+
 ### Accessibilité (tâche 16)
 - Toute modale : `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, et fermeture par **Échap** — sauf pendant une écriture en cours.
 - Tout champ a un `<label htmlFor>` ; sinon un `aria-label` explicite.
@@ -364,7 +446,12 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 |----------|----------|-------------|
 | `VITE_SUPABASE_URL` | Oui | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | Oui | Supabase anon key (**régénérable** — copier depuis le dashboard si "Invalid API key") |
+| `VITE_VAPID_PUBLIC_KEY` | Pour le push | Clé publique VAPID ; sans elle, l'écran Notifications affiche « non configuré » |
 | ~~`VITE_OPENWEATHER_API_KEY`~~ | **Supprimé** | Open-Meteo n'a pas besoin de clé |
+
+Secrets **serveur** (Supabase Edge Functions, jamais dans Vercel ni dans le
+dépôt) : `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`,
+`PUSH_WEBHOOK_SECRET`.
 
 **Base de test** : `.env.test` (non versionné) pointe vers un second projet
 Supabase isolé. `npm run dev:test` et `backup.py --env .env.test` l'utilisent.
@@ -378,7 +465,7 @@ base vide. Ne jamais décrire le schéma dans la prose ci-dessous : c'est ainsi
 que ce document avait fini par annoncer un `participations(local_user_id)`
 qui n'existait plus depuis la migration `user_number`.
 
-### Les 5 tables
+### Les 7 tables qui comptent
 | Table | Clé | Particularité |
 |---|---|---|
 | `user_profiles` | `user_number` (SEQUENCE) | identifiant **stable**, indépendant du nom |
@@ -386,6 +473,8 @@ qui n'existait plus depuis la migration `user_number`.
 | `attendances` | `UNIQUE(week_key, user_number)` | `going` \| `skip` |
 | `participations` | `UNIQUE(user_number, week_key)` | **un seul parcours par personne et par semaine** |
 | `messages` | `id` uuid | fil de discussion, fenêtre glissante de 30 jours |
+| `push_subscriptions` | `id` uuid, `endpoint` unique | un abonnement par appareil, supprimé avec le profil |
+| `notification_preferences` | `user_number` | un booléen par catégorie ; ligne absente = tout activé |
 
 ### Points non négociables
 - `participations.parcours_id` est en **`ON DELETE CASCADE`** : supprimer un
@@ -456,6 +545,9 @@ Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour l
 | `src/services/weatherCode.test.ts` | mapping des 28 codes WMO, jour/nuit |
 | `src/services/pin.test.ts` | `hashPin` |
 | `src/services/pinTrust.test.ts` | appareil de confiance : 30 jours, autre profil, repère illisible, oubli |
+| `src/services/push.test.ts` | support, iOS/standalone, permission, abonnement/désabonnement |
+| `src/hooks/usePushNotifications.test.tsx` | états de l'écran, activation, préférences, retour arrière |
+| `src/components/NotificationsModal.test.tsx` | catégories, états iPhone/navigateur, fermeture |
 | `src/hooks/useAuth.integration.test.tsx` | flux auth complet + partage d'état |
 | `src/hooks/useParcoursVotes.test.tsx` | votes hebdo, tri, pendingCount, optimisme |
 | `src/hooks/useParcoursVotes.attendance.test.tsx` | un vote sans présence ne compte pas |
@@ -525,6 +617,21 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
 7l. **Le hash du PIN ne sort jamais du service** — `getProfilesWithPinStatus`
     le convertit en `hasPin`. Ne pas renvoyer `pin_hash` à l'écran admin :
     il n'en a aucun besoin, et un hash affiché finit dans une capture d'écran.
+7m. **Le push ne se teste pas en `npm run dev`** — le service worker y est
+    désactivé. Utiliser `npm run build && npm run preview` ou Vercel, et
+    installer l'app sur l'écran d'accueil pour iPhone (iOS 16.4+). Le webhook
+    doit envoyer `x-push-secret`, et la fonction doit être déployée avec la
+    vérification JWT désactivée.
+7n. **La clé privée VAPID et `PUSH_WEBHOOK_SECRET` ne sortent jamais du
+    serveur** — elles vivent dans les secrets Supabase, pas dans `.env`, pas
+    dans Vercel, pas dans un commit.
+7o. **Un secret VAPID qui finit par `\n` casse tout en silence** — Apple
+    répond `403 BadJwtToken`. La fonction nettoie les valeurs, mais un
+    copier-coller multi-lignes dans le dashboard reste le piège n° 1 : les
+    quatre valeurs tiennent chacune sur une seule ligne.
+7p. **Le rappel du mardi ne relance que les sans-réponse** — filtrer sur
+    `attendances` pour la semaine cible, pas sur les votes. `pg_cron` est en
+    UTC : `0 17 * * 2` = 18h Paris en hiver, 19h en été.
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

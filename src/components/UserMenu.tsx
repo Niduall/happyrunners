@@ -1,10 +1,20 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User as UserIcon, LogOut, ChevronDown, Pencil, ShieldCheck, Settings } from 'lucide-react'
+import {
+  User as UserIcon,
+  LogOut,
+  ChevronDown,
+  Pencil,
+  ShieldCheck,
+  Settings,
+  Bell,
+} from 'lucide-react'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
 import { SecurityModal } from './SecurityModal'
+import { NotificationsModal } from './NotificationsModal'
 import { useAuth } from '../hooks/useAuth'
+import { usePushNotifications } from '../hooks/usePushNotifications'
 
 /** Postgres 23505 sur l'index des noms → « ce nom est déjà pris », pas « erreur ». */
 function isDuplicateNameError(err: unknown): boolean {
@@ -23,10 +33,24 @@ export function UserMenu() {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [securityOpen, setSecurityOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [nameError, setNameError] = useState('')
   const [savingName, setSavingName] = useState(false)
+  const push = usePushNotifications(user?.id ?? null)
+
+  /**
+   * Se déconnecter retire aussi l'abonnement de cet appareil : sinon il
+   * continuerait à recevoir les notifications du profil précédent.
+   * L'échec réseau ne doit jamais empêcher la déconnexion.
+   */
+  const handleLogout = async () => {
+    if (push.status === 'subscribed') {
+      await push.disable().catch(() => {})
+    }
+    logout()
+  }
 
   // Échap ferme la modale de renommage, comme les autres modales.
   useEffect(() => {
@@ -122,6 +146,16 @@ export function UserMenu() {
                 <ShieldCheck className="w-4 h-4" />
                 Sécurité (PIN)
               </button>
+              <button
+                onClick={() => {
+                  setNotificationsOpen(true)
+                  setOpen(false)
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
+              >
+                <Bell className="w-4 h-4" />
+                Notifications
+              </button>
               {adminLockEnabled && (
                 <button
                   onClick={() => {
@@ -138,7 +172,7 @@ export function UserMenu() {
 
             <div className="border-t border-gray-100">
               <button
-                onClick={logout}
+                onClick={() => void handleLogout()}
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg"
               >
                 <LogOut className="w-4 h-4" />
@@ -214,6 +248,21 @@ export function UserMenu() {
       )}
 
       {securityOpen && <SecurityModal onClose={() => setSecurityOpen(false)} />}
+
+      {notificationsOpen && (
+        <NotificationsModal
+          status={push.status}
+          preferences={push.preferences}
+          saving={push.saving}
+          error={push.error}
+          onEnable={() => void push.enable()}
+          onDisable={() => void push.disable()}
+          onPreferenceChange={(key, value) =>
+            void push.setPreference(key, value)
+          }
+          onClose={() => setNotificationsOpen(false)}
+        />
+      )}
     </>
   )
 }

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { UserMenu } from './UserMenu'
 import { AuthProvider } from '../hooks/useAuth'
+import { usePushNotifications } from '../hooks/usePushNotifications'
 import { getUserProfile, updateUserProfile, findProfileByName } from '../services/supabaseService'
 
 vi.mock('../services/supabaseService', () => ({
@@ -13,9 +14,24 @@ vi.mock('../services/supabaseService', () => ({
   findProfileByName: vi.fn(),
 }))
 
+vi.mock('../hooks/usePushNotifications', () => ({
+  usePushNotifications: vi.fn(),
+}))
+
 const mockGetProfile = vi.mocked(getUserProfile)
 const mockUpdate = vi.mocked(updateUserProfile)
 const mockFind = vi.mocked(findProfileByName)
+const mockPush = vi.mocked(usePushNotifications)
+
+const pushState = () => ({
+  status: 'available' as const,
+  preferences: { messages: true, runReminder: true },
+  saving: false,
+  error: '',
+  enable: vi.fn().mockResolvedValue(undefined),
+  disable: vi.fn().mockResolvedValue(undefined),
+  setPreference: vi.fn().mockResolvedValue(undefined),
+})
 
 function LocationProbe() {
   const location = useLocation()
@@ -65,6 +81,7 @@ beforeEach(() => {
   mockGetProfile.mockResolvedValue(profile())
   mockUpdate.mockResolvedValue(profile())
   mockFind.mockResolvedValue(null)
+  mockPush.mockReturnValue(pushState())
 })
 
 afterEach(() => {
@@ -118,6 +135,50 @@ describe('UserMenu — renommage accessible', () => {
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
       'Ce nom est déjà utilisé'
+    )
+  })
+})
+
+describe('UserMenu — notifications', () => {
+  it('ouvre les réglages de notifications depuis le menu', async () => {
+    const user = await renderMenu()
+    await user.click(screen.getByRole('button', { name: 'Menu utilisateur' }))
+    await user.click(screen.getByRole('button', { name: 'Notifications' }))
+
+    expect(
+      screen.getByRole('dialog', { name: 'Notifications' })
+    ).toBeInTheDocument()
+  })
+
+  it('retire l’abonnement de l’appareil à la déconnexion', async () => {
+    const disable = vi.fn().mockResolvedValue(undefined)
+    mockPush.mockReturnValue({
+      ...pushState(),
+      status: 'subscribed',
+      disable,
+    })
+
+    const user = await renderMenu()
+    await user.click(screen.getByRole('button', { name: 'Menu utilisateur' }))
+    await user.click(screen.getByRole('button', { name: 'Déconnexion' }))
+
+    await waitFor(() => expect(disable).toHaveBeenCalledOnce())
+    await waitFor(() =>
+      expect(localStorage.getItem('running_user')).toBeNull()
+    )
+  })
+
+  it('se déconnecte même sans abonnement push', async () => {
+    const disable = vi.fn().mockResolvedValue(undefined)
+    mockPush.mockReturnValue({ ...pushState(), disable })
+
+    const user = await renderMenu()
+    await user.click(screen.getByRole('button', { name: 'Menu utilisateur' }))
+    await user.click(screen.getByRole('button', { name: 'Déconnexion' }))
+
+    expect(disable).not.toHaveBeenCalled()
+    await waitFor(() =>
+      expect(localStorage.getItem('running_user')).toBeNull()
     )
   })
 })

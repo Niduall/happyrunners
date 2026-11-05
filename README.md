@@ -35,10 +35,21 @@ Copiez `.env.example` vers `.env` :
 ```env
 VITE_SUPABASE_URL=https://votre-projet.supabase.co
 VITE_SUPABASE_ANON_KEY=votre_cle_anon
+VITE_VAPID_PUBLIC_KEY=votre_cle_publique_vapid
 ```
 
 La clé anon est **régénérable** depuis le dashboard Supabase. Aucune clé
-météo : Open-Meteo n'en demande pas.
+météo : Open-Meteo n'en demande pas. La clé VAPID **publique** sert aux
+notifications push ; la clé privée et le secret du webhook restent dans les
+secrets Supabase (voir `AGENTS.md`, section Notifications).
+
+## Notifications
+
+Chaque personne peut activer, appareil par appareil, deux catégories :
+**nouveaux messages** et **rappel du mardi soir**. Sur iPhone, iOS 16.4
+minimum et l'application doit être installée sur l'écran d'accueil ; Android
+fonctionne aussi dans le navigateur. Le détail du déploiement (migration,
+Edge Function, webhook) est dans `AGENTS.md`.
 
 ## Base de données
 

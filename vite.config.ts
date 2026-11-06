@@ -27,7 +27,7 @@ export default defineConfig({
         // les produire lui-même.
         importScripts: ['push-handler.js'],
       },
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'notification-badge.png'],
       // En dev, ne pas enregistrer de service worker : il sert l'ancien bundle
       // en cache et masque les modifications (logs 406 fantômes, code obsolète).
       devOptions: {

@@ -350,6 +350,11 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - ⚠️ **Un `\n` en fin de `VAPID_SUBJECT` fait répondre `403 BadJwtToken`**
   aux serveurs de push (Apple). La fonction nettoie les secrets
   (`cleanSecret`), mais garder chaque valeur sur une seule ligne.
+- **Le petit icône Android est le `badge`, pas `icon`.** Android ne garde que
+  le **canal alpha** du badge : une icône opaque et colorée donne un carré
+  blanc dans la barre d'état. `public/notification-badge.png` est donc une
+  silhouette blanche 96×96 sur fond transparent, et `push-handler.js` la
+  référence explicitement. Ne pas remettre `pwa-192x192.png` en badge.
 
 #### Déploiement des notifications (dashboard)
 1. **SQL** : appliquer `migrations/2026-11-04_tache31_notifications_push.sql`
@@ -632,6 +637,10 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
 7p. **Le rappel du mardi ne relance que les sans-réponse** — filtrer sur
     `attendances` pour la semaine cible, pas sur les votes. `pg_cron` est en
     UTC : `0 17 * * 2` = 18h Paris en hiver, 19h en été.
+7q. **Le `badge` Android doit être monochrome et transparent** — Android
+    n'utilise que son canal alpha. Un PNG opaque (l'icône de l'app) produit
+    le carré blanc dans la barre d'état. Utiliser
+    `public/notification-badge.png`, jamais `pwa-192x192.png`.
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

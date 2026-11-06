@@ -25,7 +25,11 @@ self.addEventListener('push', (event) => {
   const options = {
     body: payload.body || '',
     icon: '/pwa-192x192.png',
-    badge: '/pwa-192x192.png',
+    // Android dessine la petite icône de la barre d'état à partir du seul
+    // canal alpha du badge. L'icône de l'application, opaque et colorée,
+    // donnait donc un carré blanc : ce PNG est une silhouette blanche sur
+    // fond transparent.
+    badge: '/notification-badge.png',
     // Une notification par message : sans tag, Android les empile toutes,
     // ce qui noie le fil. Le tag vient de l'identifiant du message.
     tag: payload.tag || undefined,

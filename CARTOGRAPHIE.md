@@ -253,8 +253,8 @@ vides/invalides, conversion des coordonnées, distance, dénivelé (dont A8),
 |---|---|---|
 | `schema.sql` | structure complète, rejouable : 7 tables, index, RLS, triggers, purge des tables mortes | 410 |
 | `backup.py` | `save` / `list` / `restore` de la prod, via l'API REST | 449 |
-| `public/` | `favicon.svg`, 4 PNG (192, 512, maskable 512, Apple 180) aux bonnes dimensions | — |
-| `public/push-handler.js` | écouteurs `push` et `notificationclick` importés par le service worker généré | 74 |
+| `public/` | `favicon.png`, 4 PNG (192, 512, maskable 512, Apple 180) aux bonnes dimensions, plus `notification-badge.png` (silhouette 96×96 pour Android) | — |
+| `public/push-handler.js` | écouteurs `push` et `notificationclick` importés par le service worker généré ; badge Android dédié | 78 |
 | `supabase/functions/send-push/index.ts` | Edge Function : secret, préférences, envoi VAPID, nettoyage 404/410 | 194 |
 | `migrations/2026-11-04_tache31_notifications_push.sql` | `push_subscriptions`, `notification_preferences`, RLS et triggers | 87 |
 
@@ -262,7 +262,7 @@ vides/invalides, conversion des coordonnées, distance, dénivelé (dont A8),
 
 | Fichier | Responsabilité | À savoir |
 |---|---|---|
-| `vite.config.ts` | build + PWA + config Vitest | `defineConfig` vient de `vitest/config` (tâche 27) ; le manifeste vient de `src/config/pwaManifest.ts` (testé, importé avec son extension) ; `includeAssets` cite `favicon.svg` et l'icône Apple |
+| `vite.config.ts` | build + PWA + config Vitest | `defineConfig` vient de `vitest/config` (tâche 27) ; le manifeste vient de `src/config/pwaManifest.ts` (testé, importé avec son extension) ; `includeAssets` cite `favicon.png` et l'icône Apple |
 | `tsconfig.json` | TypeScript | `strict` activé (tâche 12) ; `noUnusedLocals` et `noUnusedParameters` aussi |
 | `.github/workflows/ci.yml` | CI GitHub Actions | `npm ci` + lint + tests + build sur push `main` et PR (tâche 24) |
 | `postcss.config.js` | `@tailwindcss/postcss` + autoprefixer | `autoprefixer` est redondant avec v4, sans effet |
@@ -277,7 +277,7 @@ vides/invalides, conversion des coordonnées, distance, dénivelé (dont A8),
 | `lang` | `fr` (explicite) | conforme |
 | `theme_color` | `#593A5A` | couleur de marque (`src/index.css:4`) |
 | icônes | PNG 192, 512 et maskable 512, plus Apple 180 | vrais PNG, dessin dans la zone sûre maskable |
-| `includeAssets` | `favicon.svg`, `apple-touch-icon.png` | présents dans `public/` |
+| `includeAssets` | `favicon.png`, `apple-touch-icon.png`, `notification-badge.png` | présents dans `public/` |
 
 ---
 

@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, KeyRound, Search, ShieldCheck, ShieldOff } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card, CardContent } from '../components/ui/Card'
-import { AdminCodeModal } from '../components/AdminCodeModal'
 import { AdminPinResetModal } from '../components/AdminPinResetModal'
 import { useAuth } from '../hooks/useAuth'
 import { verifyAdminCode } from '../services/adminCode'
@@ -36,6 +35,8 @@ export function Admin() {
   const { adminLockEnabled } = useAuth()
 
   const [unlocked, setUnlocked] = useState(false)
+  const [code, setCode] = useState('')
+  const [codeError, setCodeError] = useState('')
   const [profiles, setProfiles] = useState<ProfileWithPinStatus[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -58,6 +59,35 @@ export function Admin() {
   useEffect(() => {
     if (unlocked) void load()
   }, [unlocked, load])
+
+  // Un retour depuis l'historique ne doit jamais rouvrir la console. Le
+  // déverrouillage ne vit que tant que la page est réellement affichée :
+  // si le navigateur la restaure depuis son cache (bfcache), on le retire.
+  useEffect(() => {
+    const relock = () => setUnlocked(false)
+    window.addEventListener('pagehide', relock)
+    window.addEventListener('pageshow', relock)
+    return () => {
+      window.removeEventListener('pagehide', relock)
+      window.removeEventListener('pageshow', relock)
+    }
+  }, [])
+
+  const handleUnlock = (event: FormEvent) => {
+    event.preventDefault()
+    if (code.length === 0) {
+      setCodeError('Saisis le code')
+      return
+    }
+    if (!verifyAdminCode(code)) {
+      setCodeError('Code incorrect')
+      setCode('')
+      return
+    }
+    setCode('')
+    setCodeError('')
+    setUnlocked(true)
+  }
 
   const filtered = useMemo(() => {
     const needle = normalize(search)
@@ -125,12 +155,50 @@ export function Admin() {
           </Card>
         ) : !unlocked ? (
           <Card>
-            <CardContent className="space-y-2 py-8 text-center">
-              <KeyRound className="mx-auto h-8 w-8 text-primary" />
-              <p className="font-medium text-gray-900">Accès administrateur</p>
-              <p className="text-sm text-gray-500">
-                Saisis le code pour réinitialiser un PIN.
-              </p>
+            <CardContent className="space-y-4">
+              <div className="space-y-2 text-center">
+                <KeyRound className="mx-auto h-8 w-8 text-primary" />
+                <h2 className="font-semibold text-gray-900">Code administrateur</h2>
+                <p className="text-sm text-gray-500">
+                  Saisis le code pour réinitialiser un PIN. Il est redemandé à
+                  chaque visite.
+                </p>
+              </div>
+
+              <form onSubmit={handleUnlock} className="space-y-3">
+                {codeError && (
+                  <div
+                    role="alert"
+                    className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+                  >
+                    {codeError}
+                  </div>
+                )}
+
+                <div>
+                  <label
+                    htmlFor="admin-code"
+                    className="mb-1 block text-sm font-medium text-gray-700"
+                  >
+                    Code
+                  </label>
+                  <input
+                    id="admin-code"
+                    type="password"
+                    value={code}
+                    onChange={(event) => {
+                      setCode(event.target.value)
+                      setCodeError('')
+                    }}
+                    autoComplete="off"
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+
+                <Button type="submit" className="w-full">
+                  Déverrouiller
+                </Button>
+              </form>
             </CardContent>
           </Card>
         ) : (
@@ -257,18 +325,6 @@ export function Admin() {
           </>
         )}
       </main>
-
-      {adminLockEnabled && !unlocked && (
-        <AdminCodeModal
-          onUnlock={(code) => {
-            const ok = verifyAdminCode(code)
-            if (ok) setUnlocked(true)
-            return ok
-          }}
-          onCancel={() => navigate('/')}
-          description="Réinitialiser un PIN demande le code administrateur. L'accès reste ouvert tant que tu restes sur cet écran."
-        />
-      )}
 
       {pending && (
         <AdminPinResetModal

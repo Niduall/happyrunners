@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { Admin } from './Admin'
@@ -89,6 +89,20 @@ describe('Admin — accès protégé', () => {
     expect(screen.getAllByText('PIN actif')).toHaveLength(2)
     expect(screen.getAllByText('Sans PIN')).toHaveLength(2)
     expect(mockProfiles).toHaveBeenCalledTimes(1)
+  })
+
+  it('se reverrouille quand la page revient du cache après un retour', async () => {
+    const user = userEvent.setup()
+    renderAdmin()
+    await unlock(user)
+    await screen.findByText('Julie Moudin')
+
+    // Retour Android ou restauration depuis le cache (bfcache) : la page
+    // réapparaît telle quelle, mais le déverrouillage ne doit pas survivre.
+    act(() => window.dispatchEvent(new Event('pageshow')))
+
+    expect(screen.getByLabelText('Code')).toBeInTheDocument()
+    expect(screen.queryByText('Julie Moudin')).not.toBeInTheDocument()
   })
 
   it('explique quand aucun code admin n’est configuré', () => {

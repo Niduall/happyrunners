@@ -129,6 +129,25 @@ export interface Message {
   user_number: number
   body: string
   created_at: string
+  /**
+   * Réactions reçues, chargées avec le message. Optionnel : un message
+   * optimiste n'en a pas encore, et les tests peuvent l'omettre.
+   */
+  reactions?: MessageReaction[]
+}
+
+/**
+ * Clés de la palette de réactions.
+ *
+ * On stocke une clé et non un emoji : la palette se change côté client sans
+ * migration, et le CHECK de `message_reactions` interdit une valeur inconnue.
+ */
+export type ReactionKey = 'like' | 'love' | 'laugh' | 'run' | 'fire'
+
+/** Une réaction : la clé primaire (message, personne) en garantit l'unicité. */
+export interface MessageReaction {
+  user_number: number
+  reaction: ReactionKey
 }
 
 /**

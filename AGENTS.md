@@ -184,6 +184,42 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - **Un message ne s'édite pas.** Suppression immédiate par son auteur, sans
   confirmation, bouton discret à gauche de la bulle. Le rouge reste réservé à
   cette action et aux erreurs.
+- **Réactions : une seule par personne et par message.** La clé primaire
+  `message_reactions(message_id, user_number)` porte la règle ; réagir à
+  nouveau remplace la ligne (upsert), réappuyer sur le même emoji la retire.
+  Ne pas autoriser plusieurs emoji par personne sans changer la clé primaire.
+- **La palette est fixe** (`like`, `love`, `laugh`, `run`, `fire` dans
+  `messages.ts`). On stocke la **clé**, pas l'emoji : changer un emoji ne
+  demande aucune migration. Ne pas accepter un emoji arbitraire venu du
+  clavier sans élargir le `CHECK` et la largeur des pastilles.
+- **Les réactions se chargent avec le message** (`select` imbriqué
+  `message_reactions(user_number,reaction)`) : pas de N+1 à chaque polling de
+  5 s. Un message optimiste (`pending-…`) n'a pas d'identifiant serveur et ne
+  peut pas recevoir de réaction.
+- **Bascule optimiste** : la pastille change immédiatement, puis le serveur
+  est prévenu ; en cas d'échec, l'état exact d'avant est restauré. Comme pour
+  l'envoi, incrémenter `mutationRef` invalide les pollings déjà partis.
+- **Appui long = palette** (450 ms, annulé dès 8 px de mouvement) : c'est le
+  geste des messageries. Le petit bouton smiley à côté de l'heure reste
+  indispensable au clavier et aux lecteurs d'écran, qui ne peuvent pas
+  « appuyer longuement » ; les pastilles existantes sont aussi des boutons.
+- **La sélection de texte est coupée sur mobile** (`@media (hover: none)` dans
+  `index.css`, classe `.chat-message-text`) : sans ça, l'appui long ouvre le
+  menu natif et ses poignées par-dessus la palette. D'où **« Copier le
+  message »** dans la palette, qui garde la copie possible. Sur ordinateur,
+  la sélection reste active.
+- **Cibles tactiles** : les pastilles font 36 px de haut mais 44 px de cible
+  (`after:-inset-1`) ; le bouton smiley 32 px → 44 px (`after:-inset-1.5`).
+  Ne pas retirer ces pseudo-éléments en « simplifiant » les classes.
+- **La palette se retourne** vers le bas quand la bulle est à moins de 190 px
+  du haut : sinon elle sort de la zone de défilement. Elle se ferme au clic
+  extérieur, par Échap, et après un choix.
+- **Aucune notification push pour une réaction** : un 👍 n'allume pas le
+  téléphone de l'auteur.
+- ⚠️ **Ordre de déploiement obligatoire** : appliquer la migration
+  `message_reactions` **avant** de déployer l'interface. La requête du chat
+  référence la table : sans elle, `getRecentMessages` échoue et le fil ne
+  s'affiche plus. Test d'abord, prod ensuite.
 
 ### Mise à jour de la PWA
 - Un onglet ouvert **ne se met jamais à jour seul** : il enregistre le service
@@ -470,7 +506,7 @@ base vide. Ne jamais décrire le schéma dans la prose ci-dessous : c'est ainsi
 que ce document avait fini par annoncer un `participations(local_user_id)`
 qui n'existait plus depuis la migration `user_number`.
 
-### Les 7 tables qui comptent
+### Les 8 tables qui comptent
 | Table | Clé | Particularité |
 |---|---|---|
 | `user_profiles` | `user_number` (SEQUENCE) | identifiant **stable**, indépendant du nom |
@@ -478,6 +514,7 @@ qui n'existait plus depuis la migration `user_number`.
 | `attendances` | `UNIQUE(week_key, user_number)` | `going` \| `skip` |
 | `participations` | `UNIQUE(user_number, week_key)` | **un seul parcours par personne et par semaine** |
 | `messages` | `id` uuid | fil de discussion, fenêtre glissante de 30 jours |
+| `message_reactions` | `(message_id, user_number)` | **une seule réaction par personne** : la clé primaire le garantit |
 | `push_subscriptions` | `id` uuid, `endpoint` unique | un abonnement par appareil, supprimé avec le profil |
 | `notification_preferences` | `user_number` | un booléen par catégorie ; ligne absente = tout activé |
 
@@ -641,6 +678,11 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
     n'utilise que son canal alpha. Un PNG opaque (l'icône de l'app) produit
     le carré blanc dans la barre d'état. Utiliser
     `public/notification-badge.png`, jamais `pwa-192x192.png`.
+7r. **Les réactions se migrent avant de se déployer** — `getRecentMessages`
+    sélectionne `message_reactions(...)`. Si la table n'existe pas encore en
+    prod, le chat entier tombe. Appliquer
+    `migrations/2026-11-06_tache32_reactions_chat.sql` d'abord sur la base de
+    test, puis sur la prod, et seulement ensuite pousser l'interface.
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

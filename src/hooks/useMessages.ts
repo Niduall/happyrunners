@@ -3,17 +3,21 @@ import {
   deleteMessage,
   getRecentMessages,
   purgeOldMessages,
+  removeMessageReaction,
   sendMessage,
+  setMessageReaction,
 } from '../services/supabaseService'
 import {
   MAX_MESSAGE_LENGTH,
   countUnread,
+  nextReaction,
   normalizeMessageBody,
   readLastRead,
   retentionCutoff,
+  withReaction,
   writeLastRead,
 } from '../services/messages'
-import type { Message } from '../types/supabase'
+import type { Message, ReactionKey } from '../types/supabase'
 
 /**
  * Le chat est le seul écran où 30 s d'attente se voient. Cinq secondes est un
@@ -250,6 +254,54 @@ export function useMessages(
     }
   }, [])
 
+  /**
+   * Ajoute, remplace ou retire la réaction de la personne connectée.
+   *
+   * Bascule optimiste : la pastille change au doigt levé, puis le serveur est
+   * prévenu. En cas d'échec, l'état d'avant est restauré — sans quoi on
+   * laisserait croire que la réaction est enregistrée.
+   *
+   * Un message encore en cours d'envoi n'a pas d'identifiant serveur : il ne
+   * peut pas recevoir de réaction.
+   */
+  const react = useCallback(
+    async (messageId: string, key: ReactionKey): Promise<boolean> => {
+      if (!userNumber) return false
+
+      const target = messagesRef.current.find(
+        (message) => message.id === messageId
+      )
+      if (!target || target.status) return false
+
+      const previous = target.reactions?.find(
+        (reaction) => reaction.user_number === userNumber
+      )?.reaction
+      const next = nextReaction(previous, key)
+
+      // Invalide les pollings déjà partis : leur réponse ne connaît pas
+      // encore ce choix et le ferait disparaître.
+      mutationRef.current += 1
+      setMessages((prev) => withReaction(prev, messageId, userNumber, next))
+
+      try {
+        if (next) {
+          await setMessageReaction({ messageId, userNumber, reaction: next })
+        } else {
+          await removeMessageReaction({ messageId, userNumber })
+        }
+        mutationRef.current += 1
+        return true
+      } catch {
+        setMessages((prev) =>
+          withReaction(prev, messageId, userNumber, previous ?? null)
+        )
+        mutationRef.current += 1
+        return false
+      }
+    },
+    [userNumber]
+  )
+
   /** Marque tout ce qui est affiché comme lu (chat ouvert). */
   const markAllRead = useCallback(() => {
     const newest = messagesRef.current.reduce<string | null>((latest, message) => {
@@ -279,6 +331,7 @@ export function useMessages(
     send,
     retry,
     remove,
+    react,
     markAllRead,
     refresh,
   }

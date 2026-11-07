@@ -5,6 +5,7 @@ import schema from '../../schema.sql?raw'
 import migration from '../../migrations/2026-10-25_tache17.sql?raw'
 import chatMigration from '../../migrations/2026-11-02_tache29_chat.sql?raw'
 import pushMigration from '../../migrations/2026-11-04_tache31_notifications_push.sql?raw'
+import reactionsMigration from '../../migrations/2026-11-06_tache32_reactions_chat.sql?raw'
 
 /**
  * schema.sql est la source de vérité de la structure de la base.
@@ -17,13 +18,14 @@ import pushMigration from '../../migrations/2026-11-04_tache31_notifications_pus
  */
 
 describe('schema.sql — structure', () => {
-  it('déclare les 7 tables utilisées par l\'app', () => {
+  it('déclare les 8 tables utilisées par l\'app', () => {
     for (const table of [
       'user_profiles',
       'parcours',
       'attendances',
       'participations',
       'messages',
+      'message_reactions',
       'push_subscriptions',
       'notification_preferences',
     ]) {
@@ -49,13 +51,15 @@ describe('schema.sql — structure', () => {
 
   it('ne déclare que les clés étrangères réellement présentes en prod', () => {
     const refs = [...schema.matchAll(/REFERENCES\s+(\w+)/g)].map((m) => m[1])
-    // Vérifié contre information_schema : 4 FK, toutes en CASCADE.
+    // 8 FK, toutes en CASCADE.
     // `parcours.created_by` n'en a volontairement pas (colonne jamais lue).
     expect(refs).toEqual([
       'user_profiles', // attendances.user_number
       'parcours',      // participations.parcours_id
       'user_profiles', // participations.user_number
       'user_profiles', // messages.user_number
+      'messages',      // message_reactions.message_id
+      'user_profiles', // message_reactions.user_number
       'user_profiles', // push_subscriptions.user_number
       'user_profiles', // notification_preferences.user_number
     ])
@@ -119,13 +123,14 @@ describe('schema.sql — structure', () => {
     expect(schema).toMatch(/pin_hash\s+text,/)
   })
 
-  it('active RLS et ouvre les 7 tables', () => {
+  it('active RLS et ouvre les 8 tables', () => {
     for (const table of [
       'user_profiles',
       'parcours',
       'attendances',
       'participations',
       'messages',
+      'message_reactions',
       'push_subscriptions',
       'notification_preferences',
     ]) {
@@ -133,8 +138,8 @@ describe('schema.sql — structure', () => {
         new RegExp(`ALTER TABLE ${table}\\s+ENABLE ROW LEVEL SECURITY`)
       )
     }
-    // 6 tables × 4 politiques + messages × 3 (pas d'UPDATE)
-    expect([...schema.matchAll(/CREATE POLICY/g)]).toHaveLength(27)
+    // 7 tables × 4 politiques + messages × 3 (pas d'UPDATE)
+    expect([...schema.matchAll(/CREATE POLICY/g)]).toHaveLength(31)
   })
 
   it('rend un message immuable : aucune politique UPDATE', () => {
@@ -297,5 +302,71 @@ describe('migration 2026-10-25 (tâche 17)', () => {
   it('applique tout ou rien', () => {
     expect(migration).toMatch(/^BEGIN;/m)
     expect(migration.trimEnd().endsWith('COMMIT;')).toBe(true)
+  })
+})
+describe('table message_reactions', () => {
+  it('garantit une seule réaction par personne et par message', () => {
+    // La clé primaire porte la règle métier : l'interface ne peut pas la
+    // contourner, même avec deux appuis rapides.
+    expect(schema).toMatch(
+      /CREATE TABLE IF NOT EXISTS message_reactions[\s\S]*?PRIMARY KEY \(message_id, user_number\)/
+    )
+  })
+
+  it('borne les clés de réaction en base', () => {
+    expect(schema).toMatch(
+      /CHECK \(reaction IN \('like', 'love', 'laugh', 'run', 'fire'\)\)/
+    )
+  })
+
+  it('supprime les réactions avec le message ou le profil', () => {
+    const start = schema.indexOf('CREATE TABLE IF NOT EXISTS message_reactions')
+    const end = schema.indexOf('CREATE INDEX IF NOT EXISTS idx_message_reactions_message')
+    const table = schema.slice(start, end)
+
+    expect(table.match(/ON DELETE CASCADE/g)).toHaveLength(2)
+  })
+
+  it('indexe la lecture des réactions par message', () => {
+    expect(schema).toMatch(
+      /CREATE INDEX IF NOT EXISTS idx_message_reactions_message[\s\S]*?message_id/
+    )
+  })
+
+  it('autorise UPDATE pour l’upsert, contrairement aux messages', () => {
+    expect(schema).toMatch(
+      /CREATE POLICY message_reactions_modifier\s+ON message_reactions FOR UPDATE/
+    )
+  })
+})
+
+describe('migration 2026-11-06 (tâche 32)', () => {
+  it('reprend la table, l’index et les quatre politiques', () => {
+    expect(reactionsMigration).toMatch(
+      /CREATE TABLE IF NOT EXISTS message_reactions/
+    )
+    expect(reactionsMigration).toMatch(
+      /PRIMARY KEY \(message_id, user_number\)/
+    )
+    expect(reactionsMigration).toMatch(
+      /CREATE INDEX IF NOT EXISTS idx_message_reactions_message/
+    )
+
+    for (const action of ['lire', 'inserer', 'modifier', 'supprimer']) {
+      expect(reactionsMigration).toMatch(
+        new RegExp(`CREATE POLICY message_reactions_${action}`)
+      )
+    }
+  })
+
+  it('est rejouable et ne supprime aucune donnée', () => {
+    expect(reactionsMigration).toMatch(/CREATE TABLE IF NOT EXISTS/)
+    expect(reactionsMigration).toMatch(/DROP POLICY IF EXISTS/)
+    expect(reactionsMigration).not.toMatch(/DELETE FROM|TRUNCATE|DROP TABLE/)
+  })
+
+  it('applique tout ou rien', () => {
+    expect(reactionsMigration).toMatch(/^BEGIN;/m)
+    expect(reactionsMigration.trimEnd().endsWith('COMMIT;')).toBe(true)
   })
 })

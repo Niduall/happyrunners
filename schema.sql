@@ -147,6 +147,31 @@ CREATE INDEX IF NOT EXISTS idx_messages_created
   ON messages USING btree (created_at DESC);
 
 -- ---------------------------------------------------------------------------
+-- Table : message_reactions
+-- ---------------------------------------------------------------------------
+-- Une seule réaction par personne et par message : la clé primaire porte la
+-- règle, pas l'interface. Réagir à nouveau met à jour la ligne (upsert).
+--
+-- `reaction` est une CLÉ (`like`, `love`…) et non un emoji : la palette
+-- s'affiche côté client, donc la changer ne demande aucune migration, et le
+-- CHECK interdit une valeur inventée.
+--
+-- Les deux clés étrangères sont en CASCADE : supprimer un message (ou un
+-- profil) emporte ses réactions. La purge de 30 jours fait le ménage.
+CREATE TABLE IF NOT EXISTS message_reactions (
+  message_id  uuid    NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  user_number integer NOT NULL REFERENCES user_profiles(user_number) ON DELETE CASCADE,
+  reaction    text    NOT NULL CHECK (reaction IN ('like', 'love', 'laugh', 'run', 'fire')),
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (message_id, user_number)
+);
+
+-- Le fil charge les réactions par relation imbriquée : sans cet index,
+-- chaque message déclencherait un parcours complet de la table.
+CREATE INDEX IF NOT EXISTS idx_message_reactions_message
+  ON message_reactions USING btree (message_id);
+
+-- ---------------------------------------------------------------------------
 -- Table : push_subscriptions
 -- ---------------------------------------------------------------------------
 -- Un abonnement Web Push par appareil. `endpoint` est unique : se réabonner
@@ -326,6 +351,7 @@ ALTER TABLE parcours                 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attendances              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE participations           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages                 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE message_reactions        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE push_subscriptions       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_preferences ENABLE ROW LEVEL SECURITY;
 
@@ -378,6 +404,18 @@ DROP POLICY IF EXISTS messages_supprimer ON messages;
 CREATE POLICY messages_lire      ON messages FOR SELECT USING (true);
 CREATE POLICY messages_inserer   ON messages FOR INSERT WITH CHECK (true);
 CREATE POLICY messages_supprimer ON messages FOR DELETE USING (true);
+
+-- Réactions : quatre politiques, UPDATE comprise. L'upsert
+-- `ON CONFLICT DO UPDATE` en a besoin pour changer d'emoji.
+DROP POLICY IF EXISTS message_reactions_lire      ON message_reactions;
+DROP POLICY IF EXISTS message_reactions_inserer   ON message_reactions;
+DROP POLICY IF EXISTS message_reactions_modifier  ON message_reactions;
+DROP POLICY IF EXISTS message_reactions_supprimer ON message_reactions;
+
+CREATE POLICY message_reactions_lire      ON message_reactions FOR SELECT USING (true);
+CREATE POLICY message_reactions_inserer   ON message_reactions FOR INSERT WITH CHECK (true);
+CREATE POLICY message_reactions_modifier  ON message_reactions FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY message_reactions_supprimer ON message_reactions FOR DELETE USING (true);
 
 -- Abonnements push : aucune donnée sensible pour le groupe, mais la clé
 -- privée VAPID et le secret du webhook ne sont PAS dans ces lignes.

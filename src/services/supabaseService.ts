@@ -15,7 +15,9 @@ import type {
   ProfileIdentity,
   GPXPoint,
   Message,
+  MessageReaction,
   NotificationPreferences,
+  ReactionKey,
 } from '../types/supabase'
 import type { PushSubscriptionRecord } from './push'
 
@@ -389,8 +391,20 @@ export async function deleteWeekVote(
 
 // ===== MESSAGES (fil de discussion) =====
 
-/** Colonnes utiles : `body` peut faire 500 caractères, rien d'autre à charger. */
-const MESSAGE_COLUMNS = 'id,user_number,body,created_at'
+/**
+ * Colonnes utiles : `body` peut faire 500 caractères, rien d'autre à charger.
+ *
+ * Les réactions arrivent dans la même requête (relation imbriquée) : une
+ * seconde requête par message serait un N+1 à chaque polling de 5 s. Seules
+ * les deux colonnes affichées sont demandées, pas `created_at`.
+ */
+const MESSAGE_COLUMNS =
+  'id,user_number,body,created_at,message_reactions(user_number,reaction)'
+
+/** Ligne brute renvoyée par PostgREST : la relation porte le nom de la table. */
+type MessageRow = Omit<Message, 'reactions'> & {
+  message_reactions?: MessageReaction[] | null
+}
 
 /**
  * Messages de la fenêtre courante, du plus ancien au plus récent.
@@ -411,7 +425,11 @@ export async function getRecentMessages(
     .limit(limit)
 
   if (error) throw error
-  return (data || []) as Message[]
+
+  return ((data || []) as MessageRow[]).map((row) => {
+    const { message_reactions, ...message } = row
+    return { ...message, reactions: message_reactions ?? [] }
+  })
 }
 
 /**
@@ -463,6 +481,44 @@ export async function sendMessage(params: {
 /** Suppression : l'interface ne la propose qu'à l'auteur du message. */
 export async function deleteMessage(id: string): Promise<void> {
   const { error } = await supabase.from('messages').delete().eq('id', id)
+
+  if (error) throw error
+}
+
+/**
+ * Enregistre la réaction d'une personne, ou remplace la sienne.
+ *
+ * L'upsert sur `(message_id, user_number)` laisse la base appliquer la règle
+ * « une seule réaction par personne » : pas besoin de lire avant d'écrire,
+ * et deux appuis rapides ne peuvent pas créer deux lignes.
+ */
+export async function setMessageReaction(params: {
+  messageId: string
+  userNumber: number
+  reaction: ReactionKey
+}): Promise<void> {
+  const { error } = await supabase.from('message_reactions').upsert(
+    {
+      message_id: params.messageId,
+      user_number: params.userNumber,
+      reaction: params.reaction,
+    },
+    { onConflict: 'message_id,user_number' }
+  )
+
+  if (error) throw error
+}
+
+/** Retire la réaction d'une personne. Sans effet s'il n'y en a plus. */
+export async function removeMessageReaction(params: {
+  messageId: string
+  userNumber: number
+}): Promise<void> {
+  const { error } = await supabase
+    .from('message_reactions')
+    .delete()
+    .eq('message_id', params.messageId)
+    .eq('user_number', params.userNumber)
 
   if (error) throw error
 }

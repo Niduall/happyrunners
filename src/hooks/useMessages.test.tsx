@@ -5,7 +5,9 @@ import {
   deleteMessage,
   getRecentMessages,
   purgeOldMessages,
+  removeMessageReaction,
   sendMessage,
+  setMessageReaction,
 } from '../services/supabaseService'
 import { MESSAGES_LAST_READ_KEY } from '../services/messages'
 import type { Message } from '../types/supabase'
@@ -15,12 +17,16 @@ vi.mock('../services/supabaseService', () => ({
   sendMessage: vi.fn(),
   deleteMessage: vi.fn(),
   purgeOldMessages: vi.fn(),
+  setMessageReaction: vi.fn(),
+  removeMessageReaction: vi.fn(),
 }))
 
 const mockGet = vi.mocked(getRecentMessages)
 const mockSend = vi.mocked(sendMessage)
 const mockDelete = vi.mocked(deleteMessage)
 const mockPurge = vi.mocked(purgeOldMessages)
+const mockSetReaction = vi.mocked(setMessageReaction)
+const mockRemoveReaction = vi.mocked(removeMessageReaction)
 
 function message(
   id: string,
@@ -249,6 +255,101 @@ describe('useMessages — suppression', () => {
     })
 
     expect(result.current.messages.map((m) => m.id)).toEqual(['m1'])
+  })
+})
+
+describe('useMessages — réactions', () => {
+  it('ajoute la réaction tout de suite, puis prévient le serveur', async () => {
+    mockGet.mockResolvedValue([message('m1', '2026-11-02T10:00:00.000Z')])
+    mockSetReaction.mockResolvedValue(undefined)
+
+    const { result } = renderHook(() => useMessages(1))
+    await flush()
+
+    await act(async () => {
+      expect(await result.current.react('m1', 'like')).toBe(true)
+    })
+
+    expect(mockSetReaction).toHaveBeenCalledWith({
+      messageId: 'm1',
+      userNumber: 1,
+      reaction: 'like',
+    })
+    expect(result.current.messages[0].reactions).toEqual([
+      { user_number: 1, reaction: 'like' },
+    ])
+  })
+
+  it('remplace la réaction précédente au lieu d’en ajouter une seconde', async () => {
+    mockGet.mockResolvedValue([
+      {
+        ...message('m1', '2026-11-02T10:00:00.000Z'),
+        reactions: [
+          { user_number: 1, reaction: 'like' },
+          { user_number: 2, reaction: 'fire' },
+        ],
+      },
+    ])
+    mockSetReaction.mockResolvedValue(undefined)
+
+    const { result } = renderHook(() => useMessages(1))
+    await flush()
+
+    await act(async () => {
+      await result.current.react('m1', 'laugh')
+    })
+
+    expect(result.current.messages[0].reactions).toEqual([
+      { user_number: 2, reaction: 'fire' },
+      { user_number: 1, reaction: 'laugh' },
+    ])
+  })
+
+  it('retire la réaction quand on réappuie sur le même emoji', async () => {
+    mockGet.mockResolvedValue([
+      {
+        ...message('m1', '2026-11-02T10:00:00.000Z'),
+        reactions: [{ user_number: 1, reaction: 'like' }],
+      },
+    ])
+    mockRemoveReaction.mockResolvedValue(undefined)
+
+    const { result } = renderHook(() => useMessages(1))
+    await flush()
+
+    await act(async () => {
+      expect(await result.current.react('m1', 'like')).toBe(true)
+    })
+
+    expect(mockRemoveReaction).toHaveBeenCalledWith({
+      messageId: 'm1',
+      userNumber: 1,
+    })
+    expect(result.current.messages[0].reactions).toEqual([])
+  })
+
+  it('restaure l’état d’avant si le serveur refuse', async () => {
+    mockGet.mockResolvedValue([message('m1', '2026-11-02T10:00:00.000Z')])
+    mockSetReaction.mockRejectedValue(new Error('refus'))
+
+    const { result } = renderHook(() => useMessages(1))
+    await flush()
+
+    await act(async () => {
+      expect(await result.current.react('m1', 'fire')).toBe(false)
+    })
+
+    expect(result.current.messages[0].reactions).toEqual([])
+  })
+
+  it('refuse de réagir sans identité ou sur un message inconnu', async () => {
+    const { result } = renderHook(() => useMessages(null))
+    await flush()
+
+    await act(async () => {
+      expect(await result.current.react('m1', 'like')).toBe(false)
+    })
+    expect(mockSetReaction).not.toHaveBeenCalled()
   })
 })
 

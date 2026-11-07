@@ -8,12 +8,17 @@ import {
   formatMessageTime,
   groupMessagesByDay,
   isValidMessageBody,
+  nextReaction,
   normalizeMessageBody,
   readLastRead,
   retentionCutoff,
+  summarizeReactions,
+  withReaction,
   writeLastRead,
+  REACTION_EMOJI,
+  REACTION_KEYS,
 } from './messages'
-import type { Message } from '../types/supabase'
+import type { Message, MessageReaction } from '../types/supabase'
 
 const NOW = new Date('2026-11-02T12:00:00.000Z')
 
@@ -179,5 +184,84 @@ describe('dernière lecture', () => {
 
   it('renvoie null sans valeur enregistrée', () => {
     expect(readLastRead()).toBeNull()
+  })
+})
+
+describe('réactions', () => {
+  it('résume les réactions dans l’ordre de la palette', () => {
+    const reactions: MessageReaction[] = [
+      { user_number: 1, reaction: 'fire' },
+      { user_number: 2, reaction: 'like' },
+      { user_number: 3, reaction: 'like' },
+    ]
+
+    expect(summarizeReactions(reactions, 2)).toEqual([
+      { key: 'like', emoji: '👍', label: 'J’aime', count: 2, mine: true },
+      { key: 'fire', emoji: '🔥', label: 'Bravo', count: 1, mine: false },
+    ])
+  })
+
+  it('ne renvoie aucune pastille sans réaction', () => {
+    expect(summarizeReactions([], 1)).toEqual([])
+    expect(summarizeReactions(undefined, 1)).toEqual([])
+  })
+
+  it('ne signale « la mienne » que pour la personne connectée', () => {
+    const reactions: MessageReaction[] = [{ user_number: 2, reaction: 'love' }]
+
+    expect(summarizeReactions(reactions, 1)[0].mine).toBe(false)
+    expect(summarizeReactions(reactions, 2)[0].mine).toBe(true)
+    // Visiteur non identifié : aucune réaction n'est la sienne.
+    expect(summarizeReactions(reactions, null)[0].mine).toBe(false)
+  })
+
+  it('expose une palette fixe de cinq emoji', () => {
+    expect(REACTION_KEYS).toHaveLength(5)
+    for (const key of REACTION_KEYS) {
+      expect(REACTION_EMOJI[key]).toBeTruthy()
+    }
+  })
+
+  it('bascule : un autre emoji remplace, le même retire', () => {
+    expect(nextReaction(undefined, 'like')).toBe('like')
+    expect(nextReaction('like', 'love')).toBe('love')
+    expect(nextReaction('like', 'like')).toBeNull()
+  })
+
+  it('applique la réaction sans toucher aux autres messages ni aux champs locaux', () => {
+    const messages: Message[] = [
+      {
+        ...message('m1', '2026-11-02T10:00:00.000Z'),
+        reactions: [
+          { user_number: 1, reaction: 'like' },
+          { user_number: 2, reaction: 'like' },
+        ],
+      },
+      message('m2', '2026-11-02T10:05:00.000Z'),
+    ]
+
+    const updated = withReaction(messages, 'm1', 2, 'fire')
+
+    expect(updated[0].reactions).toEqual([
+      { user_number: 1, reaction: 'like' },
+      { user_number: 2, reaction: 'fire' },
+    ])
+    expect(updated[1]).toBe(messages[1])
+  })
+
+  it('retire la réaction avec null, sans toucher à celle des autres', () => {
+    const messages: Message[] = [
+      {
+        ...message('m1', '2026-11-02T10:00:00.000Z'),
+        reactions: [
+          { user_number: 1, reaction: 'run' },
+          { user_number: 2, reaction: 'run' },
+        ],
+      },
+    ]
+
+    expect(withReaction(messages, 'm1', 1, null)[0].reactions).toEqual([
+      { user_number: 2, reaction: 'run' },
+    ])
   })
 })

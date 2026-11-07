@@ -1,6 +1,6 @@
 import { format, isSameDay, startOfDay, subDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import type { Message } from '../types/supabase'
+import type { Message, MessageReaction, ReactionKey } from '../types/supabase'
 
 /**
  * Logique pure du fil de discussion : fenêtre de rétention, validation,
@@ -159,4 +159,115 @@ export function writeLastRead(iso: string): void {
   } catch {
     // Sans stockage, la pastille se recalcule à chaque visite : acceptable.
   }
+}
+
+// ===== RÉACTIONS =====
+
+/**
+ * Palette fixe, dans l'ordre d'affichage.
+ *
+ * Une palette plutôt que le clavier complet : les pastilles sous la bulle
+ * restent compactes, le rendu est identique sur iOS et Android, et il n'y a
+ * pas de clavier à ouvrir/fermer au milieu du fil. Les clés sont stables en
+ * base ; changer un emoji ne touche pas aux données.
+ */
+export const REACTION_KEYS = ['like', 'love', 'laugh', 'run', 'fire'] as const
+
+export const REACTION_EMOJI: Record<ReactionKey, string> = {
+  like: '👍',
+  love: '❤️',
+  laugh: '😂',
+  run: '🏃',
+  fire: '🔥',
+}
+
+/** Libellés lus par les lecteurs d'écran (l'emoji seul est ambigu). */
+export const REACTION_LABELS: Record<ReactionKey, string> = {
+  like: 'J’aime',
+  love: 'J’adore',
+  laugh: 'Ça me fait rire',
+  run: 'On court',
+  fire: 'Bravo',
+}
+
+export interface ReactionSummary {
+  key: ReactionKey
+  emoji: string
+  label: string
+  count: number
+  /** La personne connectée a choisi cette réaction. */
+  mine: boolean
+}
+
+/**
+ * Résumé affiché sous la bulle : une entrée par emoji utilisé, dans l'ordre
+ * de la palette, avec le nombre et le choix de la personne connectée.
+ *
+ * Les réactions d'une personne absente (profil supprimé) ne comptent pas :
+ * `ON DELETE CASCADE` les retire déjà côté base, ce filtre couvre l'intervalle
+ * entre deux pollings.
+ */
+export function summarizeReactions(
+  reactions: readonly MessageReaction[] | undefined,
+  me: number | null
+): ReactionSummary[] {
+  const counts = new Map<ReactionKey, { count: number; mine: boolean }>()
+
+  for (const reaction of reactions ?? []) {
+    const current = counts.get(reaction.reaction) ?? { count: 0, mine: false }
+    current.count += 1
+    if (me !== null && reaction.user_number === me) current.mine = true
+    counts.set(reaction.reaction, current)
+  }
+
+  return REACTION_KEYS.flatMap((key) => {
+    const entry = counts.get(key)
+    if (!entry) return []
+    return [{
+      key,
+      emoji: REACTION_EMOJI[key],
+      label: REACTION_LABELS[key],
+      count: entry.count,
+      mine: entry.mine,
+    }]
+  })
+}
+
+/**
+ * Effet d'un appui sur `key` : choisir un autre emoji remplace le précédent,
+ * réappuyer sur le même le retire (`null`).
+ */
+export function nextReaction(
+  current: ReactionKey | undefined,
+  key: ReactionKey
+): ReactionKey | null {
+  return current === key ? null : key
+}
+
+/**
+ * Applique une réaction dans la liste locale, sans toucher au serveur.
+ *
+ * Sert à l'affichage optimiste et au retour arrière : la même fonction dans
+ * les deux sens garantit que l'état restauré est exactement l'état d'avant.
+ * Le type générique préserve les champs locaux (`status` d'un message en
+ * cours d'envoi).
+ */
+export function withReaction<T extends Message>(
+  messages: readonly T[],
+  messageId: string,
+  userNumber: number,
+  reaction: ReactionKey | null
+): T[] {
+  return messages.map((message) => {
+    if (message.id !== messageId) return message
+
+    const others = (message.reactions ?? []).filter(
+      (existing) => existing.user_number !== userNumber
+    )
+    const reactions = reaction
+      ? [...others, { user_number: userNumber, reaction }]
+      : others
+
+    return { ...message, reactions }
+  })
 }

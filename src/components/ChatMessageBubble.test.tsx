@@ -1,5 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { ChatMessageBubble } from './ChatMessageBubble'
 import type { ChatMessage } from '../hooks/useMessages'
 
@@ -22,8 +29,10 @@ function setup(props: Partial<Parameters<typeof ChatMessageBubble>[0]> = {}) {
       isMine={false}
       authorName="Ada"
       grouped={false}
+      me={1}
       onDelete={noop}
       onRetry={noop}
+      onReact={noop}
       {...props}
     />
   )
@@ -88,5 +97,171 @@ describe('ChatMessageBubble — états d’envoi', () => {
       screen.getByRole('button', { name: 'Supprimer ce message' })
     )
     expect(onDelete).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('ChatMessageBubble — réactions', () => {
+  it('affiche les pastilles avec leur nombre et met en avant la sienne', () => {
+    setup({
+      me: 1,
+      message: message({
+        reactions: [
+          { user_number: 2, reaction: 'like' },
+          { user_number: 1, reaction: 'like' },
+          { user_number: 3, reaction: 'fire' },
+        ],
+      }),
+    })
+
+    const like = screen.getByRole('button', {
+      name: 'J’aime, 2 personnes, votre réaction',
+    })
+    expect(like).toHaveAttribute('aria-pressed', 'true')
+
+    const fire = screen.getByRole('button', { name: 'Bravo, 1 personne' })
+    expect(fire).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('réagit en appuyant sur une pastille existante', () => {
+    const onReact = vi.fn()
+    setup({
+      me: 1,
+      onReact,
+      message: message({
+        reactions: [{ user_number: 2, reaction: 'like' }],
+      }),
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'J’aime, 1 personne' }))
+
+    expect(onReact).toHaveBeenCalledWith('like')
+  })
+
+  it('ouvre la palette depuis le bouton et envoie l’emoji choisi', () => {
+    const onReact = vi.fn()
+    setup({ onReact })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Réagir au message de Ada' })
+    )
+
+    const palette = screen.getByRole('group', {
+      name: 'Choisir une réaction',
+    })
+    // Les cinq emoji sont proposés, avec un libellé compréhensible.
+    expect(within(palette).getAllByRole('button')).toHaveLength(6) // + Copier
+    fireEvent.click(within(palette).getByRole('button', { name: 'J’adore' }))
+
+    expect(onReact).toHaveBeenCalledWith('love')
+    expect(
+      screen.queryByRole('group', { name: 'Choisir une réaction' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('marque l’emoji déjà choisi dans la palette', () => {
+    setup({
+      me: 1,
+      message: message({
+        reactions: [{ user_number: 1, reaction: 'laugh' }],
+      }),
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Réagir au message de Ada' })
+    )
+
+    expect(
+      screen.getByRole('button', { name: 'Ça me fait rire' })
+    ).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('ouvre la palette par appui long sur la bulle', () => {
+    vi.useFakeTimers()
+    try {
+      setup()
+
+      fireEvent.pointerDown(screen.getByText('Salut tout le monde'), {
+        pointerType: 'touch',
+        button: 0,
+        clientX: 100,
+        clientY: 100,
+      })
+      act(() => vi.advanceTimersByTime(450))
+
+      expect(
+        screen.getByRole('group', { name: 'Choisir une réaction' })
+      ).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('annule l’appui long si le doigt bouge (défilement)', () => {
+    vi.useFakeTimers()
+    try {
+      setup()
+      const bubble = screen.getByText('Salut tout le monde')
+
+      fireEvent.pointerDown(bubble, {
+        pointerType: 'touch',
+        button: 0,
+        clientX: 100,
+        clientY: 100,
+      })
+      fireEvent.pointerMove(bubble, {
+        pointerType: 'touch',
+        clientX: 140,
+        clientY: 100,
+      })
+      act(() => vi.advanceTimersByTime(450))
+
+      expect(
+        screen.queryByRole('group', { name: 'Choisir une réaction' })
+      ).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('ferme la palette avec Échap', () => {
+    setup()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Réagir au message de Ada' })
+    )
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(
+      screen.queryByRole('group', { name: 'Choisir une réaction' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('copie le texte du message depuis la palette', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+
+    setup()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Réagir au message de Ada' })
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Copier le message' }))
+
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith('Salut tout le monde')
+    )
+    expect(
+      await screen.findByRole('button', { name: 'Message copié' })
+    ).toBeInTheDocument()
+  })
+
+  it('ne propose pas de réagir à un message pas encore enregistré', () => {
+    setup({ isMine: true, message: message({ status: 'sending' }) })
+
+    expect(
+      screen.queryByRole('button', { name: 'Réagir à votre message' })
+    ).not.toBeInTheDocument()
   })
 })

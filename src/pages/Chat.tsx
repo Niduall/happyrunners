@@ -20,7 +20,7 @@ export function Chat() {
   const { user } = useAuth()
   const me = user?.id ?? null
 
-  const { messages, loading, error, send, retry, remove, markAllRead } =
+  const { messages, loading, error, send, retry, remove, react, markAllRead } =
     useMessages(me)
   const { profiles } = useProfiles(true)
 
@@ -170,8 +170,10 @@ export function Chat() {
                       isMine={message.user_number === me}
                       authorName={names.get(message.user_number) ?? 'Quelqu’un'}
                       grouped={grouped}
+                      me={me}
                       onDelete={() => void remove(message.id)}
                       onRetry={() => void retry(message.id)}
+                      onReact={(reaction) => void react(message.id, reaction)}
                     />
                   )
                 })}

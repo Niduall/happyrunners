@@ -57,7 +57,7 @@ locale qui décide. Clé de semaine = date du mercredi cible, `YYYY-MM-DD`.
 
 `schema.sql` est la source de vérité. RLS activée mais **entièrement ouverte**
 (`USING (true)` sur les tables, `schema.sql`) : l'identité est côté
-client, c'est une dissuasion, pas une sécurité. Cinq tables vivantes plus
+client, c'est une dissuasion, pas une sécurité. Huit tables vivantes plus
 deux tables mortes supprimées à la fin du fichier (`schema.sql`).
 
 | Table | Clé | Contrainte structurante |
@@ -67,6 +67,7 @@ deux tables mortes supprimées à la fin du fichier (`schema.sql`).
 | `attendances` | `UNIQUE(week_key, user_number)` | `going` \| `skip` |
 | `participations` | `UNIQUE(user_number, week_key)` | un seul parcours par personne et par semaine |
 | `messages` | `id` uuid | chat, fenêtre glissante de 30 jours, **pas de `week_key`** |
+| `message_reactions` | `(message_id, user_number)` | une seule réaction par personne, clé du `CHECK` en texte |
 
 ### Le tracé des données
 
@@ -135,7 +136,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/components/ConfirmDeleteModal.tsx` | confirmation de suppression + annonce des votes perdus | 97 |
 | `src/components/AttendanceBanner.tsx` | encadré « Tu viens ? » + deux boutons de présence | 70 |
 | `src/components/ChatComposer.tsx` | zone de saisie du chat : Entrée envoie, Maj+Entrée saut de ligne, compteur 500, 16 px sur mobile | 119 |
-| `src/components/ChatMessageBubble.tsx` | bulle du fil : auteur, heure, états `sending`/`failed`, suppression par l'auteur | 95 |
+| `src/components/ChatMessageBubble.tsx` | bulle du fil : auteur, heure, états `sending`/`failed`, suppression, appui long + palette de réactions, copie | 390 |
 | `src/components/MessagesButton.tsx` | entrée « Messages » de l'en-tête + pastille de non-lus (plafond « 99+ ») | 44 |
 | `src/components/RequireUser.tsx` | garde de route : redirige un visiteur vers `/`, attend le chargement | 26 |
 | `src/components/AdminPinResetModal.tsx` | réinitialisation d'un PIN : code provisoire ou retrait, sans jamais afficher le hash | 260 |
@@ -168,7 +169,7 @@ Toutes les lignes sont sous `running-app/`.
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
 | `src/services/supabaseService.ts` | toutes les requêtes Supabase | 562 |
-| `src/services/messages.ts` | chat : fenêtre de 30 j, validation, regroupement par jour, non-lus, dernière lecture | 160 |
+| `src/services/messages.ts` | chat : fenêtre de 30 j, validation, regroupement par jour, non-lus, dernière lecture, réactions | 273 |
 | `src/services/presenceRows.ts` | fusion annuaire + réponses : qui vient, qui est absent, qui n'a pas répondu | 50 |
 | `src/services/gpxParser.ts` | parse GPX XML (DOMParser natif) et JSON Strava, distance, dénivelé, simplification | 265 |
 | `src/services/weatherApi.ts` | client Open-Meteo + sélection de la prévision du mercredi 12h30 | 343 |
@@ -227,7 +228,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/components/RequireUser.test.tsx` | visiteur redirigé, connecté autorisé, attente du chargement |
 | `src/pages/Home.messages.test.tsx` | Messages absent sans identité, présent une fois connecté |
 | `src/components/ChatComposer.test.tsx` | Entrée / Maj+Entrée / composition d'accent, compteur, lecture sans identité |
-| `src/components/ChatMessageBubble.test.tsx` | auteur, regroupement, états d'envoi, suppression du sien |
+| `src/components/ChatMessageBubble.test.tsx` | auteur, regroupement, états d'envoi, suppression, pastilles, appui long, palette, copie |
 | `src/components/MessagesButton.test.tsx` | pastille absente à zéro, accord singulier/pluriel, plafond 99+ |
 | `src/pages/Admin.test.tsx` | code admin, liste, recherche sans accents, réinit./retrait, erreur de chargement |
 | `src/components/AdminPinResetModal.test.tsx` | validation 4 chiffres, confirmation, retrait, panne réseau |
@@ -251,7 +252,7 @@ vides/invalides, conversion des coordonnées, distance, dénivelé (dont A8),
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `schema.sql` | structure complète, rejouable : 7 tables, index, RLS, triggers, purge des tables mortes | 410 |
+| `schema.sql` | structure complète, rejouable : 8 tables, index, RLS, triggers, purge des tables mortes | 448 |
 | `backup.py` | `save` / `list` / `restore` de la prod, via l'API REST | 449 |
 | `public/` | `favicon.png`, 4 PNG (192, 512, maskable 512, Apple 180) aux bonnes dimensions, plus `notification-badge.png` (silhouette 96×96 pour Android) | — |
 | `public/push-handler.js` | écouteurs `push` et `notificationclick` importés par le service worker généré ; badge Android dédié | 78 |
@@ -305,6 +306,8 @@ Table de référence pour éviter de corriger une règle à un seul endroit.
 | Longueur d'un message = 1 à 500 | `schema.sql` (`CHECK`) + `messages.ts` (validation) | ✅ tenue par la base |
 | Lecture du chat réservée aux connectés | `RequireUser` autour de `/messages` ; `MessagesButton` et `useUnreadMessages(isAuthenticated)` sur l'accueil | ✅ un visiteur ne voit ni le bouton ni le fil |
 | Saisie du chat sans zoom iOS | `ChatComposer.tsx` (`text-base sm:text-sm`) | ✅ 16 px sous 640 px de large |
+| Réactions : une seule par personne et par message | `message_reactions` (clé primaire) + `withReaction` | ✅ tenue par la base, pas seulement par l'UI |
+| Palette de réactions fixe | `messages.ts` (`REACTION_KEYS`, `REACTION_EMOJI`) | ✅ cinq clés stables, aucun emoji arbitraire |
 | Non-lus = messages des autres depuis la dernière lecture | `messages.ts` (`readLastRead`, `writeLastRead`) + `countMessagesSince(since, me)` | ✅ ses propres messages ne comptent jamais, heure serveur retenue |
 | PIN mémorisé 30 jours par appareil | `pinTrust.ts` + `useAuth.tsx` | ✅ lié au `user_number`, oublié à la déconnexion |
 | Deux prénoms identiques → « Julie D. » / « Julie M. » | `Chat.tsx` (`names`) | ✅ l'initiale n'apparaît qu'en cas de doublon |

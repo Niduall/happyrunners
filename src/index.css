@@ -64,6 +64,21 @@ body {
   background: #94a3b8;
 }
 
+/*
+ * Appui long sur une bulle = réaction.
+ * Sur mobile, la sélection de texte ouvrirait le menu natif et ses poignées
+ * par-dessus la palette. On la désactive uniquement pour les pointeurs
+ * grossiers : sur ordinateur, sélectionner un message reste possible, et
+ * « Copier le message » est proposé dans la palette.
+ */
+@media (hover: none) {
+  .chat-message-text {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
 /* Focus visible for accessibility */
 :focus-visible {
   outline: 2px solid #593A5A;

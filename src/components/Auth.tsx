@@ -407,7 +407,7 @@ export function LoginForm() {
           </Button>
         </form>
 
-        <p className="mt-6 pt-4 border-t border-gray-100 text-center text-sm text-gray-400">
+        <p className="mt-6 pt-4 border-t border-gray-100 text-center text-sm text-gray-500">
           Le mercredi à 12h30, quand on veut.
         </p>
       </CardContent>

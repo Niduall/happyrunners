@@ -126,7 +126,7 @@ function PresentList({ rows, currentUserNumber }: ParticipantsTableProps) {
             {row.parcoursName ? (
               <ParcoursPill name={row.parcoursName} />
             ) : (
-              <span className="text-sm text-gray-400">—</span>
+              <span className="text-sm text-gray-500">—</span>
             )}
           </li>
         )

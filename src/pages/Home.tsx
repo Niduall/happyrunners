@@ -3,6 +3,7 @@ import { MapPin, RefreshCw, AlertCircle, Plus, Trophy } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { WeatherCard } from '../components/WeatherCard'
 import { AttendanceBanner } from '../components/AttendanceBanner'
+import { RunActions } from '../components/RunActions'
 import { ParcoursVoteCard } from '../components/ParcoursVoteCard'
 import { ParticipantsTable, type PresenceRow } from '../components/ParticipantsTable'
 import { Button } from '../components/ui/Button'
@@ -201,12 +202,15 @@ export function Home() {
         {isAuthenticated && (
           <>
             {/* 1. Je viens ou pas ? La date n'est dite qu'ici. */}
-            <AttendanceBanner
-              myStatus={myStatus}
-              saving={attendanceSaving}
-              subtitle={runSubtitle}
-              onChange={(s) => void setMyStatus(s)}
-            />
+            <div className="space-y-2">
+              <AttendanceBanner
+                myStatus={myStatus}
+                saving={attendanceSaving}
+                subtitle={runSubtitle}
+                onChange={(s) => void setMyStatus(s)}
+              />
+              <RunActions weekKey={weekKey} />
+            </div>
 
             {attendanceError && (
               <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
@@ -222,7 +226,7 @@ export function Home() {
                   <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
                     {hasForecast ? 'Prévision à 12h30' : 'Météo actuelle'}
                     {weatherFreshness && (
-                      <span className="text-xs text-gray-400">· {weatherFreshness}</span>
+                      <span className="text-xs text-gray-500">· {weatherFreshness}</span>
                     )}
                     {!hasForecast && (
                       <span className="px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded-full flex items-center gap-1">

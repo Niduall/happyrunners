@@ -381,10 +381,10 @@ export function ChatMessageBubble({
         )}
 
         <div className="mt-1 flex items-center gap-1 px-1">
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-gray-500">
             {formatMessageTime(message.created_at)}
           </span>
-          {sending && <span className="text-xs text-gray-400">Envoi…</span>}
+          {sending && <span className="text-xs text-gray-500">Envoi…</span>}
           {failed && (
             <button
               type="button"

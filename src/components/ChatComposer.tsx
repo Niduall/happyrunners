@@ -87,7 +87,7 @@ export function ChatComposer({ canWrite, onSend, onIdentify }: ChatComposerProps
           onKeyDown={handleKeyDown}
           placeholder="Écris un message…"
           aria-describedby={tooLong ? 'chat-message-compteur' : undefined}
-          className="w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-400 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 sm:text-sm"
+          className="w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 sm:text-sm"
         />
         {(body.length > 400 || tooLong) && (
           <p
@@ -95,7 +95,7 @@ export function ChatComposer({ canWrite, onSend, onIdentify }: ChatComposerProps
             role={tooLong ? 'alert' : undefined}
             className={cn(
               'mt-1 text-right text-xs',
-              tooLong ? 'text-error' : 'text-gray-400'
+              tooLong ? 'text-error' : 'text-gray-500'
             )}
           >
             {body.length}/{MAX_MESSAGE_LENGTH}

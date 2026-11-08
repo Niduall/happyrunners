@@ -15,13 +15,13 @@ envisagées, avec leur priorité et leur coût. Elle ne remplace pas `AGENTS.md`
   lecture seule (sauf validation explicite).
 - Migration d’abord sur la base de test, puis en prod, **avant** l’interface.
 
-## En cours — Lot rapide
+## Livré — Lot rapide (8 novembre 2026)
 
 | Tâche | Pourquoi | Effort | État |
 |---|---|---|---|
-| **Contraste du texte secondaire** | Les heures et aides en `text-gray-400` à 12 px sont à ~2,7:1 sur blanc, sous WCAG AA (4,5:1). L’app s’utilise dehors, en plein soleil. | S | À faire |
-| **Routes à la demande** | `Admin`, `ParcoursList` et `Chat` sont dans le bundle initial (631 Ko, 178 Ko gzip). Les charger seulement à la navigation accélère le premier écran. | S | À faire |
-| **Agenda + partage** | Bouton `.ics` / Google Calendar pour le mercredi 12h30, et « Partager l’app ». Adoption et rappel sans dépendre du push. | S | À faire |
+| **Contraste du texte secondaire** | Les heures et aides en `text-gray-400` à 12 px sont à ~2,7:1 sur blanc, sous WCAG AA (4,5:1). L’app s’utilise dehors, en plein soleil. | S | ✅ Livré |
+| **Routes à la demande** | `Admin`, `ParcoursList` et `Chat` sont dans le bundle initial (631 Ko, 178 Ko gzip). Les charger seulement à la navigation accélère le premier écran. | S | ✅ Livré |
+| **Agenda + partage** | Bouton `.ics` / Google Calendar pour le mercredi 12h30, et « Partager l’app ». Adoption et rappel sans dépendre du push. | S | ✅ Livré |
 
 ## À faire ensuite
 
@@ -69,6 +69,10 @@ envisagées, avec leur priorité et leur coût. Elle ne remplace pas `AGENTS.md`
 - Chat sur 30 jours glissants, envoi optimiste, non-lus, polling 5 s / 30 s.
 - Réactions à palette fixe et **liste des personnes ayant réagi** au clic sur
   une pastille.
+- Contraste du texte secondaire en `gray-500` (WCAG AA) sur les heures, aides
+  et états d’envoi.
+- Pages secondaires (`Admin`, `Chat`, `ParcoursList`) chargées à la demande.
+- Fichier d’agenda `.ics` de la sortie du mercredi et partage de l’app.
 - Notifications push résilientes, préférences par personne, rappel du mardi.
 - PIN optionnel, appareil de confiance, console de réinitialisation admin.
 - Météo Open-Meteo 16 jours, bandeau « autour de 12h30 ».

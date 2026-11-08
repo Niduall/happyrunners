@@ -28,13 +28,9 @@ const pushState = () => ({
   preferences: { messages: true, runReminder: true },
   saving: false,
   error: '',
-  testing: false,
-  testStatus: 'idle' as const,
-  testError: '',
   enable: vi.fn().mockResolvedValue(undefined),
   disable: vi.fn().mockResolvedValue(undefined),
   setPreference: vi.fn().mockResolvedValue(undefined),
-  test: vi.fn().mockResolvedValue(undefined),
 })
 
 function LocationProbe() {

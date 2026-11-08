@@ -12,7 +12,6 @@ import {
   needsInstallForPush,
   permissionState,
   subscribeToPush,
-  toSubscriptionRecord,
   unsubscribeFromPush,
 } from '../services/push'
 import { syncDeviceSubscription } from '../services/pushSync'
@@ -27,7 +26,6 @@ import {
   markPushDeviceUser,
   markPushOptedOut,
 } from '../services/pushDevice'
-import { sendTestPush } from '../services/pushTest'
 import type { NotificationPreferences } from '../types/supabase'
 
 /**
@@ -42,9 +40,6 @@ export type PushStatus =
   | 'denied'
   | 'subscribed'
   | 'available'
-
-/** Résultat du dernier envoi de test, pour l'écran Notifications. */
-export type TestPushStatus = 'idle' | 'ok' | 'error'
 
 const DEFAULT_PREFERENCES: NotificationPreferences = {
   messages: true,
@@ -78,9 +73,6 @@ export function usePushNotifications(userNumber: number | null) {
     useState<NotificationPreferences>(DEFAULT_PREFERENCES)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [testing, setTesting] = useState(false)
-  const [testStatus, setTestStatus] = useState<TestPushStatus>('idle')
-  const [testError, setTestError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -192,45 +184,13 @@ export function usePushNotifications(userNumber: number | null) {
     [userNumber, preferences]
   )
 
-  /**
-   * Envoie une notification visible à cet appareil uniquement.
-   * Sert à vérifier la chaîne complète sans déranger les autres.
-   */
-  const test = useCallback(async () => {
-    setTesting(true)
-    setTestStatus('idle')
-    setTestError('')
-    try {
-      const subscription = await getCurrentSubscription()
-      const record = subscription ? toSubscriptionRecord(subscription) : null
-      if (!record) {
-        throw new Error('Aucun abonnement actif sur cet appareil.')
-      }
-
-      await sendTestPush(record)
-      setTestStatus('ok')
-    } catch (err) {
-      console.error('[PUSH] Test impossible:', err)
-      setTestStatus('error')
-      setTestError(
-        err instanceof Error ? err.message : 'Impossible d’envoyer le test.'
-      )
-    } finally {
-      setTesting(false)
-    }
-  }, [])
-
   return {
     status,
     preferences,
     saving,
     error,
-    testing,
-    testStatus,
-    testError,
     enable,
     disable,
     setPreference,
-    test,
   }
 }

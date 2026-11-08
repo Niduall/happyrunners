@@ -14,11 +14,9 @@ import {
   needsInstallForPush,
   permissionState,
   subscribeToPush,
-  toSubscriptionRecord,
   unsubscribeFromPush,
 } from '../services/push'
 import { syncDeviceSubscription } from '../services/pushSync'
-import { sendTestPush } from '../services/pushTest'
 import {
   clearPushConfig,
   currentPushConfig,
@@ -45,16 +43,11 @@ vi.mock('../services/push', () => ({
   needsInstallForPush: vi.fn(),
   permissionState: vi.fn(),
   subscribeToPush: vi.fn(),
-  toSubscriptionRecord: vi.fn(),
   unsubscribeFromPush: vi.fn(),
 }))
 
 vi.mock('../services/pushSync', () => ({
   syncDeviceSubscription: vi.fn(),
-}))
-
-vi.mock('../services/pushTest', () => ({
-  sendTestPush: vi.fn(),
 }))
 
 vi.mock('../services/pushConfigStore', () => ({
@@ -77,13 +70,11 @@ const mockPermission = vi.mocked(permissionState)
 const mockCurrent = vi.mocked(getCurrentSubscription)
 const mockSubscribe = vi.mocked(subscribeToPush)
 const mockUnsubscribe = vi.mocked(unsubscribeFromPush)
-const mockToRecord = vi.mocked(toSubscriptionRecord)
 const mockSaveSubscription = vi.mocked(savePushSubscription)
 const mockDeleteSubscription = vi.mocked(deletePushSubscription)
 const mockGetPreferences = vi.mocked(getNotificationPreferences)
 const mockSavePreferences = vi.mocked(saveNotificationPreferences)
 const mockSync = vi.mocked(syncDeviceSubscription)
-const mockSendTest = vi.mocked(sendTestPush)
 const mockSaveConfig = vi.mocked(savePushConfig)
 const mockClearConfig = vi.mocked(clearPushConfig)
 const mockCurrentConfig = vi.mocked(currentPushConfig)
@@ -104,7 +95,6 @@ beforeEach(() => {
   mockDeleteSubscription.mockResolvedValue()
   mockSavePreferences.mockResolvedValue()
   mockSync.mockResolvedValue(null)
-  mockSendTest.mockResolvedValue({ sent: 1, failed: 0, removed: 0 })
   mockSaveConfig.mockResolvedValue()
   mockClearConfig.mockResolvedValue()
   mockCurrentConfig.mockReturnValue({
@@ -325,58 +315,5 @@ describe('usePushNotifications — préférences', () => {
 
     expect(result.current.preferences.runReminder).toBe(true)
     expect(result.current.error).toMatch(/Impossible/)
-  })
-})
-
-describe('usePushNotifications — test de l’appareil', () => {
-  const record = {
-    endpoint: 'https://push.example/abc',
-    p256dh: 'p',
-    auth: 'a',
-  }
-
-  it('envoie une notification à l’abonnement courant', async () => {
-    mockCurrent.mockResolvedValue({ endpoint: record.endpoint } as never)
-    mockToRecord.mockReturnValue(record)
-
-    const { result } = renderHook(() => usePushNotifications(14))
-    await waitFor(() => expect(result.current.status).toBe('subscribed'))
-
-    await act(async () => {
-      await result.current.test()
-    })
-
-    expect(mockSendTest).toHaveBeenCalledWith(record)
-    expect(result.current.testStatus).toBe('ok')
-    expect(result.current.testError).toBe('')
-  })
-
-  it('explique l’absence d’abonnement', async () => {
-    const { result } = renderHook(() => usePushNotifications(14))
-    await waitFor(() => expect(result.current.status).toBe('available'))
-
-    await act(async () => {
-      await result.current.test()
-    })
-
-    expect(mockSendTest).not.toHaveBeenCalled()
-    expect(result.current.testStatus).toBe('error')
-    expect(result.current.testError).toMatch(/Aucun abonnement/)
-  })
-
-  it('affiche l’erreur du serveur', async () => {
-    mockCurrent.mockResolvedValue({ endpoint: record.endpoint } as never)
-    mockToRecord.mockReturnValue(record)
-    mockSendTest.mockRejectedValue(new Error('Abonnement inconnu'))
-
-    const { result } = renderHook(() => usePushNotifications(14))
-    await waitFor(() => expect(result.current.status).toBe('subscribed'))
-
-    await act(async () => {
-      await result.current.test()
-    })
-
-    expect(result.current.testStatus).toBe('error')
-    expect(result.current.testError).toBe('Abonnement inconnu')
   })
 })

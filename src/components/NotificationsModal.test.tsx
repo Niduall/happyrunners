@@ -2,22 +2,15 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { NotificationsModal } from './NotificationsModal'
-import type {
-  PushStatus,
-  TestPushStatus,
-} from '../hooks/usePushNotifications'
+import type { PushStatus } from '../hooks/usePushNotifications'
 
 const defaults = {
   status: 'available' as PushStatus,
   preferences: { messages: true, runReminder: true },
   saving: false,
   error: '',
-  testing: false,
-  testStatus: 'idle' as TestPushStatus,
-  testError: '',
   onEnable: vi.fn(),
   onDisable: vi.fn(),
-  onTest: vi.fn(),
   onPreferenceChange: vi.fn(),
   onClose: vi.fn(),
 }
@@ -63,38 +56,6 @@ describe('NotificationsModal — états', () => {
     )
 
     expect(props.onDisable).toHaveBeenCalledOnce()
-  })
-
-  it('envoie un test depuis l’appareil abonné', async () => {
-    const { user, props } = renderModal({ status: 'subscribed' })
-
-    await user.click(
-      screen.getByRole('button', { name: /Tester les notifications/ })
-    )
-
-    expect(props.onTest).toHaveBeenCalledOnce()
-  })
-
-  it('affiche le résultat du test', () => {
-    renderModal({ status: 'subscribed', testStatus: 'ok' })
-
-    expect(screen.getByRole('status')).toHaveTextContent(/Notification envoyée/)
-  })
-
-  it('affiche l’erreur du test', () => {
-    renderModal({
-      status: 'subscribed',
-      testStatus: 'error',
-      testError: 'Abonnement inconnu',
-    })
-
-    expect(screen.getByRole('alert')).toHaveTextContent('Abonnement inconnu')
-  })
-
-  it('désactive le test pendant un envoi', () => {
-    renderModal({ status: 'subscribed', testing: true })
-
-    expect(screen.getByRole('button', { name: /Envoi/ })).toBeDisabled()
   })
 
   it('explique le blocage du navigateur', () => {

@@ -197,11 +197,18 @@ export interface ReactionSummary {
   count: number
   /** La personne connectée a choisi cette réaction. */
   mine: boolean
+  /** Qui a choisi cet emoji, par `user_number` croissant (liste stable). */
+  userNumbers: number[]
 }
 
 /**
  * Résumé affiché sous la bulle : une entrée par emoji utilisé, dans l'ordre
- * de la palette, avec le nombre et le choix de la personne connectée.
+ * de la palette, avec le nombre, le choix de la personne connectée et les
+ * auteurs.
+ *
+ * Les auteurs sont triés par `user_number` : l'ordre renvoyé par la base n'est
+ * pas garanti, et un tri stable évite que la liste « qui a réagi » change
+ * d'ordre à chaque polling.
  *
  * Les réactions d'une personne absente (profil supprimé) ne comptent pas :
  * `ON DELETE CASCADE` les retire déjà côté base, ce filtre couvre l'intervalle
@@ -211,12 +218,20 @@ export function summarizeReactions(
   reactions: readonly MessageReaction[] | undefined,
   me: number | null
 ): ReactionSummary[] {
-  const counts = new Map<ReactionKey, { count: number; mine: boolean }>()
+  const counts = new Map<
+    ReactionKey,
+    { count: number; mine: boolean; userNumbers: number[] }
+  >()
 
   for (const reaction of reactions ?? []) {
-    const current = counts.get(reaction.reaction) ?? { count: 0, mine: false }
+    const current = counts.get(reaction.reaction) ?? {
+      count: 0,
+      mine: false,
+      userNumbers: [],
+    }
     current.count += 1
     if (me !== null && reaction.user_number === me) current.mine = true
+    current.userNumbers.push(reaction.user_number)
     counts.set(reaction.reaction, current)
   }
 
@@ -229,6 +244,7 @@ export function summarizeReactions(
       label: REACTION_LABELS[key],
       count: entry.count,
       mine: entry.mine,
+      userNumbers: [...entry.userNumbers].sort((a, b) => a - b),
     }]
   })
 }

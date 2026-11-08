@@ -34,6 +34,8 @@ interface ChatMessageBubbleProps {
   grouped: boolean
   /** Identifiant de la personne connectée, pour marquer sa réaction. */
   me: number | null
+  /** `user_number` → prénom affiché, pour nommer les personnes qui ont réagi. */
+  names: ReadonlyMap<number, string>
   onDelete: () => void
   onRetry: () => void
   onReact: (reaction: ReactionKey) => void
@@ -49,6 +51,11 @@ interface ChatMessageBubbleProps {
  * Réagir : appui long sur la bulle (comme dans les messageries), ou le petit
  * bouton smiley à côté de l'heure — indispensable au clavier et pour les
  * lecteurs d'écran, qui ne peuvent pas « appuyer longuement ».
+ *
+ * Voir qui a réagi : appui sur une pastille, comme sur WhatsApp. La liste
+ * s'ouvre à la demande et ne prend aucune place au repos. Le tap ne bascule
+ * donc plus la réaction : pour l'ajouter ou la retirer, on passe par la
+ * palette, qui marque déjà l'emoji choisi.
  */
 export function ChatMessageBubble({
   message,
@@ -56,6 +63,7 @@ export function ChatMessageBubble({
   authorName,
   grouped,
   me,
+  names,
   onDelete,
   onRetry,
   onReact,
@@ -67,21 +75,41 @@ export function ChatMessageBubble({
   const canReact = !message.status
 
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [reactorsKey, setReactorsKey] = useState<ReactionKey | null>(null)
   const [dropUp, setDropUp] = useState(false)
   const [copied, setCopied] = useState(false)
 
   const columnRef = useRef<HTMLDivElement>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
+  const reactorsRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const reactorsTriggerRef = useRef<HTMLButtonElement>(null)
   const firstReactionRef = useRef<HTMLButtonElement>(null)
   const focusOnOpenRef = useRef(false)
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pressOriginRef = useRef<{ x: number; y: number } | null>(null)
 
   const reactions = summarizeReactions(message.reactions, me)
+  const reactorsOpen = reactorsKey !== null
   const myReaction = message.reactions?.find(
     (reaction) => reaction.user_number === me
   )?.reaction
+
+  // Une ligne par personne (une seule réaction par personne et par message),
+  // triée par prénom : la liste reste lisible et stable d'un polling à l'autre.
+  const reactorRows = reactions
+    .flatMap((reaction) =>
+      reaction.userNumbers.map((userNumber) => ({
+        userNumber,
+        emoji: reaction.emoji,
+        label: reaction.label,
+      }))
+    )
+    .sort((a, b) => {
+      const nameA = names.get(a.userNumber) ?? ''
+      const nameB = names.get(b.userNumber) ?? ''
+      return nameA.localeCompare(nameB, 'fr') || a.userNumber - b.userNumber
+    })
 
   function cancelPress() {
     if (pressTimerRef.current) {
@@ -97,6 +125,7 @@ export function ChatMessageBubble({
     setDropUp((rect?.top ?? 0) < FLIP_THRESHOLD_PX)
     focusOnOpenRef.current = focusFirst
     setPickerOpen(true)
+    setReactorsKey(null)
     setCopied(false)
   }
 
@@ -105,8 +134,23 @@ export function ChatMessageBubble({
     setCopied(false)
   }
 
+  function openReactors(key: ReactionKey, trigger: HTMLButtonElement) {
+    const rect = columnRef.current?.getBoundingClientRect()
+    setDropUp((rect?.top ?? 0) < FLIP_THRESHOLD_PX)
+    reactorsTriggerRef.current = trigger
+    setReactorsKey(key)
+    setPickerOpen(false)
+    setCopied(false)
+  }
+
+  function closeReactors(restoreFocus: boolean) {
+    setReactorsKey(null)
+    if (restoreFocus) reactorsTriggerRef.current?.focus()
+  }
+
   function chooseReaction(reaction: ReactionKey) {
     closePicker()
+    setReactorsKey(null)
     onReact(reaction)
     // Rendre le focus au bouton d'origine : au clavier, on ne se retrouve pas
     // nulle part après un choix.
@@ -170,6 +214,38 @@ export function ChatMessageBubble({
       document.removeEventListener('keydown', onKeyDown)
     }
   }, [pickerOpen])
+
+  // Liste « qui a réagi » : même fermeture que la palette, mais le panneau
+  // reçoit le focus pour que le clavier et les lecteurs d'écran y entrent.
+  useEffect(() => {
+    if (!reactorsOpen) return
+
+    reactorsRef.current?.focus({ preventScroll: true })
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (
+        reactorsRef.current?.contains(target) ||
+        reactorsTriggerRef.current?.contains(target)
+      ) {
+        return
+      }
+      setReactorsKey(null)
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setReactorsKey(null)
+      reactorsTriggerRef.current?.focus()
+    }
+
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [reactorsOpen])
 
   // Un démontage pendant l'appui ne doit pas laisser un minuteur derrière lui.
   useEffect(
@@ -275,8 +351,14 @@ export function ChatMessageBubble({
               <button
                 key={reaction.key}
                 type="button"
-                onClick={() => onReact(reaction.key)}
-                aria-pressed={reaction.mine}
+                onClick={(event) => {
+                  // Comme sur WhatsApp : la pastille sert à voir qui a réagi.
+                  // Ajouter ou retirer sa réaction passe par la palette.
+                  if (reactorsKey === reaction.key) closeReactors(true)
+                  else openReactors(reaction.key, event.currentTarget)
+                }}
+                aria-haspopup="dialog"
+                aria-expanded={reactorsKey === reaction.key}
                 aria-label={`${reaction.label}, ${reaction.count} ${
                   reaction.count > 1 ? 'personnes' : 'personne'
                 }${reaction.mine ? ', votre réaction' : ''}`}
@@ -285,7 +367,8 @@ export function ChatMessageBubble({
                   'relative flex min-h-9 items-center gap-1 rounded-full border px-2.5 text-xs font-medium transition-colors after:absolute after:-inset-1 after:content-[""]',
                   reaction.mine
                     ? 'border-accent/40 bg-accent/10 text-accent'
-                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50',
+                  reactorsKey === reaction.key && 'ring-2 ring-accent/30'
                 )}
               >
                 <span aria-hidden="true" className="text-sm">
@@ -382,6 +465,52 @@ export function ChatMessageBubble({
             <span role="status" className="sr-only">
               {copied ? 'Message copié' : ''}
             </span>
+          </div>
+        )}
+
+        {reactorsOpen && (
+          <div
+            ref={reactorsRef}
+            role="dialog"
+            aria-label="Personnes ayant réagi"
+            tabIndex={-1}
+            className={cn(
+              'absolute z-30 w-[248px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg outline-none',
+              isMine ? 'right-0' : 'left-0',
+              dropUp ? 'top-full mt-2' : 'bottom-full mb-2'
+            )}
+          >
+            <p className="px-3 pt-2 pb-1 text-xs font-medium text-gray-500">
+              Qui a réagi ?
+            </p>
+            <ul className="max-h-56 overflow-y-auto pb-1">
+              {reactorRows.map((row) => {
+                const name = names.get(row.userNumber) ?? 'Quelqu’un'
+                return (
+                  <li
+                    key={row.userNumber}
+                    className="flex items-center gap-2 px-3 py-2 text-sm"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold text-gray-600"
+                    >
+                      {name.slice(0, 1).toUpperCase()}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-gray-900">
+                      {name}
+                      {row.userNumber === me && (
+                        <span className="text-gray-500"> (vous)</span>
+                      )}
+                    </span>
+                    <span aria-hidden="true" className="shrink-0 text-base">
+                      {row.emoji}
+                    </span>
+                    <span className="sr-only">{row.label}</span>
+                  </li>
+                )
+              })}
+            </ul>
           </div>
         )}
       </div>

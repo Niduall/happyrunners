@@ -196,9 +196,33 @@ describe('réactions', () => {
     ]
 
     expect(summarizeReactions(reactions, 2)).toEqual([
-      { key: 'like', emoji: '👍', label: 'J’aime', count: 2, mine: true },
-      { key: 'fire', emoji: '🔥', label: 'Bravo', count: 1, mine: false },
+      {
+        key: 'like',
+        emoji: '👍',
+        label: 'J’aime',
+        count: 2,
+        mine: true,
+        userNumbers: [2, 3],
+      },
+      {
+        key: 'fire',
+        emoji: '🔥',
+        label: 'Bravo',
+        count: 1,
+        mine: false,
+        userNumbers: [1],
+      },
     ])
+  })
+
+  it('trie les auteurs par numéro pour une liste stable', () => {
+    const reactions: MessageReaction[] = [
+      { user_number: 9, reaction: 'love' },
+      { user_number: 3, reaction: 'love' },
+      { user_number: 7, reaction: 'love' },
+    ]
+
+    expect(summarizeReactions(reactions, null)[0].userNumbers).toEqual([3, 7, 9])
   })
 
   it('ne renvoie aucune pastille sans réaction', () => {

@@ -203,6 +203,15 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   geste des messageries. Le petit bouton smiley à côté de l'heure reste
   indispensable au clavier et aux lecteurs d'écran, qui ne peuvent pas
   « appuyer longuement » ; les pastilles existantes sont aussi des boutons.
+- **Qui a réagi : un appui sur une pastille** ouvre la liste des personnes,
+  comme sur WhatsApp ; elle n'est jamais affichée au repos. Le tap ne bascule
+  donc plus la réaction : ajouter ou retirer se fait dans la palette, où
+  l'emoji déjà choisi est marqué. La liste est triée par prénom, nomme la
+  personne connectée « (vous) », se ferme au clic extérieur et par Échap (le
+  focus revient à la pastille). `summarizeReactions` expose les `userNumbers`
+  triés par `user_number` pour que l'ordre ne change pas d'un polling à
+  l'autre ; les prénoms viennent de la map déjà calculée par `Chat` (initiale
+  du nom en cas de doublon).
 - **La sélection de texte est coupée sur mobile** (`@media (hover: none)` dans
   `index.css`, classe `.chat-message-text`) : sans ça, l'appui long ouvre le
   menu natif et ses poignées par-dessus la palette. D'où **« Copier le

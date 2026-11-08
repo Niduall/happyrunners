@@ -22,6 +22,12 @@ function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
 
 const noop = () => {}
 
+const NAMES = new Map<number, string>([
+  [1, 'Moi'],
+  [2, 'Ada'],
+  [3, 'Bruno'],
+])
+
 function setup(props: Partial<Parameters<typeof ChatMessageBubble>[0]> = {}) {
   return render(
     <ChatMessageBubble
@@ -30,6 +36,7 @@ function setup(props: Partial<Parameters<typeof ChatMessageBubble>[0]> = {}) {
       authorName="Ada"
       grouped={false}
       me={1}
+      names={NAMES}
       onDelete={noop}
       onRetry={noop}
       onReact={noop}
@@ -116,25 +123,91 @@ describe('ChatMessageBubble — réactions', () => {
     const like = screen.getByRole('button', {
       name: 'J’aime, 2 personnes, votre réaction',
     })
-    expect(like).toHaveAttribute('aria-pressed', 'true')
+    expect(like).toHaveAttribute('aria-haspopup', 'dialog')
+    expect(like).toHaveAttribute('aria-expanded', 'false')
 
     const fire = screen.getByRole('button', { name: 'Bravo, 1 personne' })
-    expect(fire).toHaveAttribute('aria-pressed', 'false')
+    expect(fire).toHaveAttribute('aria-haspopup', 'dialog')
   })
 
-  it('réagit en appuyant sur une pastille existante', () => {
+  it('ne montre la liste des personnes qu’à la demande', () => {
+    setup({
+      message: message({ reactions: [{ user_number: 2, reaction: 'like' }] }),
+    })
+
+    expect(
+      screen.queryByRole('dialog', { name: 'Personnes ayant réagi' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('ouvre la liste des personnes en appuyant sur une pastille', () => {
     const onReact = vi.fn()
     setup({
       me: 1,
       onReact,
       message: message({
-        reactions: [{ user_number: 2, reaction: 'like' }],
+        reactions: [
+          { user_number: 2, reaction: 'like' },
+          { user_number: 3, reaction: 'like' },
+        ],
       }),
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'J’aime, 1 personne' }))
+    fireEvent.click(screen.getByRole('button', { name: 'J’aime, 2 personnes' }))
 
-    expect(onReact).toHaveBeenCalledWith('like')
+    const dialog = screen.getByRole('dialog', {
+      name: 'Personnes ayant réagi',
+    })
+    expect(within(dialog).getByText('Ada')).toBeInTheDocument()
+    expect(within(dialog).getByText('Bruno')).toBeInTheDocument()
+    // Le tap n’ajoute plus la réaction : c’est le rôle de la palette.
+    expect(onReact).not.toHaveBeenCalled()
+  })
+
+  it('signale la personne connectée dans la liste', () => {
+    setup({
+      me: 1,
+      message: message({ reactions: [{ user_number: 1, reaction: 'fire' }] }),
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Bravo, 1 personne, votre réaction',
+      })
+    )
+
+    const dialog = screen.getByRole('dialog', {
+      name: 'Personnes ayant réagi',
+    })
+    expect(dialog).toHaveTextContent('Moi (vous)')
+  })
+
+  it('ferme la liste avec Échap et rend le focus à la pastille', () => {
+    setup({
+      message: message({ reactions: [{ user_number: 2, reaction: 'like' }] }),
+    })
+
+    const pill = screen.getByRole('button', { name: 'J’aime, 1 personne' })
+    fireEvent.click(pill)
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(
+      screen.queryByRole('dialog', { name: 'Personnes ayant réagi' })
+    ).not.toBeInTheDocument()
+    expect(pill).toHaveFocus()
+  })
+
+  it('ferme la liste au clic extérieur', () => {
+    setup({
+      message: message({ reactions: [{ user_number: 2, reaction: 'like' }] }),
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'J’aime, 1 personne' }))
+    fireEvent.pointerDown(document.body)
+
+    expect(
+      screen.queryByRole('dialog', { name: 'Personnes ayant réagi' })
+    ).not.toBeInTheDocument()
   })
 
   it('ouvre la palette depuis le bouton et envoie l’emoji choisi', () => {
@@ -173,6 +246,24 @@ describe('ChatMessageBubble — réactions', () => {
     expect(
       screen.getByRole('button', { name: 'Ça me fait rire' })
     ).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('retire sa réaction en choisissant le même emoji dans la palette', () => {
+    const onReact = vi.fn()
+    setup({
+      me: 1,
+      onReact,
+      message: message({
+        reactions: [{ user_number: 1, reaction: 'laugh' }],
+      }),
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Réagir au message de Ada' })
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Ça me fait rire' }))
+
+    expect(onReact).toHaveBeenCalledWith('laugh')
   })
 
   it('ouvre la palette par appui long sur la bulle', () => {

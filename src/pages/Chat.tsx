@@ -171,6 +171,7 @@ export function Chat() {
                       authorName={names.get(message.user_number) ?? 'Quelqu’un'}
                       grouped={grouped}
                       me={me}
+                      names={names}
                       onDelete={() => void remove(message.id)}
                       onRetry={() => void retry(message.id)}
                       onReact={(reaction) => void react(message.id, reaction)}

@@ -5,12 +5,16 @@ import {
   BellOff,
   CheckCircle2,
   Info,
+  Send,
   Smartphone,
   X,
 } from 'lucide-react'
 import { Button } from './ui/Button'
 import { cn } from '../lib/utils'
-import type { PushStatus } from '../hooks/usePushNotifications'
+import type {
+  PushStatus,
+  TestPushStatus,
+} from '../hooks/usePushNotifications'
 import type { NotificationPreferences } from '../types/supabase'
 
 interface NotificationsModalProps {
@@ -18,8 +22,12 @@ interface NotificationsModalProps {
   preferences: NotificationPreferences
   saving: boolean
   error: string
+  testing: boolean
+  testStatus: TestPushStatus
+  testError: string
   onEnable: () => void
   onDisable: () => void
+  onTest: () => void
   onPreferenceChange: (
     key: keyof NotificationPreferences,
     value: boolean
@@ -90,8 +98,12 @@ export function NotificationsModal({
   preferences,
   saving,
   error,
+  testing,
+  testStatus,
+  testError,
   onEnable,
   onDisable,
+  onTest,
   onPreferenceChange,
   onClose,
 }: NotificationsModalProps) {
@@ -232,8 +244,28 @@ export function NotificationsModal({
               variant="secondary"
               size="sm"
               className="w-full"
+              onClick={onTest}
+              disabled={saving || testing}
+            >
+              <Send className="h-4 w-4" aria-hidden="true" />
+              {testing ? 'Envoi…' : 'Tester les notifications'}
+            </Button>
+            {testStatus === 'ok' && (
+              <p role="status" className="text-sm text-green-700">
+                Notification envoyée. Regarde l’écran de ton appareil.
+              </p>
+            )}
+            {testStatus === 'error' && (
+              <p role="alert" className="text-sm text-red-700">
+                {testError}
+              </p>
+            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full"
               onClick={onDisable}
-              disabled={saving}
+              disabled={saving || testing}
             >
               {saving ? 'Désactivation…' : 'Désactiver sur cet appareil'}
             </Button>

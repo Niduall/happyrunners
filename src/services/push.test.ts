@@ -7,6 +7,7 @@ import {
   isStandalone,
   needsInstallForPush,
   permissionState,
+  resubscribeToPush,
   subscribeToPush,
   toSubscriptionRecord,
   unsubscribeFromPush,
@@ -257,6 +258,44 @@ describe('push — clé et abonnement', () => {
 
     await subscribeToPush()
     expect(subscribe).not.toHaveBeenCalled()
+  })
+
+  it('recrée l’abonnement sans redemander la permission', async () => {
+    vi.stubEnv('VITE_VAPID_PUBLIC_KEY', 'dGVzdC1rZXk')
+    const subscription = pushSubscription()
+    const subscribe = vi.fn().mockResolvedValue(subscription)
+    const registration = {
+      pushManager: {
+        getSubscription: vi.fn().mockResolvedValue(null),
+        subscribe,
+      },
+    }
+
+    vi.stubGlobal('PushManager', class {})
+    vi.stubGlobal('Notification', { permission: 'granted' })
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: { getRegistration: vi.fn().mockResolvedValue(registration) },
+    })
+
+    await expect(resubscribeToPush()).resolves.toEqual({
+      endpoint: 'https://push.example/abc',
+      p256dh: 'p256dh-key',
+      auth: 'auth-key',
+    })
+    expect(subscribe).toHaveBeenCalledOnce()
+  })
+
+  it('ne recrée rien sans permission accordée', async () => {
+    vi.stubEnv('VITE_VAPID_PUBLIC_KEY', 'dGVzdC1rZXk')
+    vi.stubGlobal('PushManager', class {})
+    vi.stubGlobal('Notification', { permission: 'default' })
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: { getRegistration: vi.fn() },
+    })
+
+    await expect(resubscribeToPush()).rejects.toThrow('Permission refusée')
   })
 
   it('demande de recharger si le service worker n’est pas actif', async () => {

@@ -8,7 +8,126 @@
  *
  * Le payload vient de l'Edge Function `send-push` :
  *   { title, body, url, tag? }
+ *
+ * Il porte aussi `pushsubscriptionchange` : quand le navigateur renouvelle ou
+ * termine l'abonnement, le worker se réabonne et met la base à jour tout seul.
+ * Sans ça, la base gardait l'ancien endpoint et le serveur continuait d'y
+ * envoyer des notifications que plus aucun appareil n'affichait.
  */
+
+// ---------------------------------------------------------------------------
+// Configuration partagée avec la page (déposée par `pushConfigStore.ts`)
+// ---------------------------------------------------------------------------
+
+const PUSH_DB = 'happyrunners-push'
+const PUSH_STORE = 'config'
+const PUSH_KEY = 'current'
+
+function openPushDb() {
+  return new Promise((resolve) => {
+    if (typeof indexedDB === 'undefined') {
+      resolve(null)
+      return
+    }
+    let request
+    try {
+      request = indexedDB.open(PUSH_DB, 1)
+    } catch {
+      resolve(null)
+      return
+    }
+    request.onupgradeneeded = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains(PUSH_STORE)) {
+        db.createObjectStore(PUSH_STORE)
+      }
+    }
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => resolve(null)
+    request.onblocked = () => resolve(null)
+  })
+}
+
+/** Lit `{ url, anonKey, userNumber, vapidPublicKey }`, ou `null`. */
+async function readPushConfig() {
+  const db = await openPushDb()
+  if (!db) return null
+
+  try {
+    return await new Promise((resolve) => {
+      const tx = db.transaction(PUSH_STORE, 'readonly')
+      const request = tx.objectStore(PUSH_STORE).get(PUSH_KEY)
+      request.onsuccess = () => resolve(request.result || null)
+      request.onerror = () => resolve(null)
+      tx.onabort = () => resolve(null)
+    })
+  } finally {
+    db.close()
+  }
+}
+
+/** Même décodage que `urlBase64ToUint8Array` côté page. */
+function base64UrlToBytes(base64) {
+  const padding = '='.repeat((4 - (base64.length % 4)) % 4)
+  const normalized = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const raw = atob(normalized)
+  const bytes = new Uint8Array(raw.length)
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i)
+  return bytes
+}
+
+function restHeaders(config, extra = {}) {
+  return {
+    apikey: config.anonKey,
+    Authorization: `Bearer ${config.anonKey}`,
+    'Content-Type': 'application/json',
+    ...extra,
+  }
+}
+
+/**
+ * Enregistre le nouvel abonnement et retire l'ancien endpoint s'il a changé.
+ * Les échecs sont silencieux : la page resynchronise à la prochaine ouverture.
+ */
+async function persistSubscription(config, subscription, oldEndpoint) {
+  const json = subscription.toJSON()
+  const keys = json.keys || {}
+  if (!json.endpoint || !keys.p256dh || !keys.auth) return
+
+  const base = String(config.url).replace(/\/+$/, '')
+
+  await fetch(
+    `${base}/rest/v1/push_subscriptions?on_conflict=endpoint`,
+    {
+      method: 'POST',
+      headers: restHeaders(config, {
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      }),
+      body: JSON.stringify({
+        user_number: config.userNumber,
+        endpoint: json.endpoint,
+        p256dh: keys.p256dh,
+        auth: keys.auth,
+      }),
+    }
+  )
+
+  if (oldEndpoint && oldEndpoint !== json.endpoint) {
+    await fetch(
+      `${base}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(
+        oldEndpoint
+      )}`,
+      {
+        method: 'DELETE',
+        headers: restHeaders(config),
+      }
+    )
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Réception d'une notification
+// ---------------------------------------------------------------------------
 
 self.addEventListener('push', (event) => {
   if (!event.data) return
@@ -37,6 +156,49 @@ self.addEventListener('push', (event) => {
   }
 
   event.waitUntil(self.registration.showNotification(title, options))
+})
+
+// ---------------------------------------------------------------------------
+// Renouvellement / invalidation de l'abonnement par le navigateur
+// ---------------------------------------------------------------------------
+
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        const config = await readPushConfig()
+        if (!config || !config.url || !config.anonKey || !config.userNumber) {
+          return
+        }
+
+        const old = event.oldSubscription
+        // La clé d'origine est la plus sûre : c'est celle avec laquelle
+        // l'abonnement précédent a été créé.
+        const applicationServerKey =
+          (old && old.options && old.options.applicationServerKey) ||
+          (config.vapidPublicKey
+            ? base64UrlToBytes(config.vapidPublicKey)
+            : null)
+
+        let subscription =
+          await self.registration.pushManager.getSubscription()
+
+        if (!subscription) {
+          if (!applicationServerKey) return
+          subscription = await self.registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey,
+          })
+        }
+
+        await persistSubscription(config, subscription, old && old.endpoint)
+      } catch (err) {
+        // La page resynchronisera à la prochaine ouverture ; on ne casse pas
+        // le worker pour autant.
+        console.error('[PUSH] Renouvellement d’abonnement impossible', err)
+      }
+    })()
+  )
 })
 
 /**

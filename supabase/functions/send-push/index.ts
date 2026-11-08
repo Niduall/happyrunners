@@ -1,7 +1,7 @@
 /**
  * Edge Function `send-push` — notifications push de HappyRunners.
  *
- * Deux déclencheurs, une seule fonction :
+ * Trois déclencheurs, une seule fonction :
  *
  *   1. **Nouveau message** — webhook Supabase sur `INSERT` dans `messages`
  *      (voir `AGENTS.md`). La fonction vérifie le secret partagé
@@ -15,6 +15,12 @@
  *      `{ "type": "run_reminder" }`. La fonction calcule le mercredi cible,
  *      ne garde que les appareils des personnes **sans réponse** pour cette
  *      semaine et respecte la préférence `run_reminder`.
+ *
+ *   3. **Test d'un appareil** — appelé par le bouton « Tester les
+ *      notifications ». Le corps porte `type: "test"`, l'endpoint et les
+ *      clés de l'abonnement ; la fonction n'envoie qu'à cet endpoint. Ce
+ *      mode ne demande pas `x-push-secret` (le navigateur ne peut pas le
+ *      détenir) : la connaissance de l'endpoint et des clés sert de capacité.
  *
  * Déploiement : Supabase Dashboard → Edge Functions → Deploy a new function.
  * Secrets : VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT,
@@ -56,6 +62,10 @@ interface PushWebhookPayload {
   type?: string
   table?: string
   record?: MessageRecord
+  /** Mode `test` : abonnement à cibler (endpoint + clés, capacité). */
+  endpoint?: string
+  p256dh?: string
+  auth?: string
 }
 
 interface SubscriptionRow {
@@ -272,10 +282,6 @@ Deno.serve(async (request) => {
     return json({ error: 'Méthode non autorisée' }, 405)
   }
 
-  if (!WEBHOOK_SECRET || !safeEqual(request.headers.get('x-push-secret') ?? '', WEBHOOK_SECRET)) {
-    return json({ error: 'Secret invalide' }, 401)
-  }
-
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
     return json({ error: 'Clés VAPID manquantes' }, 500)
   }
@@ -287,10 +293,66 @@ Deno.serve(async (request) => {
     return json({ error: 'Corps JSON invalide' }, 400)
   }
 
+  // Le mode `test` vient du navigateur, qui ne peut pas détenir le secret du
+  // webhook. Il ne peut cibler qu'un abonnement dont il connaît l'endpoint et
+  // les clés (une capacité non devinable) et n'envoie qu'une notification de
+  // test. Tous les autres appels restent protégés par `x-push-secret`.
+  const isTest = payload.type === 'test'
+  if (
+    !isTest &&
+    (!WEBHOOK_SECRET ||
+      !safeEqual(request.headers.get('x-push-secret') ?? '', WEBHOOK_SECRET))
+  ) {
+    return json({ error: 'Secret invalide' }, 401)
+  }
+
   let stage = 'vapid'
 
   try {
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
+
+    // ---------------------------------------------------------------------
+    // Test d'un appareil : uniquement l'abonnement désigné.
+    // ---------------------------------------------------------------------
+    if (isTest) {
+      const endpoint =
+        typeof payload.endpoint === 'string' ? payload.endpoint : ''
+      const p256dh = typeof payload.p256dh === 'string' ? payload.p256dh : ''
+      const auth = typeof payload.auth === 'string' ? payload.auth : ''
+
+      if (!endpoint || !p256dh || !auth) {
+        return json({ error: 'Abonnement incomplet' }, 400)
+      }
+
+      stage = 'lecture-base'
+      const rows = await rest<SubscriptionRow[]>(
+        `push_subscriptions?endpoint=eq.${encodeURIComponent(
+          endpoint
+        )}&select=endpoint,p256dh,auth,user_number`
+      )
+      const row = rows[0]
+      if (!row) {
+        return json({ error: 'Abonnement inconnu' }, 404)
+      }
+      if (!safeEqual(row.p256dh, p256dh) || !safeEqual(row.auth, auth)) {
+        return json({ error: 'Abonnement invalide' }, 401)
+      }
+
+      const notification = JSON.stringify({
+        title: 'HappyRunners',
+        body: 'Les notifications fonctionnent sur cet appareil 🎉',
+        url: '/',
+        tag: `test-${Date.now()}`,
+      })
+
+      stage = 'envoi'
+      const results = await sendAll([row], notification)
+      stage = 'nettoyage'
+      const stale = await removeStale(results)
+      const summary = failureShape(results, stale)
+
+      return json({ type: 'test', ...summary })
+    }
 
     // ---------------------------------------------------------------------
     // Rappel du mardi : seulement les personnes sans réponse pour la semaine.

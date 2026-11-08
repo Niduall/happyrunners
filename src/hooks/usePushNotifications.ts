@@ -12,8 +12,22 @@ import {
   needsInstallForPush,
   permissionState,
   subscribeToPush,
+  toSubscriptionRecord,
   unsubscribeFromPush,
 } from '../services/push'
+import { syncDeviceSubscription } from '../services/pushSync'
+import {
+  clearPushConfig,
+  currentPushConfig,
+  savePushConfig,
+} from '../services/pushConfigStore'
+import {
+  clearPushDeviceUser,
+  clearPushOptOut,
+  markPushDeviceUser,
+  markPushOptedOut,
+} from '../services/pushDevice'
+import { sendTestPush } from '../services/pushTest'
 import type { NotificationPreferences } from '../types/supabase'
 
 /**
@@ -28,6 +42,9 @@ export type PushStatus =
   | 'denied'
   | 'subscribed'
   | 'available'
+
+/** Résultat du dernier envoi de test, pour l'écran Notifications. */
+export type TestPushStatus = 'idle' | 'ok' | 'error'
 
 const DEFAULT_PREFERENCES: NotificationPreferences = {
   messages: true,
@@ -50,6 +67,10 @@ async function resolveStatus(): Promise<PushStatus> {
  * L'abonnement est par appareil ; les préférences (messages, rappel) sont par
  * personne et vivent en base. L'activation doit partir d'un clic : iOS exige
  * un geste pour la demande de permission.
+ *
+ * À chaque ouverture, `syncDeviceSubscription` réaligne la base sur
+ * l'abonnement réel du navigateur : un abonnement évincé est recréé et
+ * réenregistré sans que la personne ait à y penser.
  */
 export function usePushNotifications(userNumber: number | null) {
   const [status, setStatus] = useState<PushStatus>('loading')
@@ -57,11 +78,25 @@ export function usePushNotifications(userNumber: number | null) {
     useState<NotificationPreferences>(DEFAULT_PREFERENCES)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [testing, setTesting] = useState(false)
+  const [testStatus, setTestStatus] = useState<TestPushStatus>('idle')
+  const [testError, setTestError] = useState('')
 
   useEffect(() => {
     let cancelled = false
 
     void (async () => {
+      if (userNumber) {
+        try {
+          await syncDeviceSubscription(userNumber)
+        } catch (err) {
+          // Une resynchronisation ratée ne doit pas empêcher l'écran de
+          // s'afficher : l'état réel sera relu juste après.
+          console.warn('[PUSH] Synchronisation impossible:', err)
+        }
+      }
+
+      if (cancelled) return
       const next = await resolveStatus()
       if (cancelled) return
       setStatus(next)
@@ -87,6 +122,9 @@ export function usePushNotifications(userNumber: number | null) {
     try {
       const record = await subscribeToPush()
       await savePushSubscription(userNumber, record)
+      await savePushConfig(currentPushConfig(userNumber))
+      clearPushOptOut()
+      markPushDeviceUser(userNumber)
       setStatus('subscribed')
     } catch (err) {
       if (err instanceof Error && err.message === 'Permission refusée') {
@@ -117,6 +155,11 @@ export function usePushNotifications(userNumber: number | null) {
       if (endpoint) {
         await deletePushSubscription(endpoint).catch(() => {})
       }
+      // Mémorise le retrait : la resynchronisation du prochain démarrage ne
+      // doit pas recréer ce que la personne vient de couper.
+      markPushOptedOut()
+      clearPushDeviceUser()
+      await clearPushConfig()
       setStatus('available')
     } catch (err) {
       console.error('[PUSH] Erreur désactivation:', err)
@@ -149,13 +192,45 @@ export function usePushNotifications(userNumber: number | null) {
     [userNumber, preferences]
   )
 
+  /**
+   * Envoie une notification visible à cet appareil uniquement.
+   * Sert à vérifier la chaîne complète sans déranger les autres.
+   */
+  const test = useCallback(async () => {
+    setTesting(true)
+    setTestStatus('idle')
+    setTestError('')
+    try {
+      const subscription = await getCurrentSubscription()
+      const record = subscription ? toSubscriptionRecord(subscription) : null
+      if (!record) {
+        throw new Error('Aucun abonnement actif sur cet appareil.')
+      }
+
+      await sendTestPush(record)
+      setTestStatus('ok')
+    } catch (err) {
+      console.error('[PUSH] Test impossible:', err)
+      setTestStatus('error')
+      setTestError(
+        err instanceof Error ? err.message : 'Impossible d’envoyer le test.'
+      )
+    } finally {
+      setTesting(false)
+    }
+  }, [])
+
   return {
     status,
     preferences,
     saving,
     error,
+    testing,
+    testStatus,
+    testError,
     enable,
     disable,
     setPreference,
+    test,
   }
 }

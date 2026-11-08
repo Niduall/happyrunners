@@ -255,8 +255,12 @@ export function UserMenu() {
           preferences={push.preferences}
           saving={push.saving}
           error={push.error}
+          testing={push.testing}
+          testStatus={push.testStatus}
+          testError={push.testError}
           onEnable={() => void push.enable()}
           onDisable={() => void push.disable()}
+          onTest={() => void push.test()}
           onPreferenceChange={(key, value) =>
             void push.setPreference(key, value)
           }

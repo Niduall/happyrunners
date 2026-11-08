@@ -435,6 +435,40 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
    secondes (cold start de la fonction). Le rappel se teste sans attendre
    mardi : même appel que le job, avec le corps `{"type":"run_reminder"}`.
 
+#### Résilience de l'abonnement (tâche 33)
+
+Un abonnement Web Push peut mourir sans action de la personne : données de
+site évincées, PWA déchargée par iOS, mise à jour du navigateur. La ligne en
+base reste alors valide côté service de push, qui répond encore `201` — mais
+aucun appareil n'affiche la notification. Trois garde-fous, à ne pas retirer :
+
+- **`pushsubscriptionchange`** dans `public/push-handler.js` : quand le
+  navigateur renouvelle l'abonnement, le worker se réabonne et met la base à
+  jour (upsert du nouvel endpoint, suppression de l'ancien). Il lit la
+  configuration Supabase déposée par `src/services/pushConfigStore.ts` dans
+  IndexedDB : un service worker n'a ni `import.meta.env` ni `localStorage`.
+- **Resynchronisation à l'ouverture** (`src/services/pushSync.ts`, appelée par
+  `usePushNotifications`) : si l'abonnement du navigateur existe, ses clés et
+  son propriétaire sont réécrits ; s'il a disparu, il est recréé sans clic
+  **uniquement** si la permission est toujours accordée et que cet appareil
+  était déjà abonné pour cette personne (`src/services/pushDevice.ts`).
+- **Bouton « Tester les notifications »** dans l'écran Notifications : envoie
+  un push visible au seul appareil courant. Il appelle `send-push` avec
+  `{ "type": "test", endpoint, p256dh, auth }`.
+
+⚠️ **Le mode `test` de `send-push` ne demande pas `x-push-secret`** : le
+navigateur ne peut pas le détenir. Il vérifie que l'endpoint existe en base et
+que les clés `p256dh`/`auth` fournies correspondent ; la connaissance de ces
+valeurs sert de capacité. La RLS du projet est ouverte par conception, donc ce
+n'est **pas une authentification forte** — au pire, on envoie une notification
+de test à un appareil dont on connaît déjà l'abonnement. Ne pas y mettre autre
+chose qu'une notification de test.
+
+**Redéployer `send-push`** après modification : le mode `test` vit dans la
+même fonction, aucun second endpoint n'est nécessaire. Tant que l'ancienne
+version est en ligne, le bouton répond « Secret invalide » (l'ancienne
+fonction exige `x-push-secret` avant même de lire le corps).
+
 ### Accessibilité (tâche 16)
 - Toute modale : `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, et fermeture par **Échap** — sauf pendant une écriture en cours.
 - Tout champ a un `<label htmlFor>` ; sinon un `aria-label` explicite.
@@ -587,9 +621,13 @@ Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour l
 | `src/services/weatherCode.test.ts` | mapping des 28 codes WMO, jour/nuit |
 | `src/services/pin.test.ts` | `hashPin` |
 | `src/services/pinTrust.test.ts` | appareil de confiance : 30 jours, autre profil, repère illisible, oubli |
-| `src/services/push.test.ts` | support, iOS/standalone, permission, abonnement/désabonnement |
-| `src/hooks/usePushNotifications.test.tsx` | états de l'écran, activation, préférences, retour arrière |
-| `src/components/NotificationsModal.test.tsx` | catégories, états iPhone/navigateur, fermeture |
+| `src/services/push.test.ts` | support, iOS/standalone, permission, abonnement/désabonnement, réabonnement sans clic |
+| `src/services/pushDevice.test.ts` | marqueurs locaux : retrait explicite, profil abonné |
+| `src/services/pushConfigStore.test.ts` | configuration partagée avec le service worker, sans IndexedDB |
+| `src/services/pushSync.test.ts` | resynchronisation à l'ouverture, recréation d'un abonnement disparu |
+| `src/services/pushTest.test.ts` | envoi de test ciblé, erreurs serveur |
+| `src/hooks/usePushNotifications.test.tsx` | états de l'écran, activation, préférences, resynchronisation, test |
+| `src/components/NotificationsModal.test.tsx` | catégories, états iPhone/navigateur, test, fermeture |
 | `src/hooks/useAuth.integration.test.tsx` | flux auth complet + partage d'état |
 | `src/hooks/useParcoursVotes.test.tsx` | votes hebdo, tri, pendingCount, optimisme |
 | `src/hooks/useParcoursVotes.attendance.test.tsx` | un vote sans présence ne compte pas |
@@ -683,6 +721,13 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
     prod, le chat entier tombe. Appliquer
     `migrations/2026-11-06_tache32_reactions_chat.sql` d'abord sur la base de
     test, puis sur la prod, et seulement ensuite pousser l'interface.
+7s. **Un abonnement push peut mourir en silence** — le service de push répond
+    encore `201` alors que l'appareil n'affiche plus rien. Ne pas conclure
+    « le serveur envoie » sans vérifier l'appareil. Les garde-fous sont
+    `pushsubscriptionchange`, la resynchronisation à l'ouverture
+    (`pushSync.ts`) et le bouton « Tester les notifications ». Le mode
+    `test` de `send-push` s'authentifie par la connaissance de l'endpoint et
+    des clés, pas par `x-push-secret` : il ne doit servir qu'à un test.
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

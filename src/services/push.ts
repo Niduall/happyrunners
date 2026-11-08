@@ -111,27 +111,13 @@ export async function getCurrentSubscription(): Promise<PushSubscription | null>
 }
 
 /**
- * Demande la permission puis abonne cet appareil.
+ * Crée (ou retrouve) l'abonnement du navigateur, sans toucher à la permission.
  *
- * À appeler **depuis un clic** : iOS refuse une demande de permission qui ne
- * suit pas un geste de l'utilisateur.
+ * En développement le service worker est désactivé : sans ce garde-fou,
+ * `ready` resterait en attente indéfiniment et le bouton tournerait dans le
+ * vide. En production, il est enregistré au chargement de l'app.
  */
-export async function subscribeToPush(): Promise<PushSubscriptionRecord> {
-  if (!isPushSupported()) {
-    throw new Error('Notifications non prises en charge par ce navigateur')
-  }
-  if (!isPushConfigured()) {
-    throw new Error('Notifications non configurées sur cette installation')
-  }
-
-  const permission = await Notification.requestPermission()
-  if (permission !== 'granted') {
-    throw new Error('Permission refusée')
-  }
-
-  // En développement le service worker est désactivé : sans ce garde-fou,
-  // `ready` resterait en attente indéfiniment et le bouton tournerait dans le
-  // vide. En production, il est enregistré au chargement de l'app.
+async function ensureSubscription(): Promise<PushSubscriptionRecord> {
   const registration = await navigator.serviceWorker.getRegistration()
   if (!registration) {
     throw new Error(
@@ -150,6 +136,50 @@ export async function subscribeToPush(): Promise<PushSubscriptionRecord> {
   const record = toSubscriptionRecord(subscription)
   if (!record) throw new Error('Abonnement invalide')
   return record
+}
+
+/**
+ * Demande la permission puis abonne cet appareil.
+ *
+ * À appeler **depuis un clic** : iOS refuse une demande de permission qui ne
+ * suit pas un geste de l'utilisateur.
+ */
+export async function subscribeToPush(): Promise<PushSubscriptionRecord> {
+  if (!isPushSupported()) {
+    throw new Error('Notifications non prises en charge par ce navigateur')
+  }
+  if (!isPushConfigured()) {
+    throw new Error('Notifications non configurées sur cette installation')
+  }
+
+  const permission = await Notification.requestPermission()
+  if (permission !== 'granted') {
+    throw new Error('Permission refusée')
+  }
+
+  return ensureSubscription()
+}
+
+/**
+ * Recrée l'abonnement **sans redemander la permission**.
+ *
+ * Utilisé à l'ouverture de l'app quand la permission est déjà accordée mais
+ * que l'abonnement a disparu (navigateur qui a évincé les données de site).
+ * Aucune boîte de dialogue : iOS n'exige un geste que pour la demande de
+ * permission, pas pour un `subscribe()` déjà autorisé.
+ */
+export async function resubscribeToPush(): Promise<PushSubscriptionRecord> {
+  if (!isPushSupported()) {
+    throw new Error('Notifications non prises en charge par ce navigateur')
+  }
+  if (!isPushConfigured()) {
+    throw new Error('Notifications non configurées sur cette installation')
+  }
+  if (Notification.permission !== 'granted') {
+    throw new Error('Permission refusée')
+  }
+
+  return ensureSubscription()
 }
 
 /**

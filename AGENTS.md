@@ -200,13 +200,19 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   est prévenu ; en cas d'échec, l'état exact d'avant est restauré. Comme pour
   l'envoi, incrémenter `mutationRef` invalide les pollings déjà partis.
 - **Appui long = palette** (450 ms, annulé dès 8 px de mouvement) : c'est le
-  geste des messageries. Le petit bouton smiley à côté de l'heure reste
-  indispensable au clavier et aux lecteurs d'écran, qui ne peuvent pas
-  « appuyer longuement » ; les pastilles existantes sont aussi des boutons.
+  geste des messageries, disponible sur tous les messages. Les messages reçus
+  ont en plus un **bouton smiley à droite**, affiché au survol ou au focus
+  clavier — indispensable à ces deux usages, qui ne peuvent pas « appuyer
+  longuement » ; les pastilles existantes sont aussi des boutons. Il reste dans
+  le DOM et redevient cliquable au survol/focus (`pointer-events`), et visible
+  tant que la palette est ouverte.
 - **Qui a réagi : un appui sur une pastille** ouvre la liste des personnes,
   comme sur WhatsApp ; elle n'est jamais affichée au repos. Le tap ne bascule
   donc plus la réaction : ajouter ou retirer se fait dans la palette, où
-  l'emoji déjà choisi est marqué. La liste est triée par prénom, nomme la
+  l'emoji déjà choisi est marqué. Les pastilles **chevauchent le bord bas de la
+  bulle**, calées sur son coin extérieur (gauche pour un message reçu, droite
+  pour le sien), avec un anneau `ring-gray-50` qui les détache de la bulle,
+  comme sur WhatsApp. La liste est triée par prénom, nomme la
   personne connectée « (vous) », se ferme au clic extérieur et par Échap (le
   focus revient à la pastille). `summarizeReactions` expose les `userNumbers`
   triés par `user_number` pour que l'ordre ne change pas d'un polling à
@@ -217,6 +223,24 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   menu natif et ses poignées par-dessus la palette. D'où **« Copier le
   message »** dans la palette, qui garde la copie possible. Sur ordinateur,
   la sélection reste active.
+- **L'heure est dans la bulle**, sur la **dernière ligne** du texte, comme sur
+  WhatsApp : elle flotte à droite (`float-right`), ce qui réserve sa place sans
+  créer de seconde ligne, avec seulement 2 px de descente
+  (`translate-y-0.5`). Elle est à **10 px** (métadonnée, seule exception à la
+  règle des 12 px). Ne pas la descendre au bas de la bulle : les bulles courtes
+  s'élargissaient et gardaient un vide en haut à droite. L'avatar est aligné sur
+  le haut de la bulle.
+- **Le bouton de réaction n'apparaît qu'au survol ou au focus** des messages
+  reçus, à droite de la bulle, sans superposition. Il reprend **le design de la
+  prod** : icône grise de 32 px (`h-8 w-8`), sans bordure ni fond, 44 px de
+  cible (`after:-inset-1.5`), fond gris et accent au survol. Au repos il est
+  invisible **et non cliquable** (`pointer-events-none`) pour ne pas capter un
+  tap sur mobile ; il reste dans le DOM pour le clavier et les lecteurs
+  d'écran, et redevient visible/cliquable au `group-hover` ou au
+  `focus-visible`. Les messages envoyés n'en ont pas : on ne réagit presque
+  jamais à son propre message, et l'appui long reste disponible. Ne pas le
+  remettre au-dessus de la bulle ni à cheval sur son bord, et ne pas le rendre
+  permanent.
 - **Cibles tactiles** : les pastilles font 36 px de haut mais 44 px de cible
   (`after:-inset-1`) ; le bouton smiley 32 px → 44 px (`after:-inset-1.5`).
   Ne pas retirer ces pseudo-éléments en « simplifiant » les classes.
@@ -362,6 +386,10 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   Workbox importe `public/push-handler.js` (`workbox.importScripts`). Ce
   fichier porte les écouteurs `push` et `notificationclick` ; ne pas le
   déplacer hors de `public/`, Workbox le copie à la racine de `dist/`.
+- **Un clic sur une notification ferme tout le lot** : les messages s'empilent
+  (un tag par message), et ouvrir l'app depuis l'une d'elles appelle
+  `registration.getNotifications()` pour fermer les autres. Sinon des
+  notifications déjà lues restaient dans le centre.
 - **Un abonnement par appareil** (`push_subscriptions`, endpoint unique) et
   **des préférences par personne** (`notification_preferences`). Une ligne de
   préférences absente vaut « tout activé ».
@@ -512,7 +540,7 @@ mardi. Ne pas le réintroduire.
 - **Une seule entrée vers la gestion des parcours** : l'icône de l'en-tête.
   Pas de bouton pleine largeur en bas de page.
 - **Cibles tactiles ≥ 44 px** (`min-h-11` dans `Button`) et **aucun texte
-  inférieur à 12 px**.
+  inférieur à 12 px** — seule exception : l'heure des bulles du chat, à 10 px.
 - **L'accent `#0077a8`** est le seul bleu portant du texte blanc (contraste
   AA ≈ 5:1). Ne pas revenir à `#009ddc` pour un bouton.
 

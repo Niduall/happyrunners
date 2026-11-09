@@ -215,6 +215,12 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     (async () => {
+      // Chaque message a son propre tag : plusieurs notifications peuvent
+      // s'empiler. Ouvrir l'app depuis l'une d'elles vaut lecture du lot ;
+      // laisser les autres dans le centre de notifications n'apporte rien.
+      const notifications = await self.registration.getNotifications()
+      for (const notification of notifications) notification.close()
+
       const clients = await self.clients.matchAll({
         type: 'window',
         includeUncontrolled: true,

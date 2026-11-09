@@ -71,6 +71,31 @@ describe('ChatMessageBubble — affichage', () => {
 
     expect(screen.getByText(/ligne 1\s*ligne 2/)).toBeInTheDocument()
   })
+
+  it('garde l’heure dans la bulle, à droite du texte', () => {
+    setup()
+
+    const bubble = screen
+      .getByText('Salut tout le monde')
+      .closest('.chat-message-text')
+
+    expect(bubble).toContainElement(screen.getByText('10:00'))
+    expect(bubble).not.toContainElement(
+      screen.getByRole('button', { name: 'Réagir au message de Ada' })
+    )
+  })
+
+  it('affiche l’avatar au premier message d’une série', () => {
+    setup()
+
+    expect(screen.getByText('A')).toBeInTheDocument()
+  })
+
+  it('masque l’avatar sur les messages groupés', () => {
+    setup({ grouped: true })
+
+    expect(screen.queryByText('A')).not.toBeInTheDocument()
+  })
 })
 
 describe('ChatMessageBubble — états d’envoi', () => {
@@ -348,11 +373,32 @@ describe('ChatMessageBubble — réactions', () => {
     ).toBeInTheDocument()
   })
 
-  it('ne propose pas de réagir à un message pas encore enregistré', () => {
-    setup({ isMine: true, message: message({ status: 'sending' }) })
+  it('ne propose pas de bouton de réaction sur ses propres messages', () => {
+    setup({ isMine: true })
 
     expect(
-      screen.queryByRole('button', { name: 'Réagir à votre message' })
+      screen.queryByRole('button', { name: /Réagir au message/ })
     ).not.toBeInTheDocument()
+  })
+
+  it('ouvre quand même la palette par appui long sur son propre message', () => {
+    vi.useFakeTimers()
+    try {
+      setup({ isMine: true })
+
+      fireEvent.pointerDown(screen.getByText('Salut tout le monde'), {
+        pointerType: 'touch',
+        button: 0,
+        clientX: 100,
+        clientY: 100,
+      })
+      act(() => vi.advanceTimersByTime(450))
+
+      expect(
+        screen.getByRole('group', { name: 'Choisir une réaction' })
+      ).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

@@ -48,9 +48,11 @@ interface ChatMessageBubbleProps {
  * il sait déjà que c'est lui. Les autres sont à gauche, avec le prénom une
  * seule fois par groupe de messages consécutifs.
  *
- * Réagir : appui long sur la bulle (comme dans les messageries), ou le petit
- * bouton smiley à côté de l'heure — indispensable au clavier et pour les
- * lecteurs d'écran, qui ne peuvent pas « appuyer longuement ».
+ * Réagir : appui long sur la bulle (comme dans les messageries). Les messages
+ * reçus ont en plus un bouton smiley à droite, affiché au survol ou au focus
+ * clavier, pour ceux qui ne peuvent pas « appuyer longuement ». On ne réagit
+ * presque jamais à ses propres messages : pas de bouton sur les siens, mais
+ * l'appui long reste disponible.
  *
  * Voir qui a réagi : appui sur une pastille, comme sur WhatsApp. La liste
  * s'ouvre à la demande et ne prend aucune place au repos. Le tap ne bascule
@@ -289,14 +291,19 @@ export function ChatMessageBubble({
   }
 
   return (
-    <div className={cn('group flex items-end gap-2', isMine && 'justify-end')}>
+    <div
+      className={cn(
+        'group flex gap-2',
+        isMine ? 'items-end justify-end' : 'items-start'
+      )}
+    >
       {isMine && (
         <button
           type="button"
           onClick={onDelete}
           aria-label="Supprimer ce message"
           title="Supprimer"
-          className="mb-5 inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 opacity-60 transition-opacity hover:bg-error/10 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-error sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 opacity-60 transition-opacity hover:bg-error/10 hover:text-error focus:outline-none focus-visible:ring-2 focus-visible:ring-error sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
         >
           <Trash2 className="w-4 h-4" />
         </button>
@@ -308,7 +315,7 @@ export function ChatMessageBubble({
         ) : (
           <div
             aria-hidden="true"
-            className="mb-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold text-gray-600"
+            className="mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold text-gray-600"
           >
             {authorName.slice(0, 1).toUpperCase()}
           </div>
@@ -325,28 +332,75 @@ export function ChatMessageBubble({
           <p className="mb-1 px-1 text-xs font-medium text-gray-500">{authorName}</p>
         )}
 
-        <div
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={cancelPress}
-          onPointerCancel={cancelPress}
-          onPointerLeave={cancelPress}
-          onContextMenu={handleContextMenu}
-          className={cn(
-            // Appui long = réaction : sur mobile, on désactive la sélection de
-            // texte (sinon le navigateur ouvre son propre menu et ses poignées).
-            'chat-message-text whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm',
-            isMine
-              ? 'rounded-br-md bg-accent text-white'
-              : 'rounded-bl-md border border-gray-100 bg-white text-gray-900',
-            sending && 'opacity-60'
+        <div className="relative">
+          <div
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={cancelPress}
+            onPointerCancel={cancelPress}
+            onPointerLeave={cancelPress}
+            onContextMenu={handleContextMenu}
+            className={cn(
+              // Appui long = réaction : sur mobile, on désactive la sélection de
+              // texte (sinon le navigateur ouvre son propre menu et ses poignées).
+              'chat-message-text flow-root rounded-2xl px-3 py-2 text-sm',
+              isMine
+                ? 'rounded-br-md bg-accent text-white'
+                : 'rounded-bl-md border border-gray-100 bg-white text-gray-900',
+              sending && 'opacity-60'
+            )}
+          >
+            <span className="whitespace-pre-wrap break-words">
+              {message.body}
+            </span>
+            <span
+              className={cn(
+                // Métadonnée : 10 px, seule exception à la règle des 12 px.
+                // Elle flotte sur la dernière ligne, comme sur WhatsApp : sa
+                // place est réservée à droite du texte, sans seconde ligne.
+                'float-right ml-2 mt-1 translate-y-0.5 text-[10px] leading-none',
+                isMine ? 'text-white' : 'text-gray-500'
+              )}
+            >
+              {formatMessageTime(message.created_at)}
+            </span>
+          </div>
+
+          {canReact && !isMine && (
+            <button
+              ref={triggerRef}
+              type="button"
+              onClick={() => (pickerOpen ? closePicker() : openPicker(true))}
+              aria-label={`Réagir au message de ${authorName}`}
+              aria-haspopup="true"
+              aria-expanded={pickerOpen}
+              className={cn(
+                // Design de la prod : 32 px, 44 px de cible. Au repos il est
+                // invisible et non cliquable (mobile) ; il apparaît au survol
+                // ou au focus clavier, et reste affiché tant que la palette est
+                // ouverte.
+                'absolute bottom-0 -right-9 flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors after:absolute after:-inset-1.5 after:content-[""] hover:bg-gray-100 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+                pickerOpen
+                  ? 'pointer-events-auto bg-gray-100 text-accent opacity-100'
+                  : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100'
+              )}
+            >
+              <SmilePlus className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
-        >
-          {message.body}
         </div>
 
         {reactions.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-2">
+          <div
+            className={cn(
+              // Comme sur WhatsApp : la pastille chevauche le bord bas de la
+              // bulle et se cale sur son coin extérieur (gauche pour un message
+              // reçu, droite pour le sien), avec un anneau de la couleur du fond
+              // pour la détacher de la bulle.
+              'relative z-10 -mt-2 flex flex-wrap gap-2',
+              isMine ? 'self-end mr-2' : 'self-start ml-2'
+            )}
+          >
             {reactions.map((reaction) => (
               <button
                 key={reaction.key}
@@ -364,11 +418,14 @@ export function ChatMessageBubble({
                 }${reaction.mine ? ', votre réaction' : ''}`}
                 className={cn(
                   // 36 px de haut, 44 px de cible grâce au pseudo-élément.
-                  'relative flex min-h-9 items-center gap-1 rounded-full border px-2.5 text-xs font-medium transition-colors after:absolute after:-inset-1 after:content-[""]',
+                  // L'anneau reprend la couleur du fond du chat : la pastille
+                  // posée sur le bord de la bulle paraît découpée, comme sur
+                  // WhatsApp.
+                  'relative flex min-h-9 items-center gap-1 rounded-full border px-2.5 text-xs font-medium ring-2 ring-gray-50 transition-colors after:absolute after:-inset-1 after:content-[""]',
                   reaction.mine
                     ? 'border-accent/40 bg-accent/10 text-accent'
                     : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50',
-                  reactorsKey === reaction.key && 'ring-2 ring-accent/30'
+                  reactorsKey === reaction.key && 'ring-accent/30'
                 )}
               >
                 <span aria-hidden="true" className="text-sm">
@@ -380,42 +437,20 @@ export function ChatMessageBubble({
           </div>
         )}
 
-        <div className="mt-1 flex items-center gap-1 px-1">
-          <span className="text-xs text-gray-500">
-            {formatMessageTime(message.created_at)}
-          </span>
-          {sending && <span className="text-xs text-gray-500">Envoi…</span>}
-          {failed && (
-            <button
-              type="button"
-              onClick={onRetry}
-              className="text-xs font-medium text-error underline-offset-2 hover:underline"
-            >
-              Non envoyé · Réessayer
-            </button>
-          )}
-          {canReact && (
-            <button
-              ref={triggerRef}
-              type="button"
-              onClick={() => (pickerOpen ? closePicker() : openPicker(true))}
-              aria-label={
-                isMine
-                  ? 'Réagir à votre message'
-                  : `Réagir au message de ${authorName}`
-              }
-              aria-haspopup="true"
-              aria-expanded={pickerOpen}
-              className={cn(
-                // 32 px de haut, 44 px de cible ; discret au repos.
-                'relative flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors after:absolute after:-inset-1.5 after:content-[""] hover:bg-gray-100 hover:text-accent',
-                pickerOpen && 'bg-gray-100 text-accent'
-              )}
-            >
-              <SmilePlus className="h-4 w-4" aria-hidden="true" />
-            </button>
-          )}
-        </div>
+        {(sending || failed) && (
+          <div className="mt-1 flex items-center gap-1 px-1">
+            {sending && <span className="text-xs text-gray-500">Envoi…</span>}
+            {failed && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="text-xs font-medium text-error underline-offset-2 hover:underline"
+              >
+                Non envoyé · Réessayer
+              </button>
+            )}
+          </div>
+        )}
 
         {pickerOpen && (
           <div

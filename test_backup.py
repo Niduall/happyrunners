@@ -49,7 +49,21 @@ def make_dump(profiles: int = 2, attendances: int = 1) -> dict:
                 "status": "yes",
             }
         ],
+        "messages": [],
+        "message_reactions": [],
+        "push_subscriptions": [],
+        "notification_preferences": [],
     }
+
+
+def with_chat(dump: dict | None = None) -> dict:
+    """Ajoute un message et une réaction, pour les tables du chat."""
+    dump = dump or make_dump()
+    dump["messages"] = [{"id": "m1", "user_number": 1, "body": "Salut"}]
+    dump["message_reactions"] = [
+        {"message_id": "m1", "user_number": 2, "reaction": "laugh"}
+    ]
+    return dump
 
 
 class PaginationTest(unittest.TestCase):
@@ -155,6 +169,65 @@ class ValidationTest(unittest.TestCase):
         dump["attendances"] = []
         with self.assertRaisesRegex(ValueError, "sans présence « going »"):
             backup.validate_dump(dump)
+
+    def test_reaction_sans_id_acceptee(self):
+        counts = backup.validate_dump(with_chat())
+        self.assertEqual(counts["message_reactions"], 1)
+
+    def test_reaction_en_double(self):
+        dump = with_chat()
+        dump["message_reactions"].append(
+            {"message_id": "m1", "user_number": 2, "reaction": "like"}
+        )
+        with self.assertRaisesRegex(ValueError, "en double"):
+            backup.validate_dump(dump)
+
+    def test_reaction_inconnue(self):
+        dump = with_chat()
+        dump["message_reactions"][0]["reaction"] = "smile"
+        with self.assertRaisesRegex(ValueError, "réaction inconnue"):
+            backup.validate_dump(dump)
+
+    def test_reaction_sans_message(self):
+        dump = with_chat()
+        dump["message_reactions"][0]["message_id"] = "inconnu"
+        with self.assertRaisesRegex(ValueError, "absent de messages"):
+            backup.validate_dump(dump)
+
+    def test_chaque_table_a_son_tri_et_sa_cle(self):
+        self.assertEqual(set(backup.TABLE_ORDER), set(backup.TABLES))
+        self.assertEqual(set(backup.TABLE_KEYS), set(backup.TABLES))
+
+
+class DeleteTest(unittest.TestCase):
+    def test_filtre_sans_id(self):
+        calls = []
+
+        def fake_curl(method, path, body_file=None):
+            calls.append((method, path))
+            return b""
+
+        with mock.patch.object(backup, "curl", side_effect=fake_curl):
+            backup.api_delete_all("notification_preferences")
+
+        self.assertEqual(
+            calls,
+            [("DELETE", "/notification_preferences?user_number=not.is.null")],
+        )
+
+    def test_tri_composite_des_reactions(self):
+        paths = []
+
+        def fake_curl(method, path, body_file=None):
+            paths.append(path)
+            return b"[]"
+
+        with mock.patch.object(backup, "curl", side_effect=fake_curl):
+            backup.api_get("message_reactions")
+
+        self.assertIn(
+            "order=message_id.asc,user_number.asc", paths[0]
+        )
 
 
 class SequenceTest(unittest.TestCase):

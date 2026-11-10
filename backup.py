@@ -41,8 +41,71 @@ PAGE_SIZE = 1000
 FORMAT_VERSION = 2
 
 # L'ordre compte à la restauration :
-# participations référence parcours, qui référence user_profiles.
-TABLES = ["user_profiles", "parcours", "attendances", "participations"]
+# participations référence parcours, qui référence user_profiles ; les
+# réactions référencent messages, qui référence user_profiles.
+TABLES = [
+    "user_profiles",
+    "parcours",
+    "attendances",
+    "participations",
+    "messages",
+    "message_reactions",
+    "push_subscriptions",
+    "notification_preferences",
+]
+
+# Colonne(s) de tri par table. Un tri explicite rend la pagination stable :
+# sans lui, PostgREST peut renvoyer deux fois la même ligne entre deux pages.
+# `message_reactions` et `notification_preferences` n'ont pas de colonne `id`.
+TABLE_ORDER = {
+    "user_profiles": "id.asc",
+    "parcours": "id.asc",
+    "attendances": "id.asc",
+    "participations": "id.asc",
+    "messages": "id.asc",
+    "message_reactions": "message_id.asc,user_number.asc",
+    "push_subscriptions": "id.asc",
+    "notification_preferences": "user_number.asc",
+}
+
+# Colonne(s) qui identifient une ligne : sert à refuser un doublon avant de
+# supprimer quoi que ce soit. Deux tables ont une clé primaire composite.
+TABLE_KEYS = {
+    "user_profiles": ("id",),
+    "parcours": ("id",),
+    "attendances": ("id",),
+    "participations": ("id",),
+    "messages": ("id",),
+    "message_reactions": ("message_id", "user_number"),
+    "push_subscriptions": ("id",),
+    "notification_preferences": ("user_number",),
+}
+
+# Clés de réaction acceptées par le CHECK de `message_reactions`.
+REACTIONS = ("like", "love", "laugh", "run", "fire")
+
+# Libellés courts de `cmd_list` : `t[:4]` faisait collision entre `messages`
+# et `message_reactions`.
+SHORT_LABELS = {
+    "user_profiles": "profil",
+    "parcours": "parc",
+    "attendances": "pres",
+    "participations": "votes",
+    "messages": "msg",
+    "message_reactions": "react",
+    "push_subscriptions": "push",
+    "notification_preferences": "prefs",
+}
+
+# Filtre « toutes les lignes » pour la suppression. PostgREST n'a pas de
+# DELETE sans filtre : on utilise une condition toujours vraie. Les tables
+# sans `id` ne peuvent pas réutiliser le filtre des autres.
+NEVER_UUID = "00000000-0000-0000-0000-000000000000"
+TABLE_DELETE_FILTER = {
+    table: f"id=neq.{NEVER_UUID}" for table in TABLES
+}
+TABLE_DELETE_FILTER["message_reactions"] = "message_id=not.is.null"
+TABLE_DELETE_FILTER["notification_preferences"] = "user_number=not.is.null"
 
 
 def die(msg: str) -> None:
@@ -123,8 +186,9 @@ def curl(method: str, path: str, body_file: Path | None = None) -> bytes:
 
 
 def api_get_page(table: str, offset: int) -> list:
+    order = TABLE_ORDER.get(table, "id.asc")
     path = (
-        f"/{table}?select=*&order=id.asc"
+        f"/{table}?select=*&order={order}"
         f"&limit={PAGE_SIZE}&offset={offset}"
     )
     return json.loads(curl("GET", path))
@@ -133,7 +197,7 @@ def api_get_page(table: str, offset: int) -> list:
 def api_get(table: str) -> list:
     """Lit toute une table, page par page.
 
-    `order=id.asc` rend la pagination stable : sans ordre explicite,
+    Le tri explicite (`TABLE_ORDER`) rend la pagination stable : sans ordre,
     PostgREST peut renvoyer les mêmes lignes deux fois entre deux pages.
     """
     rows: list = []
@@ -159,9 +223,10 @@ def api_post(table: str, row: dict) -> None:
 
 
 def api_delete_all(table: str) -> None:
-    # Filtre always-false : efface toutes les lignes sans lister les id.
-    never = "00000000-0000-0000-0000-000000000000"
-    curl("DELETE", f"/{table}?id=neq.{never}")
+    # Filtre qui ne peut exclure aucune vraie ligne : efface toute la table
+    # sans avoir à lister les clés. `message_reactions` et
+    # `notification_preferences` n'ont pas de colonne `id`.
+    curl("DELETE", f"/{table}?{TABLE_DELETE_FILTER[table]}")
 
 
 def do_save(prefix: str = "happyrunners") -> Path:
@@ -174,7 +239,7 @@ def do_save(prefix: str = "happyrunners") -> Path:
     counts: dict[str, int] = {}
 
     for table in TABLES:
-        print(f"  {table:<16}", end="", flush=True)
+        print(f"  {table:<22}", end="", flush=True)
         rows = api_get(table)
         dump[table] = rows
         counts[table] = len(rows)
@@ -218,9 +283,11 @@ def cmd_list() -> None:
         except (OSError, json.JSONDecodeError):
             print(f"  {f.name:<40} illisible")
             continue
-        # On ne compte que les 4 tables : `_meta` n'est pas un tableau de lignes.
+        # On ne compte que les tables : `_meta` n'est pas un tableau de lignes.
         total = sum(len(dump.get(t, [])) for t in TABLES)
-        detail = " ".join(f"{t[:4]}:{len(dump.get(t, []))}" for t in TABLES)
+        detail = " ".join(
+            f"{SHORT_LABELS[t]}:{len(dump.get(t, []))}" for t in TABLES
+        )
         label = f.stem.replace("happyrunners-", "")
         print(f"  {label:<32} {total:>5} lignes   {detail}")
 
@@ -238,16 +305,23 @@ def validate_dump(dump: dict, allow_empty: bool = False) -> dict[str, int]:
 
     # Identifiants présents et uniques dans chaque table.
     for table in TABLES:
-        ids = set()
+        keys = TABLE_KEYS[table]
+        seen = set()
         for row in dump[table]:
             if not isinstance(row, dict):
                 raise ValueError(f"{table} : ligne qui n'est pas un objet")
-            rid = row.get("id")
-            if not rid:
-                raise ValueError(f"{table} : ligne sans id")
-            if rid in ids:
-                raise ValueError(f"{table} : id {rid} en double")
-            ids.add(rid)
+            missing = [key for key in keys if not row.get(key)]
+            if missing:
+                raise ValueError(
+                    f"{table} : ligne sans {', '.join(missing)}"
+                )
+            ident = tuple(row[key] for key in keys)
+            if ident in seen:
+                label = ", ".join(
+                    f"{key}={value}" for key, value in zip(keys, ident)
+                )
+                raise ValueError(f"{table} : {label} en double")
+            seen.add(ident)
 
     profiles = dump["user_profiles"]
     if not profiles and not allow_empty:
@@ -317,6 +391,49 @@ def validate_dump(dump: dict, allow_empty: bool = False) -> dict[str, int]:
                 f"(personne {row['user_number']}, semaine {row['week_key']})"
             )
 
+    message_ids = {row["id"] for row in dump["messages"]}
+
+    for row in dump["messages"]:
+        if row.get("user_number") not in users:
+            raise ValueError(
+                "messages : user_number "
+                f"{row.get('user_number')} absent de user_profiles"
+            )
+        if not row.get("body"):
+            raise ValueError("messages : corps vide")
+
+    for row in dump["message_reactions"]:
+        if row.get("message_id") not in message_ids:
+            raise ValueError(
+                "message_reactions : message_id "
+                f"{row.get('message_id')} absent de messages"
+            )
+        if row.get("user_number") not in users:
+            raise ValueError(
+                "message_reactions : user_number "
+                f"{row.get('user_number')} absent de user_profiles"
+            )
+        if row.get("reaction") not in REACTIONS:
+            raise ValueError(
+                f"message_reactions : réaction inconnue {row.get('reaction')!r}"
+            )
+
+    for row in dump["push_subscriptions"]:
+        if row.get("user_number") not in users:
+            raise ValueError(
+                "push_subscriptions : user_number "
+                f"{row.get('user_number')} absent de user_profiles"
+            )
+        if not row.get("endpoint"):
+            raise ValueError("push_subscriptions : endpoint manquant")
+
+    for row in dump["notification_preferences"]:
+        if row.get("user_number") not in users:
+            raise ValueError(
+                "notification_preferences : user_number "
+                f"{row.get('user_number')} absent de user_profiles"
+            )
+
     # Un fichier tronqué à l'écriture ou édité à la main se voit ici.
     meta_counts = (dump.get("_meta") or {}).get("counts")
     if meta_counts:
@@ -353,7 +470,7 @@ def cmd_restore(path: str, dry_run: bool, allow_empty: bool) -> None:
     print(f"Restauration depuis {src.name}")
     print(f"Base cible : {api_base()}")
     for table in TABLES:
-        print(f"  {table:<16} {counts[table]} lignes")
+        print(f"  {table:<22} {counts[table]} lignes")
     print(f"  suppression     {' → '.join(reversed(TABLES))}")
     print(f"  réinsertion     {' → '.join(TABLES)}")
 
@@ -372,13 +489,13 @@ def cmd_restore(path: str, dry_run: bool, allow_empty: bool) -> None:
 
     # Ordre inverse : évite de déclencher les cascades de clés étrangères.
     for table in reversed(TABLES):
-        print(f"  suppression {table:<20}", end="", flush=True)
+        print(f"  suppression {table:<22}", end="", flush=True)
         api_delete_all(table)
         print("ok")
 
     for table in TABLES:
         rows = dump[table]
-        print(f"  réinsertion {table:<20}", end="", flush=True)
+        print(f"  réinsertion {table:<22}", end="", flush=True)
         for row in rows:
             api_post(table, row)
         print(f"{len(rows)} lignes")

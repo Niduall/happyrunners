@@ -1,0 +1,83 @@
+name: Sauvegarde base de prod
+
+# Sauvegarde quotidienne de la production, chiffrée et conservée 30 jours.
+#
+# Secrets requis (Settings → Secrets and variables → Actions) :
+#   SUPABASE_URL          URL du projet de prod
+#   SUPABASE_ANON_KEY     clé anon de la prod (lecture seule, RLS ouverte)
+#   BACKUP_PASSPHRASE     phrase de passe du chiffrement des artefacts
+#
+# Les artefacts contiennent des noms et des votes : ne jamais les rendre
+# publics. Le chiffrement est fait avec openssl (AES-256-CBC + PBKDF2).
+
+on:
+  schedule:
+    # 03:00 UTC, soit 04:00 ou 05:00 à Paris selon la saison.
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-prod
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tests hors ligne de backup.py
+        run: python3 -m unittest test_backup.py -v
+
+      - name: Exporter la base
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          mkdir -p backups
+          printf 'VITE_SUPABASE_URL=%s\nVITE_SUPABASE_ANON_KEY=%s\n' \
+            "$VITE_SUPABASE_URL" "$VITE_SUPABASE_ANON_KEY" > .env
+          python3 backup.py save
+
+      - name: Refuser une sauvegarde vide
+        run: |
+          python3 - <<'PY'
+          import glob, json
+          fichiers = sorted(glob.glob("backups/happyrunners-*.json"))
+          if not fichiers:
+              raise SystemExit("aucune sauvegarde produite")
+          dump = json.load(open(fichiers[-1], encoding="utf-8"))
+          if not dump.get("user_profiles"):
+              raise SystemExit("sauvegarde vide : aucun profil")
+          print(
+              f"{fichiers[-1]} : {len(dump['user_profiles'])} profils, "
+              f"{len(dump.get('messages', []))} messages"
+          )
+          PY
+
+      - name: Chiffrer et vérifier
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          FICHIER=$(ls -t backups/happyrunners-*.json | head -1)
+          openssl enc -aes-256-cbc -pbkdf2 -salt \
+            -in "$FICHIER" -out "$FICHIER.enc" -pass env:BACKUP_PASSPHRASE
+          openssl enc -d -aes-256-cbc -pbkdf2 \
+            -in "$FICHIER.enc" -out /tmp/verif.json -pass env:BACKUP_PASSPHRASE
+          cmp "$FICHIER" /tmp/verif.json
+          rm -f "$FICHIER" /tmp/verif.json
+          ls -lh backups/
+
+      - name: Conserver l'artefact chiffré
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-${{ github.run_number }}
+          path: backups/*.enc
+          retention-days: 30
+          if-no-files-found: error

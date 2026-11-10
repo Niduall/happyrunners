@@ -1,6 +1,6 @@
 # Feuille de route — HappyRunners
 
-Dernière mise à jour : **8 novembre 2026**
+Dernière mise à jour : **10 novembre 2026**
 
 Cette feuille de route garde les idées d’amélioration et les fonctionnalités
 envisagées, avec leur priorité et leur coût. Elle ne remplace pas `AGENTS.md`
@@ -23,6 +23,16 @@ envisagées, avec leur priorité et leur coût. Elle ne remplace pas `AGENTS.md`
 | **Routes à la demande** | `Admin`, `ParcoursList` et `Chat` sont dans le bundle initial (631 Ko, 178 Ko gzip). Les charger seulement à la navigation accélère le premier écran. | S | ✅ Livré |
 | **Agenda + partage** | Bouton `.ics` / Google Calendar pour le mercredi 12h30, et « Partager l’app ». Adoption et rappel sans dépendre du push. | S | ✅ Livré |
 
+## Livré — Sauvegardes planifiées (9 novembre 2026)
+
+| Tâche | Pourquoi | Effort | État |
+|---|---|---|---|
+| **Sauvegardes planifiées** | Job quotidien qui exécute `backup.py save` et conserve un artefact chiffré, au lieu de dépendre d’une action manuelle. | M | ✅ Livré |
+
+`backup.py` couvre désormais les **huit tables** (chat et push compris), et
+`.github/workflows/backup.yml` sauvegarde la prod chaque jour à 3 h UTC dans
+un artefact chiffré conservé 30 jours.
+
 ## À faire ensuite
 
 ### Priorité 1 — fort impact
@@ -40,7 +50,6 @@ envisagées, avec leur priorité et leur coût. Elle ne remplace pas `AGENTS.md`
 | **Message épinglé** | Un message important (parcours du jour, consignes) reste en haut du fil. | S/M |
 | **Annulation météo** | État « Sortie annulée » avec motif, visible sur Home et notifié aux personnes qui viennent. | M |
 | **Tests de bout en bout** | Trois scénarios Playwright : connexion → présence/vote, envoi dans le chat, réaction + « qui a réagi ». Couvre les régressions visuelles et de déploiement. | M |
-| **Sauvegardes planifiées** | Job planifié qui exécute `backup.py save` et conserve un artefact chiffré, au lieu de dépendre d’une action manuelle. | M |
 
 ### Priorité 3 — selon le besoin réel
 

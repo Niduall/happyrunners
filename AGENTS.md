@@ -625,12 +625,21 @@ python3 backup.py restore <fichier> --dry-run
 python3 backup.py save --env .env.test  # cible la base de test
 ```
 
-`save` pagine par 1 000 lignes. `restore` valide le fichier, sauvegarde l'état
-courant, supprime dans l'ordre inverse et vérifie les comptes. Il refuse aussi
-un dump contenant un vote sans présence `going` (ancien vote orphelin), avant
-toute suppression. Il sort en **code 2** tant que le `setval` de
-`user_number_seq` n'a pas été exécuté.
-Tests hors ligne : `python3 -m unittest test_backup.py -v`.
+`save` pagine par 1 000 lignes et couvre les **huit tables**, chat et push
+compris. `restore` valide le fichier, sauvegarde l'état courant, supprime dans
+l'ordre inverse et vérifie les comptes. Il refuse aussi un dump contenant un
+vote sans présence `going` (ancien vote orphelin), avant toute suppression. Il
+sort en **code 2** tant que le `setval` de `user_number_seq` n'a pas été
+exécuté. Tests hors ligne : `python3 -m unittest test_backup.py -v`.
+
+**Sauvegarde planifiée** : `.github/workflows/backup.yml` lance `save` chaque
+jour à 3 h UTC et conserve un artefact chiffré 30 jours. Secrets requis :
+`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `BACKUP_PASSPHRASE` (Settings → Secrets
+and variables → Actions). Le chiffrement passe par
+`openssl enc -aes-256-cbc -pbkdf2` ; la procédure de restauration est dans
+`README.md`. Ne jamais committer la phrase de passe. GitHub désactive les
+workflows planifiés après 60 jours sans activité sur le dépôt : vérifier de
+temps en temps que le job tourne encore.
 
 ## Testing
 ```bash

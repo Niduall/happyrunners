@@ -78,8 +78,10 @@ python3 backup.py restore <fichier> --dry-run   # affiche le plan, n'écrit rien
 python3 backup.py restore <fichier> --allow-empty
 ```
 
-`save` pagine par 1 000 lignes : aucune table n'est tronquée. `restore` valide
-le fichier avant de supprimer quoi que ce soit (4 tables, comptes, clés
+`save` pagine par 1 000 lignes : aucune table n'est tronquée. Il couvre les
+huit tables, y compris le chat (`messages`, `message_reactions`) et le push
+(`push_subscriptions`, `notification_preferences`). `restore` valide le
+fichier avant de supprimer quoi que ce soit (tables, comptes, clés
 étrangères), prend automatiquement une sauvegarde
 `happyrunners-pre-restore-<date>.json`, puis vérifie les comptes après
 réécriture. Il refuse aussi un dump contenant un vote sans présence `going`
@@ -92,6 +94,38 @@ inscription peut échouer.
 
 Les backups contiennent les noms et les votes des membres : ils sont ignorés
 par git (`backups/`) et ne doivent pas circuler.
+
+### Sauvegarde automatique
+
+`.github/workflows/backup.yml` exécute `backup.py save` **chaque jour à 3 h
+UTC** (4 h ou 5 h à Paris selon la saison), et peut aussi être lancé à la main
+depuis l’onglet **Actions** du dépôt.
+
+Le fichier est **chiffré** (AES-256-CBC + PBKDF2, via `openssl`) puis conservé
+comme artefact GitHub pendant **30 jours**. Le job échoue si la sauvegarde est
+vide ou si le déchiffrement ne redonne pas exactement le fichier d’origine.
+
+Secrets à créer dans **Settings → Secrets and variables → Actions** :
+
+| Secret | Valeur |
+|---|---|
+| `SUPABASE_URL` | URL du projet de prod |
+| `SUPABASE_ANON_KEY` | clé anon de la prod (lecture seule, RLS ouverte) |
+| `BACKUP_PASSPHRASE` | phrase de passe du chiffrement, à conserver hors du dépôt |
+
+Pour restaurer un artefact : le télécharger depuis l’onglet Actions, puis
+
+```bash
+openssl enc -d -aes-256-cbc -pbkdf2 \
+  -in happyrunners-<date>.json.enc -out happyrunners-<date>.json \
+  -pass env:BACKUP_PASSPHRASE
+python3 backup.py restore happyrunners-<date>.json
+```
+
+Deux limites à connaître : GitHub **désactive les workflows planifiés** après
+60 jours sans activité sur le dépôt, et les artefacts expirent au bout de
+30 jours. Pour une conservation plus longue, télécharger régulièrement
+l’artefact ou passer à un stockage dédié.
 
 ## Code administrateur
 

@@ -33,6 +33,12 @@ envisagées, avec leur priorité et leur coût. Elle ne remplace pas `AGENTS.md`
 `.github/workflows/backup.yml` sauvegarde la prod chaque jour à 3 h UTC dans
 un artefact chiffré conservé 30 jours.
 
+## Livré — Chat (10 novembre 2026)
+
+| Tâche | Pourquoi | Effort | État |
+|---|---|---|---|
+| **Répondre à un message** | Réponse citée dans le chat (`reply_to_id`), avec un aperçu du message d’origine. Utile dès qu’on est nombreux. L’aperçu est un instantané (`reply_to_body`, `reply_to_user_number`) qui survit à la purge des 30 jours. | M | ✅ Livré |
+
 ## À faire ensuite
 
 ### Priorité 1 — fort impact
@@ -40,7 +46,6 @@ un artefact chiffré conservé 30 jours.
 | Idée | Détail | Effort |
 |---|---|---|
 | **Historique des sorties** | Page `/historique` : mercredis passés, présents, parcours retenu, distance/D+. Stats perso : nombre de sorties, km cumulés, série en cours. Les données existent déjà (`attendances`, `participations` par `week_key`) et `weeksBetween` est prévu pour ça. | M |
-| **Répondre à un message** | Réponse citée dans le chat (`reply_to_id`), avec un aperçu du message d’origine. Utile dès qu’on est nombreux. Petite migration. | M |
 | **Hors ligne réel** | Le README promet « fonctionne hors ligne », mais seule la coquille est précachée. Cacher le dernier état de Home et afficher un bandeau « données du … » quand le réseau manque. | M |
 
 ### Priorité 2 — confort et fiabilité

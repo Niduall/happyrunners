@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useMessages } from '../hooks/useMessages'
 import { useProfiles } from '../hooks/useProfiles'
-import { groupMessagesByDay } from '../services/messages'
+import { groupMessagesByDay, type ReplyTarget } from '../services/messages'
 import { Button } from '../components/ui/Button'
 import { ChatMessageBubble } from '../components/ChatMessageBubble'
 import { ChatComposer } from '../components/ChatComposer'
@@ -47,6 +47,7 @@ export function Chat() {
 
   const listRef = useRef<HTMLDivElement>(null)
   const [hasNew, setHasNew] = useState(false)
+  const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null)
   const initialScrollRef = useRef(true)
   const previousCountRef = useRef(0)
 
@@ -89,6 +90,18 @@ export function Chat() {
   useEffect(() => {
     if (!loading) markAllRead()
   }, [messages.length, loading, markAllRead])
+
+  const handleSend = useCallback(
+    async (body: string) => {
+      const ok = await send(body, replyTo)
+      // La cible est consommée dans tous les cas : si l'envoi échoue, le
+      // message reste dans le fil avec « Réessayer », qui conserve la
+      // citation. Garder le bandeau ferait croire qu'il n'est pas parti.
+      setReplyTo(null)
+      return ok
+    },
+    [send, replyTo]
+  )
 
   return (
     <div className="flex h-dvh flex-col bg-gray-50">
@@ -175,6 +188,16 @@ export function Chat() {
                       onDelete={() => void remove(message.id)}
                       onRetry={() => void retry(message.id)}
                       onReact={(reaction) => void react(message.id, reaction)}
+                      onReply={() =>
+                        setReplyTo({
+                          // Un message pas encore enregistré n'a pas
+                          // d'identifiant serveur : la citation garde le
+                          // texte, sans lien.
+                          id: message.status ? null : message.id,
+                          body: message.body,
+                          userNumber: message.user_number,
+                        })
+                      }
                     />
                   )
                 })}
@@ -198,8 +221,15 @@ export function Chat() {
         <div className="mx-auto max-w-3xl px-4 py-3">
           <ChatComposer
             canWrite={Boolean(user)}
-            onSend={send}
+            onSend={handleSend}
             onIdentify={() => navigate('/')}
+            replyTo={replyTo}
+            replyToName={
+              replyTo
+                ? names.get(replyTo.userNumber) ?? 'quelqu’un'
+                : undefined
+            }
+            onCancelReply={() => setReplyTo(null)}
           />
         </div>
       </div>

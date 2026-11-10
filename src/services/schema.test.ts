@@ -6,6 +6,7 @@ import migration from '../../migrations/2026-10-25_tache17.sql?raw'
 import chatMigration from '../../migrations/2026-11-02_tache29_chat.sql?raw'
 import pushMigration from '../../migrations/2026-11-04_tache31_notifications_push.sql?raw'
 import reactionsMigration from '../../migrations/2026-11-06_tache32_reactions_chat.sql?raw'
+import repliesMigration from '../../migrations/2026-11-10_tache34_reponse_chat.sql?raw'
 
 /**
  * schema.sql est la source de vérité de la structure de la base.
@@ -51,13 +52,16 @@ describe('schema.sql — structure', () => {
 
   it('ne déclare que les clés étrangères réellement présentes en prod', () => {
     const refs = [...schema.matchAll(/REFERENCES\s+(\w+)/g)].map((m) => m[1])
-    // 8 FK, toutes en CASCADE.
+    // 10 FK. Les 8 historiques en CASCADE ; les deux de la réponse citée en
+    // SET NULL, pour que supprimer l'original ne supprime pas la réponse.
     // `parcours.created_by` n'en a volontairement pas (colonne jamais lue).
     expect(refs).toEqual([
       'user_profiles', // attendances.user_number
       'parcours',      // participations.parcours_id
       'user_profiles', // participations.user_number
       'user_profiles', // messages.user_number
+      'messages',      // messages.reply_to_id (auto-référence)
+      'user_profiles', // messages.reply_to_user_number
       'messages',      // message_reactions.message_id
       'user_profiles', // message_reactions.user_number
       'user_profiles', // push_subscriptions.user_number
@@ -274,6 +278,25 @@ describe('table messages', () => {
 
     expect(table).not.toMatch(/updated_at/)
   })
+
+  it('garde un instantané de la réponse citée, détaché de l’original', () => {
+    const start = schema.indexOf('CREATE TABLE IF NOT EXISTS messages')
+    const end = schema.indexOf('idx_messages_created')
+    const table = schema.slice(start, end)
+
+    // SET NULL et non CASCADE : supprimer l'original ne doit pas emporter la
+    // réponse. Le texte reste lisible grâce à l'instantané.
+    expect(table).toMatch(
+      /reply_to_id\s+uuid REFERENCES messages\(id\) ON DELETE SET NULL/
+    )
+    expect(table).toMatch(/reply_to_body\s+text/)
+    expect(table).toMatch(
+      /reply_to_user_number integer REFERENCES user_profiles\(user_number\) ON DELETE SET NULL/
+    )
+    expect(table).toMatch(
+      /messages_reply_body_length[\s\S]*?char_length\(reply_to_body\) BETWEEN 1 AND 500/
+    )
+  })
 })
 
 describe('migration 2026-10-25 (tâche 17)', () => {
@@ -368,5 +391,50 @@ describe('migration 2026-11-06 (tâche 32)', () => {
   it('applique tout ou rien', () => {
     expect(reactionsMigration).toMatch(/^BEGIN;/m)
     expect(reactionsMigration.trimEnd().endsWith('COMMIT;')).toBe(true)
+  })
+})
+
+describe('migration 2026-11-10 (tâche 34)', () => {
+  it('ajoute les trois colonnes, les clés étrangères et la borne', () => {
+    for (const column of [
+      'reply_to_id',
+      'reply_to_body',
+      'reply_to_user_number',
+    ]) {
+      expect(repliesMigration).toMatch(
+        new RegExp(`ADD COLUMN IF NOT EXISTS ${column}`)
+      )
+    }
+
+    expect(repliesMigration).toMatch(
+      /messages_reply_to_id_fkey[\s\S]*?REFERENCES messages\(id\) ON DELETE SET NULL/
+    )
+    expect(repliesMigration).toMatch(
+      /messages_reply_to_user_number_fkey[\s\S]*?ON DELETE SET NULL/
+    )
+    expect(repliesMigration).toMatch(
+      /messages_reply_body_length[\s\S]*?BETWEEN 1 AND 500/
+    )
+  })
+
+  it('indexe le lien pour que la purge ne parcoure pas toute la table', () => {
+    expect(repliesMigration).toMatch(
+      /CREATE INDEX IF NOT EXISTS idx_messages_reply_to/
+    )
+  })
+
+  it('est rejouable et ne supprime aucune donnée', () => {
+    expect(repliesMigration).toMatch(/ADD COLUMN IF NOT EXISTS/)
+    // Les contraintes sont ajoutées seulement si le catalogue ne les connaît
+    // pas encore : rejouer le fichier ne doit pas échouer.
+    expect(repliesMigration).toMatch(
+      /IF NOT EXISTS \(\s*SELECT 1 FROM pg_constraint/
+    )
+    expect(repliesMigration).not.toMatch(/DELETE FROM|TRUNCATE|DROP TABLE/)
+  })
+
+  it('applique tout ou rien', () => {
+    expect(repliesMigration).toMatch(/^BEGIN;/m)
+    expect(repliesMigration.trimEnd().endsWith('COMMIT;')).toBe(true)
   })
 })

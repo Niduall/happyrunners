@@ -140,11 +140,22 @@ CREATE TABLE IF NOT EXISTS messages (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_number integer NOT NULL REFERENCES user_profiles(user_number) ON DELETE CASCADE,
   body        text    NOT NULL CHECK (char_length(body) BETWEEN 1 AND 500),
-  created_at  timestamptz NOT NULL DEFAULT now()
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  -- Réponse citée : lien vers l'original + instantané de son texte et de son
+  -- auteur. L'instantané survit à la purge (le lien passe à NULL, pas le
+  -- texte) et ne peut pas diverger : un message ne s'édite pas.
+  reply_to_id          uuid REFERENCES messages(id) ON DELETE SET NULL,
+  reply_to_body        text,
+  reply_to_user_number integer REFERENCES user_profiles(user_number) ON DELETE SET NULL,
+  CONSTRAINT messages_reply_body_length
+    CHECK (reply_to_body IS NULL OR char_length(reply_to_body) BETWEEN 1 AND 500)
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_created
   ON messages USING btree (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_messages_reply_to
+  ON messages USING btree (reply_to_id);
 
 -- ---------------------------------------------------------------------------
 -- Table : message_reactions

@@ -226,6 +226,67 @@ describe('useMessages — envoi', () => {
     })
     expect(mockSend).not.toHaveBeenCalled()
   })
+
+  it('affiche la citation immédiatement et l’envoie avec le message', async () => {
+    let resolveSend: ((value: Message) => void) | undefined
+    mockSend.mockImplementation(
+      () =>
+        new Promise<Message>((resolve) => {
+          resolveSend = resolve
+        })
+    )
+
+    const { result } = renderHook(() => useMessages(1))
+    await flush()
+
+    const replyTo = { id: 'm1', body: 'Question', userNumber: 2 }
+
+    await act(async () => {
+      void result.current.send('Réponse', replyTo)
+    })
+
+    expect(mockSend).toHaveBeenCalledWith({
+      userNumber: 1,
+      body: 'Réponse',
+      replyTo,
+    })
+    expect(result.current.messages[0]).toMatchObject({
+      body: 'Réponse',
+      reply_to_id: 'm1',
+      reply_to_body: 'Question',
+      reply_to_user_number: 2,
+    })
+
+    await act(async () => {
+      resolveSend?.(message('s1', '2026-11-02T10:00:05.000Z', 1, 'Réponse'))
+    })
+  })
+
+  it('conserve la citation quand on réessaie', async () => {
+    mockSend
+      .mockRejectedValueOnce(new Error('réseau'))
+      .mockResolvedValueOnce(
+        message('s1', '2026-11-02T10:00:05.000Z', 1, 'Réponse')
+      )
+
+    const { result } = renderHook(() => useMessages(1))
+    await flush()
+
+    const replyTo = { id: 'm1', body: 'Question', userNumber: 2 }
+
+    await act(async () => {
+      expect(await result.current.send('Réponse', replyTo)).toBe(false)
+    })
+    await act(async () => {
+      await result.current.retry(result.current.messages[0].id)
+    })
+
+    expect(mockSend).toHaveBeenLastCalledWith({
+      userNumber: 1,
+      body: 'Réponse',
+      replyTo,
+    })
+  })
 })
 
 describe('useMessages — suppression', () => {

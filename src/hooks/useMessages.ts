@@ -16,6 +16,7 @@ import {
   retentionCutoff,
   withReaction,
   writeLastRead,
+  type ReplyTarget,
 } from '../services/messages'
 import type { Message, ReactionKey } from '../types/supabase'
 
@@ -164,7 +165,7 @@ export function useMessages(
   }, [])
 
   const send = useCallback(
-    async (raw: string): Promise<boolean> => {
+    async (raw: string, replyTo: ReplyTarget | null = null): Promise<boolean> => {
       const body = normalizeMessageBody(raw)
       if (!userNumber || body.length === 0 || body.length > MAX_MESSAGE_LENGTH) {
         return false
@@ -176,12 +177,17 @@ export function useMessages(
         body,
         created_at: new Date().toISOString(),
         status: 'sending',
+        // Instantané de la citation : l'aperçu s'affiche dès l'envoi, sans
+        // attendre la réponse du serveur ni dépendre de l'original.
+        reply_to_id: replyTo?.id ?? null,
+        reply_to_body: replyTo?.body ?? null,
+        reply_to_user_number: replyTo?.userNumber ?? null,
       }
 
       setMessages((prev) => [...prev, temp])
 
       try {
-        const saved = await sendMessage({ userNumber, body })
+        const saved = await sendMessage({ userNumber, body, replyTo })
         mutationRef.current += 1
         setMessages((prev) =>
           sortByCreatedAt(prev.map((m) => (m.id === temp.id ? saved : m)))
@@ -215,6 +221,16 @@ export function useMessages(
       const saved = await sendMessage({
         userNumber: target.user_number,
         body: target.body,
+        // Le réessai conserve la citation : sans elle, le message partirait
+        // sans l'aperçu que la personne avait choisie.
+        replyTo:
+          target.reply_to_body && target.reply_to_user_number != null
+            ? {
+                id: target.reply_to_id ?? null,
+                body: target.reply_to_body,
+                userNumber: target.reply_to_user_number,
+              }
+            : null,
       })
       mutationRef.current += 1
       setMessages((prev) =>

@@ -59,12 +59,26 @@ export function isValidMessageBody(raw: string): boolean {
   return body.length > 0 && body.length <= MAX_MESSAGE_LENGTH
 }
 
-export interface MessageDay {
+export interface MessageDay<T extends Message = Message> {
   /** Clé stable `yyyy-MM-dd`, utilisable comme `key` React. */
   key: string
   /** « Aujourd'hui », « Hier », « Mardi 28 octobre ». */
   label: string
-  messages: Message[]
+  messages: T[]
+}
+
+/**
+ * Message auquel on répond.
+ *
+ * `id` peut être `null` quand l'original n'a pas encore d'identifiant serveur
+ * (message optimiste) : la citation reste possible, seul le lien est absent.
+ * `body` et `userNumber` sont recopiés au moment de l'envoi : l'aperçu ne
+ * dépend pas de la survie de l'original.
+ */
+export interface ReplyTarget {
+  id: string | null
+  body: string
+  userNumber: number
 }
 
 /**
@@ -73,15 +87,15 @@ export interface MessageDay {
  * Un fil de chat se lit dans l'ordre chronologique : les messages arrivent
  * triés, le regroupement ne doit pas les retourner.
  */
-export function groupMessagesByDay(
-  messages: Message[],
+export function groupMessagesByDay<T extends Message>(
+  messages: T[],
   now: Date = new Date()
-): MessageDay[] {
+): MessageDay<T>[] {
   const sorted = [...messages].sort(
     (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)
   )
 
-  const days: MessageDay[] = []
+  const days: MessageDay<T>[] = []
 
   for (const message of sorted) {
     const date = new Date(message.created_at)

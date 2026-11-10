@@ -134,6 +134,14 @@ export interface Message {
    * optimiste n'en a pas encore, et les tests peuvent l'omettre.
    */
   reactions?: MessageReaction[]
+  /**
+   * Réponse citée. `reply_to_body` et `reply_to_user_number` sont un
+   * instantané pris à l'envoi : ils survivent à la purge de l'original, qui
+   * remet seulement `reply_to_id` à NULL.
+   */
+  reply_to_id?: string | null
+  reply_to_body?: string | null
+  reply_to_user_number?: number | null
 }
 
 /**

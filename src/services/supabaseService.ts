@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { goingSet, summarizeVotes } from './voteTallies'
-import { normalizeMessageBody } from './messages'
+import { normalizeMessageBody, type ReplyTarget } from './messages'
 import { hashPin } from './pin'
 import type {
   Parcours,
@@ -399,7 +399,7 @@ export async function deleteWeekVote(
  * les deux colonnes affichées sont demandées, pas `created_at`.
  */
 const MESSAGE_COLUMNS =
-  'id,user_number,body,created_at,message_reactions(user_number,reaction)'
+  'id,user_number,body,created_at,reply_to_id,reply_to_body,reply_to_user_number,message_reactions(user_number,reaction)'
 
 /** Ligne brute renvoyée par PostgREST : la relation porte le nom de la table. */
 type MessageRow = Omit<Message, 'reactions'> & {
@@ -461,16 +461,29 @@ export async function countMessagesSince(
 /**
  * Envoie un message et renvoie la ligne créée (avec son `id` et son
  * `created_at` serveur, qui font foi).
+ *
+ * `replyTo` recopie le texte et l'auteur de l'original dans la ligne : la
+ * citation reste lisible même quand l'original est purgé au bout de 30 jours.
+ * Le lien `reply_to_id` est absent pour un message optimiste (pas encore
+ * d'identifiant serveur).
  */
 export async function sendMessage(params: {
   userNumber: number
   body: string
+  replyTo?: ReplyTarget | null
 }): Promise<Message> {
   const body = normalizeMessageBody(params.body)
+  const replyTo = params.replyTo ?? null
 
   const { data, error } = await supabase
     .from('messages')
-    .insert({ user_number: params.userNumber, body })
+    .insert({
+      user_number: params.userNumber,
+      body,
+      reply_to_id: replyTo?.id ?? null,
+      reply_to_body: replyTo?.body ?? null,
+      reply_to_user_number: replyTo?.userNumber ?? null,
+    })
     .select(MESSAGE_COLUMNS)
     .single()
 

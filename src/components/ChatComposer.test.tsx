@@ -91,3 +91,39 @@ describe('ChatComposer — lecture sans identité', () => {
     expect(onIdentify).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('ChatComposer — réponse citée', () => {
+  const replyTo = { id: 'm1', body: 'Question importante', userNumber: 2 }
+
+  it('affiche l’auteur et l’aperçu du message cité', () => {
+    setup({ replyTo, replyToName: 'Ada' })
+
+    expect(screen.getByText('Réponse à Ada')).toBeInTheDocument()
+    expect(screen.getByText('Question importante')).toBeInTheDocument()
+  })
+
+  it('donne le focus à la saisie quand on choisit de répondre', () => {
+    const { textarea } = setup({ replyTo, replyToName: 'Ada' })
+
+    expect(textarea).toHaveFocus()
+  })
+
+  it('annule la réponse et rend le focus à la saisie', () => {
+    const onCancelReply = vi.fn()
+    const { textarea } = setup({ replyTo, replyToName: 'Ada', onCancelReply })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Annuler la réponse' }))
+
+    expect(onCancelReply).toHaveBeenCalledTimes(1)
+    expect(textarea).toHaveFocus()
+  })
+
+  it('n’affiche aucun bandeau sans message cité', () => {
+    setup()
+
+    expect(screen.queryByText(/Réponse à/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Annuler la réponse' })
+    ).not.toBeInTheDocument()
+  })
+})

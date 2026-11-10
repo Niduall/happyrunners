@@ -62,7 +62,7 @@ TABLE_ORDER = {
     "parcours": "id.asc",
     "attendances": "id.asc",
     "participations": "id.asc",
-    "messages": "id.asc",
+    "messages": "created_at.asc,id.asc",
     "message_reactions": "message_id.asc,user_number.asc",
     "push_subscriptions": "id.asc",
     "notification_preferences": "user_number.asc",
@@ -401,6 +401,22 @@ def validate_dump(dump: dict, allow_empty: bool = False) -> dict[str, int]:
             )
         if not row.get("body"):
             raise ValueError("messages : corps vide")
+
+        reply_body = row.get("reply_to_body")
+        reply_number = row.get("reply_to_user_number")
+        reply_id = row.get("reply_to_id")
+
+        if reply_body is not None and not 1 <= len(reply_body) <= 500:
+            raise ValueError("messages : reply_to_body hors bornes")
+        if reply_number is not None and reply_number not in users:
+            raise ValueError(
+                "messages : reply_to_user_number "
+                f"{reply_number} absent de user_profiles"
+            )
+        if reply_id and reply_id not in message_ids:
+            raise ValueError(
+                f"messages : reply_to_id {reply_id} absent de messages"
+            )
 
     for row in dump["message_reactions"]:
         if row.get("message_id") not in message_ids:

@@ -249,10 +249,23 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   extérieur, par Échap, et après un choix.
 - **Aucune notification push pour une réaction** : un 👍 n'allume pas le
   téléphone de l'auteur.
+- **Réponse citée** : `reply_to_id` garde le lien, `reply_to_body` et
+  `reply_to_user_number` sont un **instantané** pris à l'envoi. Un message
+  n'étant jamais modifié, l'instantané ne peut pas diverger ; il survit à la
+  purge des 30 jours, qui remet seulement `reply_to_id` à NULL. Les deux clés
+  étrangères sont en `ON DELETE SET NULL` : supprimer l'original ou son auteur
+  n'emporte jamais la réponse. « Répondre » vit dans la palette (appui long,
+  clic droit, ou bouton smiley sur les messages reçus), pas dans un bouton
+  permanent sur la bulle. Le bandeau du composeur s'annule sans vider le texte
+  déjà saisi, et la saisie reprend le focus après le choix.
 - ⚠️ **Ordre de déploiement obligatoire** : appliquer la migration
   `message_reactions` **avant** de déployer l'interface. La requête du chat
   référence la table : sans elle, `getRecentMessages` échoue et le fil ne
   s'affiche plus. Test d'abord, prod ensuite.
+- ⚠️ **Même ordre pour la réponse citée** : appliquer
+  `migrations/2026-11-10_tache34_reponse_chat.sql` avant de déployer
+  l'interface. `getRecentMessages` et `sendMessage` sélectionnent les trois
+  colonnes `reply_to_*` : sans elles, le chat entier tombe.
 
 ### Mise à jour de la PWA
 - Un onglet ouvert **ne se met jamais à jour seul** : il enregistre le service
@@ -763,6 +776,12 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
     `pushsubscriptionchange` et la resynchronisation à l'ouverture
     (`pushSync.ts`). Pas de bouton de test dans l'interface : la vérification
     se fait avec un vrai message ou le rappel du mardi.
+7t. **La réponse citée se migre avant l'interface** — `getRecentMessages` et
+    `sendMessage` lisent les colonnes `reply_to_*`. Appliquer
+    `migrations/2026-11-10_tache34_reponse_chat.sql` d'abord sur la base de
+    test, puis en prod. La sauvegarde doit aussi restaurer les messages dans
+    l'ordre de `created_at` (pas `id`) : une réponse cite toujours un message
+    plus ancien, sinon la clé étrangère échoue.
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

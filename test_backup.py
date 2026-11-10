@@ -194,6 +194,46 @@ class ValidationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "absent de messages"):
             backup.validate_dump(dump)
 
+    def test_reponse_a_un_message_existant(self):
+        dump = with_chat()
+        dump["messages"].append(
+            {
+                "id": "m2",
+                "user_number": 2,
+                "body": "Réponse",
+                "reply_to_id": "m1",
+                "reply_to_body": "Salut",
+                "reply_to_user_number": 1,
+            }
+        )
+
+        counts = backup.validate_dump(dump)
+        self.assertEqual(counts["messages"], 2)
+
+    def test_reponse_a_un_message_absent(self):
+        dump = with_chat()
+        dump["messages"][0]["reply_to_id"] = "inconnu"
+        dump["messages"][0]["reply_to_body"] = "Texte conservé"
+        with self.assertRaisesRegex(
+            ValueError, "reply_to_id inconnu absent de messages"
+        ):
+            backup.validate_dump(dump)
+
+    def test_reponse_a_un_auteur_absent(self):
+        dump = with_chat()
+        dump["messages"][0]["reply_to_body"] = "Texte conservé"
+        dump["messages"][0]["reply_to_user_number"] = 99
+        with self.assertRaisesRegex(
+            ValueError, "reply_to_user_number 99 absent"
+        ):
+            backup.validate_dump(dump)
+
+    def test_reponse_trop_longue(self):
+        dump = with_chat()
+        dump["messages"][0]["reply_to_body"] = "a" * 501
+        with self.assertRaisesRegex(ValueError, "reply_to_body hors bornes"):
+            backup.validate_dump(dump)
+
     def test_chaque_table_a_son_tri_et_sa_cle(self):
         self.assertEqual(set(backup.TABLE_ORDER), set(backup.TABLES))
         self.assertEqual(set(backup.TABLE_KEYS), set(backup.TABLES))
@@ -228,6 +268,20 @@ class DeleteTest(unittest.TestCase):
         self.assertIn(
             "order=message_id.asc,user_number.asc", paths[0]
         )
+
+    def test_tri_chronologique_des_messages(self):
+        # Une réponse cite un message forcément plus ancien : réinsérer dans
+        # l'ordre de `created_at` évite une violation de clé étrangère.
+        paths = []
+
+        def fake_curl(method, path, body_file=None):
+            paths.append(path)
+            return b"[]"
+
+        with mock.patch.object(backup, "curl", side_effect=fake_curl):
+            backup.api_get("messages")
+
+        self.assertIn("order=created_at.asc,id.asc", paths[0])
 
 
 class SequenceTest(unittest.TestCase):

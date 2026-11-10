@@ -40,6 +40,7 @@ function setup(props: Partial<Parameters<typeof ChatMessageBubble>[0]> = {}) {
       onDelete={noop}
       onRetry={noop}
       onReact={noop}
+      onReply={noop}
       {...props}
     />
   )
@@ -244,15 +245,15 @@ describe('ChatMessageBubble — réactions', () => {
     )
 
     const palette = screen.getByRole('group', {
-      name: 'Choisir une réaction',
+      name: 'Actions du message',
     })
-    // Les cinq emoji sont proposés, avec un libellé compréhensible.
-    expect(within(palette).getAllByRole('button')).toHaveLength(6) // + Copier
+    // Les cinq emoji sont proposés, plus « Répondre » et « Copier ».
+    expect(within(palette).getAllByRole('button')).toHaveLength(7)
     fireEvent.click(within(palette).getByRole('button', { name: 'J’adore' }))
 
     expect(onReact).toHaveBeenCalledWith('love')
     expect(
-      screen.queryByRole('group', { name: 'Choisir une réaction' })
+      screen.queryByRole('group', { name: 'Actions du message' })
     ).not.toBeInTheDocument()
   })
 
@@ -305,7 +306,7 @@ describe('ChatMessageBubble — réactions', () => {
       act(() => vi.advanceTimersByTime(450))
 
       expect(
-        screen.getByRole('group', { name: 'Choisir une réaction' })
+        screen.getByRole('group', { name: 'Actions du message' })
       ).toBeInTheDocument()
     } finally {
       vi.useRealTimers()
@@ -332,7 +333,7 @@ describe('ChatMessageBubble — réactions', () => {
       act(() => vi.advanceTimersByTime(450))
 
       expect(
-        screen.queryByRole('group', { name: 'Choisir une réaction' })
+        screen.queryByRole('group', { name: 'Actions du message' })
       ).not.toBeInTheDocument()
     } finally {
       vi.useRealTimers()
@@ -348,7 +349,7 @@ describe('ChatMessageBubble — réactions', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
 
     expect(
-      screen.queryByRole('group', { name: 'Choisir une réaction' })
+      screen.queryByRole('group', { name: 'Actions du message' })
     ).not.toBeInTheDocument()
   })
 
@@ -395,10 +396,75 @@ describe('ChatMessageBubble — réactions', () => {
       act(() => vi.advanceTimersByTime(450))
 
       expect(
-        screen.getByRole('group', { name: 'Choisir une réaction' })
+        screen.getByRole('group', { name: 'Actions du message' })
       ).toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('ChatMessageBubble — réponse citée', () => {
+  it('affiche l’auteur et le texte du message cité, avant la réponse', () => {
+    setup({
+      message: message({
+        reply_to_id: 'm0',
+        reply_to_body: 'Le parcours de mercredi',
+        reply_to_user_number: 3,
+      }),
+    })
+
+    const bubble = screen
+      .getByText('Salut tout le monde')
+      .closest('.chat-message-text')
+
+    expect(within(bubble as HTMLElement).getByText('Bruno')).toBeInTheDocument()
+    expect(
+      within(bubble as HTMLElement).getByText('Le parcours de mercredi')
+    ).toBeInTheDocument()
+    // La citation précède la réponse dans l'ordre de lecture.
+    expect(bubble?.textContent?.indexOf('Le parcours de mercredi')).toBeLessThan(
+      bubble?.textContent?.indexOf('Salut tout le monde') ?? 0
+    )
+  })
+
+  it('garde la citation quand l’auteur n’est plus connu', () => {
+    setup({
+      message: message({
+        reply_to_id: null,
+        reply_to_body: 'Texte conservé',
+        reply_to_user_number: null,
+      }),
+    })
+
+    expect(screen.getByText('Message cité')).toBeInTheDocument()
+    expect(screen.getByText('Texte conservé')).toBeInTheDocument()
+  })
+
+  it('propose de répondre depuis la palette et la referme', () => {
+    const onReply = vi.fn()
+    setup({ onReply })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Réagir au message de Ada' })
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Répondre' }))
+
+    expect(onReply).toHaveBeenCalledTimes(1)
+    expect(
+      screen.queryByRole('group', { name: 'Actions du message' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('propose aussi de répondre à son propre message', () => {
+    const onReply = vi.fn()
+    setup({ isMine: true, onReply })
+
+    // Pas de bouton smiley sur ses messages : la palette s'ouvre au clic droit
+    // (ou par appui long sur mobile).
+    fireEvent.contextMenu(screen.getByText('Salut tout le monde'))
+    fireEvent.click(screen.getByRole('button', { name: 'Répondre' }))
+
+    expect(onReply).toHaveBeenCalledTimes(1)
   })
 })

@@ -5,7 +5,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import { Check, Copy, SmilePlus, Trash2 } from 'lucide-react'
+import { Check, Copy, Reply, SmilePlus, Trash2 } from 'lucide-react'
 import type { ChatMessage } from '../hooks/useMessages'
 import {
   REACTION_EMOJI,
@@ -39,6 +39,8 @@ interface ChatMessageBubbleProps {
   onDelete: () => void
   onRetry: () => void
   onReact: (reaction: ReactionKey) => void
+  /** Citer ce message dans la zone de saisie. */
+  onReply: () => void
 }
 
 /**
@@ -69,6 +71,7 @@ export function ChatMessageBubble({
   onDelete,
   onRetry,
   onReact,
+  onReply,
 }: ChatMessageBubbleProps) {
   const failed = message.status === 'failed'
   const sending = message.status === 'sending'
@@ -96,6 +99,14 @@ export function ChatMessageBubble({
   const myReaction = message.reactions?.find(
     (reaction) => reaction.user_number === me
   )?.reaction
+
+  // Auteur de la citation : l'instantané garde le numéro, le prénom vient de
+  // l'annuaire déjà chargé par la page. Un profil supprimé laisse le texte,
+  // sans nom : « Message cité » reste compréhensible.
+  const replyAuthor =
+    message.reply_to_user_number != null
+      ? names.get(message.reply_to_user_number) ?? 'Quelqu’un'
+      : 'Message cité'
 
   // Une ligne par personne (une seule réaction par personne et par message),
   // triée par prénom : la liste reste lisible et stable d'un polling à l'autre.
@@ -157,6 +168,13 @@ export function ChatMessageBubble({
     // Rendre le focus au bouton d'origine : au clavier, on ne se retrouve pas
     // nulle part après un choix.
     triggerRef.current?.focus()
+  }
+
+  function chooseReply() {
+    closePicker()
+    setReactorsKey(null)
+    // La zone de saisie prend le focus d'elle-même quand la cible change.
+    onReply()
   }
 
   async function copyBody() {
@@ -350,6 +368,32 @@ export function ChatMessageBubble({
               sending && 'opacity-60'
             )}
           >
+            {message.reply_to_body && (
+              <div
+                className={cn(
+                  // Citation : un bloc avant le texte, avec une barre à gauche
+                  // comme dans les messageries. Le texte est un instantané :
+                  // il reste lisible même si l'original a été purgé.
+                  'mb-1.5 rounded-lg border-l-2 px-2 py-1 text-xs',
+                  isMine
+                    ? 'border-white/70 bg-white/15 text-white'
+                    : 'border-accent/50 bg-gray-50 text-gray-600'
+                )}
+              >
+                <p
+                  className={cn(
+                    'font-medium',
+                    isMine ? 'text-white' : 'text-accent'
+                  )}
+                >
+                  {replyAuthor}
+                </p>
+                <p className="line-clamp-2 whitespace-pre-wrap break-words">
+                  {message.reply_to_body}
+                </p>
+              </div>
+            )}
+
             <span className="whitespace-pre-wrap break-words">
               {message.body}
             </span>
@@ -456,7 +500,7 @@ export function ChatMessageBubble({
           <div
             ref={pickerRef}
             role="group"
-            aria-label="Choisir une réaction"
+            aria-label="Actions du message"
             className={cn(
               'absolute z-30 w-[236px] rounded-xl border border-gray-200 bg-white p-1 shadow-lg',
               isMine ? 'right-0' : 'left-0',
@@ -483,6 +527,14 @@ export function ChatMessageBubble({
             </div>
 
             <div className="mt-1 border-t border-gray-100 pt-1">
+              <button
+                type="button"
+                onClick={chooseReply}
+                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm text-gray-600 transition-colors hover:bg-gray-50"
+              >
+                <Reply className="h-4 w-4" aria-hidden="true" />
+                Répondre
+              </button>
               <button
                 type="button"
                 onClick={() => void copyBody()}

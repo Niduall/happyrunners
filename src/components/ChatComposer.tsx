@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { Send } from 'lucide-react'
+import { Send, X } from 'lucide-react'
 import { Button } from './ui/Button'
 import {
   MAX_MESSAGE_LENGTH,
   isValidMessageBody,
   normalizeMessageBody,
+  type ReplyTarget,
 } from '../services/messages'
 import { cn } from '../lib/utils'
 
@@ -13,6 +14,11 @@ interface ChatComposerProps {
   canWrite: boolean
   onSend: (body: string) => Promise<boolean>
   onIdentify: () => void
+  /** Message cité, ou `null` quand on écrit sans réponse. */
+  replyTo?: ReplyTarget | null
+  /** Prénom de l'auteur cité, résolu par la page. */
+  replyToName?: string
+  onCancelReply?: () => void
 }
 
 /**
@@ -22,7 +28,14 @@ interface ChatComposerProps {
  * même en cas d'échec : le message reste affiché dans le fil avec un bouton
  * « Réessayer ». Le garder dans la zone créerait un doublon visuel.
  */
-export function ChatComposer({ canWrite, onSend, onIdentify }: ChatComposerProps) {
+export function ChatComposer({
+  canWrite,
+  onSend,
+  onIdentify,
+  replyTo = null,
+  replyToName,
+  onCancelReply,
+}: ChatComposerProps) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -38,6 +51,17 @@ export function ChatComposer({ canWrite, onSend, onIdentify }: ChatComposerProps
     element.style.height = 'auto'
     element.style.height = `${Math.min(element.scrollHeight, 96)}px`
   }, [text])
+
+  // Choisir « Répondre » dans la palette doit amener directement à la saisie :
+  // sinon il faut un second tap sur le champ.
+  useEffect(() => {
+    if (replyTo) textareaRef.current?.focus()
+  }, [replyTo])
+
+  const cancelReply = () => {
+    onCancelReply?.()
+    textareaRef.current?.focus()
+  }
 
   const submit = async () => {
     if (!canSend) return
@@ -73,47 +97,73 @@ export function ChatComposer({ canWrite, onSend, onIdentify }: ChatComposerProps
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex items-end gap-2">
-      <div className="min-w-0 flex-1">
-        <label htmlFor="chat-message" className="sr-only">
-          Ton message
-        </label>
-        <textarea
-          id="chat-message"
-          ref={textareaRef}
-          rows={1}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Écris un message…"
-          aria-describedby={tooLong ? 'chat-message-compteur' : undefined}
-          className="w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 sm:text-sm"
-        />
-        {(body.length > 400 || tooLong) && (
-          <p
-            id="chat-message-compteur"
-            role={tooLong ? 'alert' : undefined}
-            className={cn(
-              'mt-1 text-right text-xs',
-              tooLong ? 'text-error' : 'text-gray-500'
-            )}
+    <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+      {replyTo && (
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-lg border-l-2 border-accent bg-accent/5 px-3 py-2"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-accent">
+              Réponse à {replyToName ?? 'quelqu’un'}
+            </p>
+            <p className="mt-0.5 line-clamp-2 whitespace-pre-wrap break-words text-xs text-gray-600">
+              {replyTo.body}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={cancelReply}
+            aria-label="Annuler la réponse"
+            className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-500 after:absolute after:-inset-1.5 after:content-[''] hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           >
-            {body.length}/{MAX_MESSAGE_LENGTH}
-          </p>
-        )}
-      </div>
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
-      <Button
-        type="submit"
-        variant="accent"
-        size="sm"
-        disabled={!canSend}
-        aria-label="Envoyer le message"
-        className="shrink-0"
-      >
-        <Send className="w-4 h-4" />
-        <span className="hidden sm:inline">Envoyer</span>
-      </Button>
+      <div className="flex items-end gap-2">
+        <div className="min-w-0 flex-1">
+          <label htmlFor="chat-message" className="sr-only">
+            Ton message
+          </label>
+          <textarea
+            id="chat-message"
+            ref={textareaRef}
+            rows={1}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Écris un message…"
+            aria-describedby={tooLong ? 'chat-message-compteur' : undefined}
+            className="w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 sm:text-sm"
+          />
+          {(body.length > 400 || tooLong) && (
+            <p
+              id="chat-message-compteur"
+              role={tooLong ? 'alert' : undefined}
+              className={cn(
+                'mt-1 text-right text-xs',
+                tooLong ? 'text-error' : 'text-gray-500'
+              )}
+            >
+              {body.length}/{MAX_MESSAGE_LENGTH}
+            </p>
+          )}
+        </div>
+
+        <Button
+          type="submit"
+          variant="accent"
+          size="sm"
+          disabled={!canSend}
+          aria-label="Envoyer le message"
+          className="shrink-0"
+        >
+          <Send className="w-4 h-4" />
+          <span className="hidden sm:inline">Envoyer</span>
+        </Button>
+      </div>
     </form>
   )
 }

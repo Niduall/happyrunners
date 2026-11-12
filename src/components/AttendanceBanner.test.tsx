@@ -30,7 +30,7 @@ describe('AttendanceBanner', () => {
 
     expect(classes('Je viens')).not.toContain('bg-primary')
     expect(classes("Pas cette semaine")).not.toContain('bg-error')
-    expect(classes("Pas cette semaine")).not.toContain('bg-gray-100')
+    expect(classes("Pas cette semaine")).not.toContain('bg-gray-700')
     expect(bouton('Je viens')).toHaveAttribute('aria-pressed', 'false')
     expect(bouton("Pas cette semaine")).toHaveAttribute('aria-pressed', 'false')
   })
@@ -46,7 +46,10 @@ describe('AttendanceBanner', () => {
   it('remplit « Pas cette semaine » seulement quand il est choisi', () => {
     renderBanner('skip')
 
-    expect(classes("Pas cette semaine")).toContain('bg-gray-100')
+    // Gris foncé rempli : un gris clair se confondait avec le contour
+    // « Je viens », on ne voyait pas que la réponse était enregistrée.
+    expect(classes("Pas cette semaine")).toContain('bg-gray-700')
+    expect(classes("Pas cette semaine")).toContain('text-white')
     expect(classes("Pas cette semaine")).not.toContain('bg-error')
     expect(bouton("Pas cette semaine")).toHaveAttribute('aria-pressed', 'true')
     // Rien ne doit suggérer un « oui » quand on a répondu non

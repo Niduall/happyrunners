@@ -2,13 +2,17 @@ import { forwardRef, type ButtonHTMLAttributes } from 'react'
 import { cn } from '../../lib/utils'
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'accent'
+  variant?: 'primary' | 'secondary' | 'neutral' | 'outline' | 'ghost' | 'danger' | 'accent'
   size?: 'sm' | 'md' | 'lg'
 }
 
 const variants = {
   primary: 'bg-primary text-white hover:bg-primary-hover focus:ring-primary',
   secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200 focus:ring-gray-500',
+  // Réponse choisie qui n'est ni un « oui » ni une action destructive :
+  // gris foncé rempli, d'un poids visuel comparable au violet de « Je viens ».
+  // Le gris clair de `secondary` se confondait avec le contour non choisi.
+  neutral: 'bg-gray-700 text-white hover:bg-gray-800 focus:ring-gray-700',
   outline: 'border-2 border-primary text-primary hover:bg-primary/10 focus:ring-primary',
   ghost: 'text-primary hover:bg-primary/10 focus:ring-primary',
   danger: 'bg-error text-white hover:bg-error/90 focus:ring-error',

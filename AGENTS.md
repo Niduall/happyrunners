@@ -530,7 +530,9 @@ mardi. Ne pas le réintroduire.
   titres de section, les cartes ou le tableau.
 - **Refuser une sortie n'est pas une action destructive** : « Pas cette
   semaine » est gris, jamais rouge. Le rouge est réservé aux suppressions et
-  aux erreurs.
+  aux erreurs. Une fois choisi, il est **rempli en gris foncé** (`neutral`) :
+  le gris clair se confondait avec le contour violet resté sur « Je viens »,
+  on ne voyait pas que la réponse était enregistrée.
 - **Un seul titre par bloc** : la carte météo n'a pas de titre (celui de la
   section suffit) ; le tableau de présence n'a **ni titre ni récapitulatif**
   au-dessus ou en dessous — ses trois en-têtes de groupe portent le compte

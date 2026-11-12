@@ -50,9 +50,11 @@ export function AttendanceBanner({ myStatus, saving, subtitle, onChange }: Atten
               Je viens
             </Button>
             {/* Refuser une sortie n'est pas une action destructive : gris,
-                jamais rouge. Le rouge reste réservé aux suppressions. */}
+                jamais rouge. Une fois choisi, le bouton est rempli en gris
+                foncé : le gris clair se distinguait mal du contour violet
+                resté sur « Je viens ». */}
             <Button
-              variant={myStatus === 'skip' ? 'secondary' : 'outline'}
+              variant={myStatus === 'skip' ? 'neutral' : 'outline'}
               size="sm"
               disabled={saving}
               onClick={() => onChange('skip')}

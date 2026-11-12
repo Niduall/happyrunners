@@ -42,4 +42,12 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
   },
+  // Playwright écrit ses traces et captures dans le projet pendant les tests
+  // E2E. Sans cette exclusion, Vite les voit comme des fichiers modifiés et
+  // recharge la page en pleine action — ce qui annule l'envoi d'un message.
+  server: {
+    watch: {
+      ignored: ['**/test-results/**', '**/playwright-report/**'],
+    },
+  },
 })

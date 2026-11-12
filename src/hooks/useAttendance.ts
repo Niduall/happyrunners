@@ -51,6 +51,10 @@ export function useAttendance(): AttendanceState {
   const [error, setError] = useState<string | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const requestIdRef = useRef(0)
+  // Incrémenté à chaque écriture optimiste. Une réponse de chargement partie
+  // avant l'écriture décrit un état antérieur : l'appliquer ferait disparaître
+  // « Je viens » jusqu'au polling suivant.
+  const mutationRef = useRef(0)
 
   const { weekKey, weekLabel } = useTargetWednesday()
   // Clé courante, lue au moment où la réponse arrive : une requête partie
@@ -65,12 +69,13 @@ export function useAttendance(): AttendanceState {
 
       const requestId = ++requestIdRef.current
       const requestedWeekKey = weekKey
+      const mutation = mutationRef.current
       const isStale = () =>
         requestId !== requestIdRef.current || requestedWeekKey !== weekKeyRef.current
 
       try {
         const list = await getWeekAttendances(requestedWeekKey)
-        if (isStale()) return
+        if (isStale() || mutation !== mutationRef.current) return
         setAttendees((prev) => (sameAttendees(prev, list) ? prev : list))
         setMyStatusState(list.find((a) => a.userNumber === user.id)?.status ?? null)
         if (!opts?.keepError) setError(null)
@@ -122,6 +127,9 @@ export function useAttendance(): AttendanceState {
 
       const previous = myStatus
       const actionWeekKey = weekKey
+      // Invalide les chargements déjà partis : leur réponse ne connaît pas
+      // encore cette écriture et écraserait l'état optimiste.
+      mutationRef.current += 1
       // Optimiste : la ligne est remplacée, pas dupliquée
       setMyStatusState(status)
       setAttendees((prev) => [

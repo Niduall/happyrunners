@@ -34,6 +34,8 @@ yarn-error.log*
 
 # Testing
 coverage/
+playwright-report/
+test-results/
 
 # Python (backup.py)
 __pycache__/

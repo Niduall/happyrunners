@@ -30,6 +30,8 @@ npm run build      # TypeScript check + Vite build
 npm run preview    # Preview production build
 npm test           # Unit + integration tests (Vitest)
 npm test:watch     # Watch mode
+npm run test:e2e   # Bout en bout (Playwright, base de test)
+npm run test:e2e:ui
 npm run lint       # ESLint (TypeScript + règles React hooks)
 npm run lint:fix   # ESLint avec corrections automatiques
 npm run typecheck  # tsc --noEmit
@@ -132,6 +134,12 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - `useProfiles` (annuaire) ne se recharge **pas** en boucle : il ne dépend pas
   de la semaine. Une personne qui s'inscrit apparaît dès qu'elle répond, puis
   avec tout le monde au rechargement suivant.
+- **Une écriture optimiste invalide les chargements déjà partis** : dans
+  `useAttendance`, `setMyStatus` incrémente `mutationRef`, et `loadAll` ignore
+  une réponse dont la mutation a changé entre-temps. Sans ça, cliquer
+  « Je viens » pendant le chargement initial réappliquait l'ancien état et
+  verrouillait les parcours jusqu'au polling suivant (30 s). Même principe que
+  `mutationRef` dans `useMessages`.
 
 ### Fil de discussion (chat)
 - Table `messages` : **pas de `week_key`**. La fenêtre est **glissante de
@@ -680,6 +688,7 @@ Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour l
 | `src/hooks/useAuth.integration.test.tsx` | flux auth complet + partage d'état |
 | `src/hooks/useParcoursVotes.test.tsx` | votes hebdo, tri, pendingCount, optimisme |
 | `src/hooks/useParcoursVotes.attendance.test.tsx` | un vote sans présence ne compte pas |
+| `src/hooks/useAttendance.test.tsx` | réponse optimiste, échec, course avec un chargement déjà parti |
 | `src/services/adminCode.test.ts` | verrou admin, ne mémorise rien |
 | `src/pages/ParcoursList.admin.test.tsx` | portée du déverrouillage (page + personne) |
 | `src/services/schema.test.ts` | `schema.sql` rejouable et à jour |
@@ -697,6 +706,31 @@ Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour l
 | `src/test/setup.ts` | mock Supabase global + cleanup |
 
 Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
+
+### Bout en bout (Playwright)
+
+```bash
+npm run test:e2e       # 3 scénarios, Chrome local
+npm run test:e2e:ui    # mode interface
+```
+
+`playwright.config.ts` démarre lui-même `npm run dev:test` sur le port 5175 :
+les scénarios tournent **uniquement sur la base de test** (`.env.test`).
+
+- Trois parcours : connexion → présence/vote, envoi d'un message avec réponse
+  citée, réaction puis « qui a réagi ».
+- Compte dédié **Test E2E** (prénom/nom), créé au premier passage via
+  « Passer sans PIN ». Ses messages sont supprimés en fin de scénario ; sa
+  présence est remise à « Pas cette semaine ».
+- **Un seul worker** : les scénarios partagent la base de test.
+- macOS 13 : le Chromium fourni par Playwright ne s'installe pas. On utilise
+  `channel: 'chrome'` (Chrome du système). Sur une autre machine, retirer
+  cette ligne et lancer `npx playwright install chromium`.
+- `vite.config.ts` ignore `test-results/` et `playwright-report/` : sans ça,
+  Vite recharge la page quand Playwright écrit une trace, ce qui annule les
+  requêtes en cours (le message restait en « Envoi… »).
+- La CI ne les lance pas encore : ils écrivent dans la base de test et
+  demandent un navigateur.
 
 ## Deployment
 - GitHub : `Niduall/happyrunners` (branche `main`)
@@ -782,6 +816,15 @@ Ajouter un test pour toute nouvelle logique d'auth ou d'identification.
     test, puis en prod. La sauvegarde doit aussi restaurer les messages dans
     l'ordre de `created_at` (pas `id`) : une réponse cite toujours un message
     plus ancien, sinon la clé étrangère échoue.
+7u. **Playwright écrit dans le projet** — traces, captures et rapports vont
+    dans `test-results/` et `playwright-report/`. Sans les exclure du watcher
+    Vite (`server.watch.ignored`), le serveur recharge la page en pleine
+    action et annule les requêtes en cours. Symptôme : un message reste en
+    « Envoi… » alors que la ligne existe en base.
+7v. **Une écriture optimiste doit invalider les chargements partis avant**
+    (`mutationRef` dans `useAttendance` et `useMessages`). Sinon la réponse
+    d'un chargement antérieur réapplique l'ancien état : « Je viens » semble
+    ne pas être pris en compte jusqu'au polling suivant.
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

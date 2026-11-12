@@ -1,6 +1,6 @@
 # Feuille de route — HappyRunners
 
-Dernière mise à jour : **10 novembre 2026**
+Dernière mise à jour : **12 novembre 2026**
 
 Cette feuille de route garde les idées d’amélioration et les fonctionnalités
 envisagées, avec leur priorité et leur coût. Elle ne remplace pas `AGENTS.md`
@@ -39,6 +39,12 @@ un artefact chiffré conservé 30 jours.
 |---|---|---|---|
 | **Répondre à un message** | Réponse citée dans le chat (`reply_to_id`), avec un aperçu du message d’origine. Utile dès qu’on est nombreux. L’aperçu est un instantané (`reply_to_body`, `reply_to_user_number`) qui survit à la purge des 30 jours. | M | ✅ Livré |
 
+## Livré — Tests de bout en bout (12 novembre 2026)
+
+| Tâche | Pourquoi | Effort | État |
+|---|---|---|---|
+| **Tests de bout en bout** | Trois scénarios Playwright sur la base de test : connexion → présence/vote, envoi d’un message avec réponse citée, réaction puis « qui a réagi ». Ils ont déjà révélé une course entre « Je viens » et le chargement initial, corrigée. | M | ✅ Livré |
+
 ## À faire ensuite
 
 ### Priorité 1 — fort impact
@@ -54,7 +60,6 @@ un artefact chiffré conservé 30 jours.
 |---|---|---|
 | **Message épinglé** | Un message important (parcours du jour, consignes) reste en haut du fil. | S/M |
 | **Annulation météo** | État « Sortie annulée » avec motif, visible sur Home et notifié aux personnes qui viennent. | M |
-| **Tests de bout en bout** | Trois scénarios Playwright : connexion → présence/vote, envoi dans le chat, réaction + « qui a réagi ». Couvre les régressions visuelles et de déploiement. | M |
 
 ### Priorité 3 — selon le besoin réel
 
@@ -88,6 +93,8 @@ un artefact chiffré conservé 30 jours.
 - Pages secondaires (`Admin`, `Chat`, `ParcoursList`) chargées à la demande.
 - Fichier d’agenda `.ics` de la sortie du mercredi et partage de l’app.
 - Notifications push résilientes, préférences par personne, rappel du mardi.
+- Tests E2E Playwright (connexion/vote, chat + réponse citée, réactions), sur la
+  base de test uniquement.
 - PIN optionnel, appareil de confiance, console de réinitialisation admin.
 - Météo Open-Meteo 16 jours, bandeau « autour de 12h30 ».
 - Présences, votes multi-parcours, tableau « Qui vient ? ».

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { AuthProvider } from './useAuth'
-import { useAttendance } from './useAttendance'
+import { useAttendance, type Attendee } from './useAttendance'
 import { getWeekAttendances, setAttendance, deleteWeekVote, getUserProfile } from '../services/supabaseService'
 
 vi.mock('../services/supabaseService', () => ({
@@ -212,6 +212,32 @@ describe('useAttendance — « pas aujourd’hui » retire le choix de parcours'
       await result.current.setMyStatus('skip')
     })
     expect(result.current.showParcours).toBe(false)
+  })
+
+  it('une réponse de chargement partie avant l’écriture n’écrase pas « je viens »', async () => {
+    // Régression vue en E2E : cliquer « Je viens » pendant le chargement
+    // initial laissait les parcours verrouillés jusqu'au polling suivant,
+    // car la réponse partie avant l'écriture réappliquait l'ancien état.
+    const initialLoad = deferred<Attendee[]>()
+    mockAttendances.mockReturnValue(initialLoad.promise)
+
+    const { result } = renderAttendance()
+    await waitFor(() => expect(mockAttendances).toHaveBeenCalled())
+
+    await act(async () => {
+      await result.current.setMyStatus('going')
+    })
+    expect(result.current.myStatus).toBe('going')
+    expect(result.current.showParcours).toBe(true)
+
+    // La requête partie avant l'écriture revient avec l'état d'avant.
+    await act(async () => {
+      initialLoad.resolve([])
+      await initialLoad.promise
+    })
+
+    expect(result.current.myStatus).toBe('going')
+    expect(result.current.showParcours).toBe(true)
   })
 
   it('ré-affiche les préférences si on revient sur « je viens »', async () => {

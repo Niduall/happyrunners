@@ -174,6 +174,18 @@ passer par `npm run dev:test` ou `backup.py --env .env.test` ; la prod est
 réservée aux utilisateurs. Seule lecture autorisée sur la prod :
 `python3 backup.py save`.
 
+## Tests
+
+```bash
+npm test           # unitaires + intégration (Vitest)
+npm run test:e2e   # bout en bout (Playwright, base de test)
+```
+
+Les tests E2E démarrent leur propre serveur `dev:test` et utilisent un compte
+dédié « Test E2E » : ils ne touchent jamais la prod. Ils nécessitent Chrome
+(`channel: 'chrome'` sur macOS 13, où le Chromium de Playwright ne s'installe
+pas).
+
 ## Build production
 
 ```bash

@@ -79,8 +79,10 @@ python3 backup.py restore <fichier> --allow-empty
 ```
 
 `save` pagine par 1 000 lignes : aucune table n'est tronquée. Il couvre les
-huit tables, y compris le chat (`messages`, `message_reactions`) et le push
-(`push_subscriptions`, `notification_preferences`). `restore` valide le
+neuf tables, y compris le chat (`messages`, `message_reactions`), le push
+(`push_subscriptions`, `notification_preferences`) et l'historique
+(`weekly_runs`). Un dump antérieur à l'historique reste restaurable : la
+table est simplement recréée vide. `restore` valide le
 fichier avant de supprimer quoi que ce soit (tables, comptes, clés
 étrangères), prend automatiquement une sauvegarde
 `happyrunners-pre-restore-<date>.json`, puis vérifie les comptes après
@@ -217,7 +219,7 @@ backup.py           # export / restauration
 ARCHITECTURE.md     # machine à états, flux, points d'attention
 src/
 ├── components/     # Auth, UserMenu, SecurityModal, WeatherCard, ParticipantsTable…
-├── pages/          # Home, ParcoursList
+├── pages/          # Home, ParcoursList, Chat, History, Admin
 ├── hooks/          # useAuth, useParcours, useParcoursVotes, useAttendance…
 ├── services/       # supabaseService, weatherApi, gpxParser, storage, weekKey
 ├── types/          # interfaces TypeScript
@@ -226,5 +228,29 @@ src/
 
 ## Historique des sorties
 
-Pas encore implémenté. L'app ne conserve qu'une semaine active : elle bascule
-sur le mercredi suivant à 14h (voir `weekKey.ts`).
+`/historique` (réservé aux personnes connectées) affiche les **12 derniers
+mercredis** : présents, vote indicatif et sorties **réellement courues**.
+
+- Le vote ne dit pas ce qui a été fait. Le parcours le plus voté reste un
+  simple indice, jamais un fait.
+- **Chacun déclare son propre parcours** (liste des parcours ou « autre » avec
+  un libellé libre), et peut le corriger ou **retirer sa sortie**. Le groupe ne
+  fait pas toujours le même parcours : une ligne par personne et par mercredi.
+- **Une sortie se déclare jusqu'au mercredi suivant 14h.** Ensuite la semaine
+  est figée : plus de bouton, et l'application refuse l'écriture. Un oubli
+  après la bascule est donc définitif — c'est la règle annoncée à l'écran.
+  C'est une règle d'interface, pas une authentification serveur.
+- **L'accueil rappelle la sortie manquante** : une carte propose de l'indiquer
+  dès 12h30 le jour du run, puis jusqu'au mercredi suivant 14h. Elle disparaît
+  une fois la sortie déclarée.
+- **Aucune présélection dans la modale** sans sortie déjà déclarée ni vote : le
+  bouton « Enregistrer » reste inactif tant qu'aucun parcours n'est choisi.
+- Déclarer une sortie remet la présence de la semaine à « going » : quelqu'un
+  qui a couru sans avoir répondu peut tout de même la renseigner.
+- Les stats sont personnelles : sorties, série en cours, cumul des km et du
+  D+ **connus**. Une sortie « autre » compte comme sortie mais n'invente ni
+  distance ni dénivelé.
+
+Table : `weekly_runs`, clé `(week_key, user_number)`. Le nom du parcours, la
+distance et le dénivelé sont figés à la déclaration pour survivre à la
+suppression ou au renommage d'un parcours.

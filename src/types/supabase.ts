@@ -169,3 +169,45 @@ export interface NotificationPreferences {
   messages: boolean
   runReminder: boolean
 }
+
+/**
+ * Origine du parcours déclaré.
+ *
+ * `manual` aujourd'hui ; `gpx` et `strava` sont prévus pour une preuve de
+ * tracé. La colonne existe dès la première migration pour éviter un second
+ * changement de schéma le jour où l'import arrivera.
+ */
+export type WeeklyRunSource = 'manual' | 'gpx' | 'strava'
+
+/**
+ * Sortie réellement courue par une personne, une ligne par personne et par
+ * mercredi passé.
+ *
+ * `parcours_name`, `distance_km` et `elevation_gain_m` sont des instantanés
+ * pris à la déclaration : renommer, modifier ou supprimer un parcours ne
+ * réécrit pas les totaux d'une ligue passée.
+ *
+ * Une sortie « autre » a `parcours_id` NULL et son libellé libre dans
+ * `parcours_name` ; sa distance reste NULL.
+ */
+export interface WeeklyRun {
+  week_key: string
+  user_number: number
+  parcours_id: string | null
+  parcours_name: string
+  source: WeeklyRunSource
+  distance_km: number | null
+  elevation_gain_m: number | null
+  declared_at: string
+  updated_at: string
+}
+
+export interface WeeklyRunInsert {
+  week_key: string
+  user_number: number
+  parcours_id: string | null
+  parcours_name: string
+  source?: WeeklyRunSource
+  distance_km?: number | null
+  elevation_gain_m?: number | null
+}

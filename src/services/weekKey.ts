@@ -20,6 +20,10 @@ const MS_PER_DAY = 86_400_000
 /** Heure locale de bascule (le run de 12h30 est terminé) */
 const SWITCH_HOUR = 14
 
+/** Le run part à 12h30 : avant, la sortie du jour n'a pas encore eu lieu. */
+const RUN_HOUR = 12
+const RUN_MINUTE = 30
+
 function toISODate(date: Date): string {
   const y = date.getFullYear()
   const m = String(date.getMonth() + 1).padStart(2, '0')
@@ -73,6 +77,21 @@ export function formatWeekLabel(weekKey: string, locale = 'fr-FR'): string {
 export function isRunDay(weekKey: string, from: Date = new Date()): boolean {
   if (from.getDay() === 3 && from.getHours() >= SWITCH_HOUR) return false
   return weekKey === toISODate(from)
+}
+
+/**
+ * true à partir de 12h30 le mercredi, jusqu'à la bascule de 14h.
+ *
+ * Sert à proposer la déclaration de la sortie dès la fin du run, sans attendre
+ * 14h : c'est le moment où l'on y pense. Avant 12h30, la sortie n'a pas eu
+ * lieu ; après 14h, la semaine a basculé et `isRunDay` est déjà faux.
+ */
+export function hasRunStarted(weekKey: string, from: Date = new Date()): boolean {
+  if (!isRunDay(weekKey, from)) return false
+  return (
+    from.getHours() > RUN_HOUR ||
+    (from.getHours() === RUN_HOUR && from.getMinutes() >= RUN_MINUTE)
+  )
 }
 
 /** Nombre de semaines entre deux clés (utile pour l'historique) */

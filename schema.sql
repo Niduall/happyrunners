@@ -216,6 +216,54 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
 );
 
 -- ---------------------------------------------------------------------------
+-- Table : weekly_runs
+-- ---------------------------------------------------------------------------
+-- Ce que chaque personne a RÉELLEMENT couru, une ligne par personne et par
+-- mercredi passé. Le groupe ne fait pas toujours le même parcours.
+--
+-- Le vote (`participations`) dit ce que le groupe préférait ; cette table dit
+-- ce qui a été fait, personne par personne. Les deux restent séparées : le
+-- parcours gagnant d'un vote n'est jamais présenté comme un fait.
+--
+-- `parcours_name`, `distance_km` et `elevation_gain_m` sont des INSTANTANÉS
+-- pris à la déclaration : renommer, modifier ou supprimer un parcours ne
+-- réécrit pas les totaux d'une ligue passée. `parcours_id` reste un lien
+-- facultatif vers le tracé (`ON DELETE SET NULL`).
+--
+-- Une sortie « autre » a `parcours_id` NULL et son libellé libre dans
+-- `parcours_name`. Sa distance reste NULL : on ne compte que le connu.
+--
+-- `source` prépare la preuve de tracé : `manual` aujourd'hui, `gpx` puis
+-- `strava` quand elle existera. Aucune de ces sources n'est encore écrite.
+CREATE TABLE IF NOT EXISTS weekly_runs (
+  week_key          text    NOT NULL,
+  user_number       integer NOT NULL
+                      REFERENCES user_profiles(user_number) ON DELETE CASCADE,
+  parcours_id       uuid REFERENCES parcours(id) ON DELETE SET NULL,
+  parcours_name     text    NOT NULL CHECK (btrim(parcours_name) <> ''),
+  source            text    NOT NULL DEFAULT 'manual'
+                      CHECK (source IN ('manual', 'gpx', 'strava')),
+  distance_km       numeric
+                      CHECK (distance_km IS NULL OR distance_km >= 0),
+  elevation_gain_m  numeric
+                      CHECK (elevation_gain_m IS NULL OR elevation_gain_m >= 0),
+  declared_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at        timestamptz NOT NULL DEFAULT now(),
+  -- Une seule sortie par personne et par semaine.
+  PRIMARY KEY (week_key, user_number)
+);
+
+-- `ON DELETE SET NULL` met à jour les lignes qui pointent vers le parcours
+-- supprimé : sans cet index, chaque suppression parcourrait toute la table.
+CREATE INDEX IF NOT EXISTS idx_weekly_runs_parcours
+  ON weekly_runs USING btree (parcours_id);
+
+-- La clé primaire commence par `week_key` : les statistiques personnelles
+-- (toutes les semaines d'une personne) ont besoin de cet index.
+CREATE INDEX IF NOT EXISTS idx_weekly_runs_user
+  ON weekly_runs USING btree (user_number);
+
+-- ---------------------------------------------------------------------------
 -- Règle métier : un vote exige une présence « going »
 -- ---------------------------------------------------------------------------
 -- La règle était purement côté client : un vote pouvait exister sans présence
@@ -299,6 +347,20 @@ CREATE TRIGGER attendances_remove_vote_on_delete
   EXECUTE FUNCTION remove_vote_when_not_going();
 
 -- ---------------------------------------------------------------------------
+-- Historique : pas de trigger de présence, volontairement
+-- ---------------------------------------------------------------------------
+-- La tâche 35 a d'abord imposé `attendances.status = 'going'` pour confirmer
+-- le parcours du groupe. Le modèle est devenu « une sortie par personne » :
+-- chacun déclare la sienne, et l'application remet sa présence à « going »
+-- pour la semaine au moment de la déclaration. Exiger la présence *avant*
+-- la déclaration bloquerait précisément les personnes qui ont couru sans
+-- avoir répondu, cas explicitement accepté.
+--
+-- La cohérence est donc tenue côté application (`declareWeeklyRun` écrit la
+-- présence puis la sortie) : il n'y a pas d'authentification serveur qui
+-- permettrait de vérifier « c'est bien moi », un trigger ne protégerait rien.
+
+-- ---------------------------------------------------------------------------
 -- Mise à jour automatique de updated_at
 -- ---------------------------------------------------------------------------
 -- `castWeekVote()` et `setAttendance()` font un upsert sans toucher
@@ -345,6 +407,11 @@ CREATE TRIGGER trg_notification_preferences_touch
   BEFORE UPDATE ON notification_preferences
   FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 
+DROP TRIGGER IF EXISTS trg_weekly_runs_touch ON weekly_runs;
+CREATE TRIGGER trg_weekly_runs_touch
+  BEFORE UPDATE ON weekly_runs
+  FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
 -- =============================================================================
 -- Row Level Security
 -- =============================================================================
@@ -365,6 +432,7 @@ ALTER TABLE messages                 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE message_reactions        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE push_subscriptions       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_preferences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE weekly_runs              ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS profils_lire      ON user_profiles;
 DROP POLICY IF EXISTS profils_inserer   ON user_profiles;
@@ -449,6 +517,19 @@ CREATE POLICY notification_preferences_lire      ON notification_preferences FOR
 CREATE POLICY notification_preferences_inserer   ON notification_preferences FOR INSERT WITH CHECK (true);
 CREATE POLICY notification_preferences_modifier  ON notification_preferences FOR UPDATE USING (true) WITH CHECK (true);
 CREATE POLICY notification_preferences_supprimer ON notification_preferences FOR DELETE USING (true);
+
+-- Historique : quatre politiques, UPDATE comprise. Corriger une confirmation
+-- est un upsert `ON CONFLICT DO UPDATE` ; sans politique UPDATE, seul le
+-- premier enregistrement passerait.
+DROP POLICY IF EXISTS weekly_runs_lire      ON weekly_runs;
+DROP POLICY IF EXISTS weekly_runs_inserer   ON weekly_runs;
+DROP POLICY IF EXISTS weekly_runs_modifier  ON weekly_runs;
+DROP POLICY IF EXISTS weekly_runs_supprimer ON weekly_runs;
+
+CREATE POLICY weekly_runs_lire      ON weekly_runs FOR SELECT USING (true);
+CREATE POLICY weekly_runs_inserer   ON weekly_runs FOR INSERT WITH CHECK (true);
+CREATE POLICY weekly_runs_modifier  ON weekly_runs FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY weekly_runs_supprimer ON weekly_runs FOR DELETE USING (true);
 
 -- =============================================================================
 -- Tables héritées à supprimer

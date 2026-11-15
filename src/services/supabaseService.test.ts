@@ -15,6 +15,11 @@ import {
   deletePushSubscription,
   getNotificationPreferences,
   saveNotificationPreferences,
+  getHistoryAttendances,
+  getHistoryVotes,
+  getWeeklyRuns,
+  declareWeeklyRun,
+  deleteWeeklyRun,
 } from './supabaseService'
 import { hashPin } from './pin'
 import { supabase } from '../lib/supabase'
@@ -571,5 +576,169 @@ describe('préférences de notification', () => {
     await expect(
       saveNotificationPreferences(14, { messages: true, runReminder: false })
     ).rejects.toThrow('réglage refusé')
+  })
+})
+
+describe('historique — lectures groupées', () => {
+  it('ne fait aucune requête sans semaine demandée', async () => {
+    await expect(getHistoryAttendances([])).resolves.toEqual([])
+    await expect(getHistoryVotes([])).resolves.toEqual([])
+    await expect(getWeeklyRuns([])).resolves.toEqual([])
+  })
+
+  it('rattache les noms aux présences de plusieurs semaines', async () => {
+    mockAttendanceRows.mockReturnValue([
+      { week_key: '2026-11-04', user_number: 1, status: 'going' },
+      { week_key: '2026-10-28', user_number: 2, status: 'skip' },
+    ])
+    mockProfiles.mockReturnValue([
+      { user_number: 1, first_name: 'Ada', last_name: 'Lovelace' },
+      { user_number: 2, first_name: 'Alan', last_name: 'Turing' },
+    ])
+
+    const list = await getHistoryAttendances(['2026-11-04', '2026-10-28'])
+
+    expect(list).toEqual([
+      {
+        weekKey: '2026-11-04',
+        userNumber: 1,
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        status: 'going',
+      },
+      {
+        weekKey: '2026-10-28',
+        userNumber: 2,
+        firstName: 'Alan',
+        lastName: 'Turing',
+        status: 'skip',
+      },
+    ])
+  })
+
+  it('garde les statuts quand les noms sont indisponibles', async () => {
+    mockAttendanceRows.mockReturnValue([
+      { week_key: '2026-11-04', user_number: 7, status: 'going' },
+    ])
+    mockProfilesError.mockReturnValue(new Error('annuaire en panne'))
+
+    const list = await getHistoryAttendances(['2026-11-04'])
+
+    expect(list[0]).toMatchObject({
+      userNumber: 7,
+      firstName: 'Membre',
+      lastName: '#7',
+      status: 'going',
+    })
+  })
+
+  it('relit les votes avec leur semaine', async () => {
+    mockRows.mockReturnValue([
+      {
+        week_key: '2026-11-04',
+        parcours_id: 'p1',
+        user_number: 1,
+        status: 'yes',
+      },
+    ])
+
+    await expect(getHistoryVotes(['2026-11-04'])).resolves.toEqual([
+      {
+        weekKey: '2026-11-04',
+        parcoursId: 'p1',
+        userNumber: 1,
+        status: 'yes',
+      },
+    ])
+  })
+
+  it('propage une erreur de lecture de l’historique', async () => {
+    mockError.mockReturnValue(new Error('lecture refusée'))
+
+    await expect(getWeeklyRuns(['2026-11-04'])).rejects.toThrow(
+      'lecture refusée'
+    )
+  })
+})
+
+describe('declareWeeklyRun', () => {
+  it('remet la présence à « going » puis écrit la sortie', async () => {
+    await declareWeeklyRun({
+      weekKey: '2026-11-04',
+      userNumber: 3,
+      parcoursId: 'p1',
+      parcoursName: 'Bords de Marne',
+      distanceKm: 8.4,
+      elevationGainM: 120,
+    })
+
+    expect(mockUpsertValues).toHaveBeenNthCalledWith(1, {
+      week_key: '2026-11-04',
+      user_number: 3,
+      status: 'going',
+    })
+    expect(mockUpsertValues).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        week_key: '2026-11-04',
+        user_number: 3,
+        parcours_id: 'p1',
+        parcours_name: 'Bords de Marne',
+        source: 'manual',
+        distance_km: 8.4,
+        elevation_gain_m: 120,
+      })
+    )
+    expect(mockUpsertOptions).toHaveBeenLastCalledWith({
+      onConflict: 'week_key,user_number',
+    })
+  })
+
+  it('n’invente pas de distance pour une sortie « autre »', async () => {
+    await declareWeeklyRun({
+      weekKey: '2026-11-04',
+      userNumber: 3,
+      parcoursId: null,
+      parcoursName: 'Boucle du parc',
+    })
+
+    expect(mockUpsertValues).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        parcours_id: null,
+        parcours_name: 'Boucle du parc',
+        distance_km: null,
+        elevation_gain_m: null,
+      })
+    )
+  })
+
+  it('propage une erreur d’enregistrement', async () => {
+    mockError.mockReturnValue(new Error('écriture refusée'))
+
+    await expect(
+      declareWeeklyRun({
+        weekKey: '2026-11-04',
+        userNumber: 3,
+        parcoursId: 'p1',
+        parcoursName: 'Bords de Marne',
+      })
+    ).rejects.toThrow('écriture refusée')
+  })
+})
+
+describe('deleteWeeklyRun', () => {
+  it('supprime la sortie de la personne pour la semaine', async () => {
+    await deleteWeeklyRun({ weekKey: '2026-11-04', userNumber: 3 })
+
+    expect(mockEq).toHaveBeenCalledWith('week_key', '2026-11-04')
+    expect(mockEq).toHaveBeenCalledWith('user_number', 3)
+  })
+
+  it('propage une erreur de suppression', async () => {
+    mockError.mockReturnValue(new Error('suppression refusée'))
+
+    await expect(
+      deleteWeeklyRun({ weekKey: '2026-11-04', userNumber: 3 })
+    ).rejects.toThrow('suppression refusée')
   })
 })

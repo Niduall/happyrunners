@@ -18,6 +18,8 @@ import type {
   MessageReaction,
   NotificationPreferences,
   ReactionKey,
+  WeeklyRun,
+  WeeklyRunInsert,
 } from '../types/supabase'
 import type { PushSubscriptionRecord } from './push'
 
@@ -385,6 +387,184 @@ export async function deleteWeekVote(
     .delete()
     .eq('user_number', userNumber)
     .eq('week_key', weekKey)
+
+  if (error) throw error
+}
+
+// ===== HISTORIQUE (parcours réellement couru) =====
+
+/** Une présence passée, avec le nom affiché. */
+export interface HistoryAttendance {
+  weekKey: string
+  userNumber: number
+  firstName: string
+  lastName: string
+  status: AttendanceStatus
+}
+
+/**
+ * Présences de plusieurs semaines en UNE requête.
+ *
+ * L'historique affiche 12 mercredis : appeler `getWeekAttendances` en boucle
+ * ferait 12 allers-retours, plus un par semaine pour les noms. Ici les lignes
+ * arrivent ensemble, puis un seul `IN` ramène les profils.
+ */
+export async function getHistoryAttendances(
+  weekKeys: string[]
+): Promise<HistoryAttendance[]> {
+  if (weekKeys.length === 0) return []
+
+  const { data, error } = await supabase
+    .from('attendances')
+    .select('week_key,user_number,status')
+    .in('week_key', weekKeys)
+
+  if (error) throw error
+
+  const rows = (data || []) as Array<{
+    week_key: string
+    user_number: number
+    status: AttendanceStatus
+  }>
+  if (rows.length === 0) return []
+
+  const { data: profiles, error: profilesError } = await supabase
+    .from('user_profiles')
+    .select('user_number,first_name,last_name')
+    .in('user_number', [...new Set(rows.map((r) => r.user_number))])
+
+  if (profilesError) {
+    console.warn(
+      '[HISTORY] Noms indisponibles, repli sur les numéros:',
+      profilesError
+    )
+  }
+
+  const names = new Map(
+    ((profiles || []) as ProfileIdentity[]).map((p) => [
+      p.user_number,
+      { firstName: p.first_name, lastName: p.last_name },
+    ])
+  )
+
+  return rows.map((row) => ({
+    weekKey: row.week_key,
+    userNumber: row.user_number,
+    firstName: names.get(row.user_number)?.firstName || 'Membre',
+    lastName: names.get(row.user_number)?.lastName || `#${row.user_number}`,
+    status: row.status,
+  }))
+}
+
+/** Un vote passé, rattaché à sa semaine. */
+export interface HistoryVote {
+  weekKey: string
+  parcoursId: string
+  userNumber: number
+  status: 'yes' | 'no'
+}
+
+/** Tous les votes des semaines demandées, en une requête. */
+export async function getHistoryVotes(
+  weekKeys: string[]
+): Promise<HistoryVote[]> {
+  if (weekKeys.length === 0) return []
+
+  const { data, error } = await supabase
+    .from('participations')
+    .select('week_key,parcours_id,user_number,status')
+    .in('week_key', weekKeys)
+
+  if (error) throw error
+
+  return ((data || []) as Array<{
+    week_key: string
+    parcours_id: string
+    user_number: number
+    status: 'yes' | 'no'
+  }>).map((row) => ({
+    weekKey: row.week_key,
+    parcoursId: row.parcours_id,
+    userNumber: row.user_number,
+    status: row.status,
+  }))
+}
+
+/** Confirmations de parcours pour les semaines demandées. */
+export async function getWeeklyRuns(
+  weekKeys: string[]
+): Promise<WeeklyRun[]> {
+  if (weekKeys.length === 0) return []
+
+  const { data, error } = await supabase
+    .from('weekly_runs')
+    .select('*')
+    .in('week_key', weekKeys)
+
+  if (error) throw error
+  return (data || []) as WeeklyRun[]
+}
+
+/**
+ * Déclare (ou corrige) la sortie réellement courue par une personne.
+ *
+ * Deux écritures, dans cet ordre :
+ *   1. la présence de la semaine passe à « going » — quelqu'un qui a couru
+ *      sans avoir répondu doit apparaître présent, sinon le tableau de la
+ *      semaine contredirait l'historique ;
+ *   2. la sortie est enregistrée, avec le nom, la distance et le dénivelé
+ *      figés à cet instant.
+ *
+ * Upsert sur `(week_key, user_number)` : une seule sortie par personne et par
+ * semaine, la dernière écriture gagne. Aucun trigger de présence ne bloque :
+ * la règle est explicitement « déclarer sa sortie rend présent ».
+ */
+export async function declareWeeklyRun(params: {
+  weekKey: string
+  userNumber: number
+  parcoursId: string | null
+  parcoursName: string
+  distanceKm?: number | null
+  elevationGainM?: number | null
+}): Promise<void> {
+  await setAttendance({
+    weekKey: params.weekKey,
+    userNumber: params.userNumber,
+    status: 'going',
+  })
+
+  const { error } = await supabase.from('weekly_runs').upsert(
+    {
+      week_key: params.weekKey,
+      user_number: params.userNumber,
+      parcours_id: params.parcoursId,
+      parcours_name: params.parcoursName,
+      source: 'manual',
+      distance_km: params.distanceKm ?? null,
+      elevation_gain_m: params.elevationGainM ?? null,
+    } as WeeklyRunInsert,
+    { onConflict: 'week_key,user_number' }
+  )
+
+  if (error) throw error
+}
+
+/**
+ * Retire la sortie déclarée d'une personne pour une semaine.
+ *
+ * Ne touche **pas** à la présence : elle exprime une intention (« je viens »),
+ * pas une preuve de course. Déclarer l'avait passée à « going » ; l'annulation
+ * ne doit pas effacer une réponse réelle ni en inventer une.
+ */
+export async function deleteWeeklyRun(params: {
+  weekKey: string
+  userNumber: number
+}): Promise<void> {
+  const { error } = await supabase
+    .from('weekly_runs')
+    .delete()
+    .eq('week_key', params.weekKey)
+    .eq('user_number', params.userNumber)
 
   if (error) throw error
 }

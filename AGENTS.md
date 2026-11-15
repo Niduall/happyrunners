@@ -74,6 +74,10 @@ npm run build      # 0 erreur TypeScript
 | `src/components/LazyMapView.tsx` | carte Leaflet chargée à la demande — **importer ce composant, pas `MapView`** |
 | `src/components/ParticipantsTable.tsx` | Tout le groupe : présents en lignes (avec parcours), sans-réponse et absents en puces |
 | `src/pages/Chat.tsx` | fil de discussion `/messages` : jours, auto-défilement, noms en double |
+| `src/pages/History.tsx` | historique `/historique` : 12 mercredis, stats personnelles, déclaration du parcours couru |
+| `src/services/history.ts` | logique pure de l'historique : semaines passées, sorties par personne, stats km/D+ |
+| `src/hooks/useHistory.ts` | chargement groupé des 12 semaines + `declare` |
+| `src/components/DeclareRunModal.tsx` | déclaration du parcours personnel (liste ou « autre ») |
 | `src/components/ChatComposer.tsx` | saisie du chat (Entrée envoie, Maj+Entrée à la ligne) |
 | `src/components/ChatMessageBubble.tsx` | bulle, état d'envoi, suppression par l'auteur |
 | `src/components/MessagesButton.tsx` | entrée Messages de l'en-tête + pastille de non-lus |
@@ -274,6 +278,63 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   `migrations/2026-11-10_tache34_reponse_chat.sql` avant de déployer
   l'interface. `getRecentMessages` et `sendMessage` sélectionnent les trois
   colonnes `reply_to_*` : sans elles, le chat entier tombe.
+
+### Historique des sorties (tâche 35)
+- **Le vote n'est pas la réalité.** `participations` dit ce que le groupe
+  préférait ; `weekly_runs` dit ce que chaque personne a couru. Ne jamais
+  présenter le parcours gagnant du vote comme un fait.
+- **Une sortie par personne et par mercredi** : la clé primaire
+  `(week_key, user_number)` porte la règle. Le groupe ne fait pas toujours le
+  même parcours, et une ligue ou des badges exigent de savoir qui a fait quoi.
+- **Chacun ne renseigne que la sienne** (upsert sur
+  `week_key,user_number`). Personne ne peut écrire à la place d'un autre.
+- **Retrait possible** : « Retirer ma sortie » supprime la ligne de la
+  personne après confirmation. La présence de la semaine n'est **pas**
+  modifiée : elle exprime une intention (« je viens »), pas une preuve de
+  course. Déclarer l'avait passée à « going » ; l'annulation ne doit ni
+  effacer une réponse réelle ni en inventer une.
+- **Une semaine se fige au mercredi suivant 14h** : seule la sortie la plus
+  récente (`weekKeys[0]`, la semaine qui vient de se terminer) reste
+  déclarable, corrigeable et retirable. Au-delà, aucun bouton n'est proposé et
+  `useHistory` refuse l'écriture (`refuseIfFrozen`). Une fois la bascule
+  passée, un oubli est définitif : c'est la règle annoncée dans l'interface.
+  ⚠️ C'est une **règle d'interface**, pas une sécurité : la RLS est ouverte et
+  la clé anon est dans le bundle. Elle empêche une correction de bonne foi de
+  réécrire un classement passé, pas une écriture délibérée via l'API.
+- **Déclarer sa sortie remet la présence de la semaine à « going »**
+  (`declareWeeklyRun` écrit la présence puis la sortie). Quelqu'un qui a couru
+  sans avoir répondu doit pouvoir déclarer. Il n'y a donc **pas** de trigger
+  `weekly_runs_require_going` : exiger la présence avant la déclaration
+  bloquerait précisément ce cas.
+- **La modale part de la sortie déjà déclarée** en correction, sinon du
+  parcours le plus voté. **Sans sortie ni vote, rien n'est présélectionné** et
+  « Enregistrer » reste inactif : partir du premier parcours de la liste
+  enregistrerait un choix arbitraire d'un seul clic, donc une fausse sortie
+  dans une ligue.
+- **L'accueil rappelle la sortie à déclarer** (`useLastRun`) tant qu'elle
+  manque : la carte vise le mercredi précédent, ou celui du jour dès 12h30
+  (`hasRunStarted`), pour ne pas faire attendre la bascule de 14h. Elle
+  disparaît une fois la sortie déclarée ; correction et retrait restent dans
+  l'historique.
+- **`parcours_name`, `distance_km` et `elevation_gain_m` sont des
+  instantanés** pris à la déclaration. Renommer, modifier ou supprimer un
+  parcours ne doit jamais réécrire les totaux d'une ligue passée.
+  `parcours_id` est un lien facultatif (`ON DELETE SET NULL`).
+- **Une sortie « autre » n'a pas de distance** : `parcours_id` NULL,
+  `parcours_name` porte le libellé libre, km et D+ restent NULL. On ne compte
+  que le connu, jamais un chiffre inventé.
+- **`source` est prête pour la preuve** : `manual` aujourd'hui, `gpx` puis
+  `strava` plus tard. Aucune de ces deux dernières n'est encore écrite.
+- **Les stats sont personnelles** : sorties, série, cumul des km et du D+
+  **connus** de la personne connectée. Une sortie « autre » compte comme
+  sortie mais n'ajoute ni km ni D+.
+- **Douze semaines** (`HISTORY_WEEKS`) : un trimestre, assez pour voir une
+  série et léger à charger. Présences, votes et sorties arrivent en trois
+  requêtes groupées (`IN (week_keys)`), pas une par semaine.
+- ⚠️ **Ordre de déploiement obligatoire** : appliquer
+  `migrations/2026-11-12_tache35_historique.sql` **avant** de déployer
+  l'interface. `useHistory` interroge `weekly_runs` : sans la table, la page
+  entière échoue. Test d'abord, prod ensuite.
 
 ### Mise à jour de la PWA
 - Un onglet ouvert **ne se met jamais à jour seul** : il enregistre le service
@@ -591,7 +652,7 @@ base vide. Ne jamais décrire le schéma dans la prose ci-dessous : c'est ainsi
 que ce document avait fini par annoncer un `participations(local_user_id)`
 qui n'existait plus depuis la migration `user_number`.
 
-### Les 8 tables qui comptent
+### Les 9 tables qui comptent
 | Table | Clé | Particularité |
 |---|---|---|
 | `user_profiles` | `user_number` (SEQUENCE) | identifiant **stable**, indépendant du nom |
@@ -602,6 +663,7 @@ qui n'existait plus depuis la migration `user_number`.
 | `message_reactions` | `(message_id, user_number)` | **une seule réaction par personne** : la clé primaire le garantit |
 | `push_subscriptions` | `id` uuid, `endpoint` unique | un abonnement par appareil, supprimé avec le profil |
 | `notification_preferences` | `user_number` | un booléen par catégorie ; ligne absente = tout activé |
+| `weekly_runs` | `(week_key, user_number)` | sortie **réellement courue** par une personne ; nom, km et D+ figés |
 
 ### Points non négociables
 - `participations.parcours_id` est en **`ON DELETE CASCADE`** : supprimer un
@@ -610,6 +672,11 @@ qui n'existait plus depuis la migration `user_number`.
 - **Un vote exige une présence `going`**. Les triggers
   `participations_require_going` et `attendances_remove_vote*` le garantissent
   en base ; le client ne suffit pas (vote orphelin `#16`).
+- **Une sortie n'exige pas de présence préalable** : déclarer remet la
+  présence à `going` (`declareWeeklyRun`), pour que le tableau de la semaine
+  ne contredise pas l'historique. `weekly_runs.parcours_id` est en
+  **`ON DELETE SET NULL`** et `parcours_name` garde le nom : supprimer un
+  parcours ne doit jamais effacer une ligne d'historique.
 - **`updated_at` est tenu par la base** : les triggers `trg_parcours_touch`,
   `trg_attendances_touch` et `trg_participations_touch` appellent
   `touch_updated_at()` à chaque `UPDATE`. Ne pas compter sur le client pour
@@ -648,8 +715,9 @@ python3 backup.py restore <fichier> --dry-run
 python3 backup.py save --env .env.test  # cible la base de test
 ```
 
-`save` pagine par 1 000 lignes et couvre les **huit tables**, chat et push
-compris. `restore` valide le fichier, sauvegarde l'état courant, supprime dans
+`save` pagine par 1 000 lignes et couvre les **neuf tables**, chat, push et
+historique compris. Un dump de format 2 (sans `weekly_runs`) reste restaurable :
+la table est simplement vide. `restore` valide le fichier, sauvegarde l'état courant, supprime dans
 l'ordre inverse et vérifie les comptes. Il refuse aussi un dump contenant un
 vote sans présence `going` (ancien vote orphelin), avant toute suppression. Il
 sort en **code 2** tant que le `setval` de `user_number_seq` n'a pas été
@@ -700,6 +768,11 @@ Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour l
 | `src/hooks/useMessages.test.tsx` | polling, envoi optimiste, échec, purge, course polling/envoi |
 | `src/hooks/useUnreadMessages.test.tsx` | pastille : première visite, 30 s, retour d'onglet |
 | `src/pages/Chat.test.tsx` | lecture ouverte, fil, marquage lu, prénoms en double |
+| `src/services/history.test.ts` | semaines passées, une sortie par personne, stats km/D+ |
+| `src/hooks/useHistory.test.tsx` | verrouillage : seule la semaine la plus récente est déclarable ou retirable |
+| `src/hooks/useLastRun.test.tsx` | semaine déclarable sur l'accueil, sortie existante, déclaration |
+| `src/pages/Home.lastRun.test.tsx` | rappel de la sortie à déclarer, modale sans présélection |
+| `src/pages/History.test.tsx` | mercredis, déclaration « autre », correction, retrait, semaine figée, Échap |
 | `src/components/RequireUser.test.tsx` | visiteur redirigé, connecté autorisé, attente du chargement |
 | `src/pages/Home.messages.test.tsx` | Messages absent sans identité, présent une fois connecté |
 | `src/config/vercelConfig.test.ts` | repli SPA de Vercel : toute route inconnue → `index.html` |
@@ -827,6 +900,12 @@ les scénarios tournent **uniquement sur la base de test** (`.env.test`).
     (`mutationRef` dans `useAttendance` et `useMessages`). Sinon la réponse
     d'un chargement antérieur réapplique l'ancien état : « Je viens » semble
     ne pas être pris en compte jusqu'au polling suivant.
+7w. **L'historique se migre avant l'interface** — `useHistory` interroge
+    `weekly_runs`. Appliquer
+    `migrations/2026-11-12_tache35_historique.sql` d'abord sur la base de
+    test, puis en prod, et seulement ensuite pousser l'interface. Un dump
+    antérieur (format 2) n'a pas cette table : `validate_dump` l'accepte et
+    restaure un historique vide.
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

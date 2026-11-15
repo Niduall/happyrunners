@@ -29,7 +29,8 @@ envisagées, avec leur priorité et leur coût. Elle ne remplace pas `AGENTS.md`
 |---|---|---|---|
 | **Sauvegardes planifiées** | Job quotidien qui exécute `backup.py save` et conserve un artefact chiffré, au lieu de dépendre d’une action manuelle. | M | ✅ Livré |
 
-`backup.py` couvre désormais les **huit tables** (chat et push compris), et
+`backup.py` couvre désormais les **neuf tables** (chat, push et historique
+compris), et
 `.github/workflows/backup.yml` sauvegarde la prod chaque jour à 3 h UTC dans
 un artefact chiffré conservé 30 jours.
 
@@ -45,13 +46,19 @@ un artefact chiffré conservé 30 jours.
 |---|---|---|---|
 | **Tests de bout en bout** | Trois scénarios Playwright sur la base de test : connexion → présence/vote, envoi d’un message avec réponse citée, réaction puis « qui a réagi ». Ils ont déjà révélé une course entre « Je viens » et le chargement initial, corrigée. | M | ✅ Livré |
 
+## En cours — Historique des sorties (12 novembre 2026)
+
+| Tâche | Pourquoi | Effort | État |
+|---|---|---|---|
+| **Historique des sorties** | Page `/historique` : 12 mercredis passés, présents, et **une sortie par personne et par semaine** (`weekly_runs`, clé `week_key,user_number`). Chacun déclare son propre parcours (liste ou « autre »), peut le corriger ou le retirer ; déclarer remet la présence à « going ». Une semaine se fige au mercredi suivant 14h : seule la sortie la plus récente reste modifiable. L'accueil rappelle la sortie manquante dès 12h30 le jour du run, et la modale ne présélectionne rien sans indice. Nom, km et D+ sont figés à la déclaration, les stats personnelles comptent les valeurs connues. Le vote reste un simple indice. Source `manual`, prête pour GPX/Strava. | M | 🚧 En cours |
+| **Ligue et badges** | S'appuyer sur les sorties déclarées (une par personne et par mercredi) pour un classement et des badges. À cadrer : critères (régularité, km, D+, série), périodes, égalités. | M | À cadrer |
+
 ## À faire ensuite
 
 ### Priorité 1 — fort impact
 
 | Idée | Détail | Effort |
 |---|---|---|
-| **Historique des sorties** | Page `/historique` : mercredis passés, présents, parcours retenu, distance/D+. Stats perso : nombre de sorties, km cumulés, série en cours. Les données existent déjà (`attendances`, `participations` par `week_key`) et `weeksBetween` est prévu pour ça. | M |
 | **Hors ligne réel** | Le README promet « fonctionne hors ligne », mais seule la coquille est précachée. Cacher le dernier état de Home et afficher un bandeau « données du … » quand le réseau manque. | M |
 
 ### Priorité 2 — confort et fiabilité

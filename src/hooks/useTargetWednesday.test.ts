@@ -80,6 +80,26 @@ describe('useTargetWednesday — pas de re-rendu inutile', () => {
     expect(result.current.weekKey).toBe('2026-10-14')
   })
 
+  it('runStarted bascule à 12h30 et retombe à 14h', () => {
+    vi.setSystemTime(new Date(2026, 9, 7, 12, 29, 0))
+    const { result } = renderHook(() => useTargetWednesday())
+    expect(result.current.runStarted).toBe(false)
+
+    act(() => {
+      vi.setSystemTime(new Date(2026, 9, 7, 12, 30, 0))
+      vi.advanceTimersByTime(30_000)
+    })
+    expect(result.current.runStarted).toBe(true)
+    expect(result.current.weekKey).toBe('2026-10-07')
+
+    act(() => {
+      vi.setSystemTime(new Date(2026, 9, 7, 14, 0, 0))
+      vi.advanceTimersByTime(30_000)
+    })
+    expect(result.current.runStarted).toBe(false)
+    expect(result.current.weekKey).toBe('2026-10-14')
+  })
+
   it('nettoie son timer au démontage', () => {
     // Le nombre de timers actifs baisse après le démontage
     const { unmount } = renderHook(() => useTargetWednesday())

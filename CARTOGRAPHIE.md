@@ -88,6 +88,10 @@ deux tables mortes supprimées à la fin du fichier (`schema.sql`).
                   └─▶ useMessages (5 s visible / 30 s caché) ──▶ messages
                        ├─ useProfiles (annuaire, une fois)
                        └─ groupMessagesByDay + purge 30 j
+
+   /historique ─▶ RequireUser ─▶ History.tsx
+                    └─▶ useHistory (12 semaines, 3 requêtes groupées)
+                         └─▶ weekly_runs + attendances + participations
 ```
 
 `localStorage` ne sert plus que de **secours** pour l'utilisateur
@@ -106,16 +110,17 @@ Toutes les lignes sont sous `running-app/`.
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
 | `src/main.tsx` | point d'entrée **réel** : monte `App` sous `StrictMode` + `AuthProvider` | 12 |
-| `src/App.tsx` | routeur : `/` → `Home`, `/parcours` → `ParcoursList`, `/messages` → `Chat` (via `RequireUser`), `/admin` → `Admin` | 29 |
+| `src/App.tsx` | routeur : `/` → `Home`, `/parcours` → `ParcoursList`, `/messages` → `Chat` et `/historique` → `History` (via `RequireUser`), `/admin` → `Admin` | 42 |
 | `index.html` | hôte, `lang="fr"`, monte `#root` | 19 |
 
 ### 2.2 Pages
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/pages/Home.tsx` | page principale : auth, présence, météo, vote, tableau des participants, entrée du chat (connectés seulement) | 367 |
+| `src/pages/Home.tsx` | page principale : auth, présence, météo, vote, tableau des participants, entrée du chat (connectés seulement), rappel de la sortie à déclarer | 447 |
 | `src/pages/ParcoursList.tsx` | gestion : liste, import GPX, suppression, verrou admin | 316 |
 | `src/pages/Chat.tsx` | fil de discussion : groupes par jour, auto-défilement, envoi, suppression, noms désambiguïsés | 205 |
+| `src/pages/History.tsx` | historique : 12 mercredis, stats personnelles (km/D+), sorties déclarées par personne, déclaration et retrait, verrouillage de la semaine | 276 |
 | `src/pages/Admin.tsx` | console admin : liste des profils, recherche, réinitialisation ou retrait du PIN | 283 |
 
 ### 2.3 Composants métier
@@ -126,7 +131,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/components/SecurityModal.tsx` | gestion du PIN : ajouter, changer, retirer ; rappelle la confiance de 30 jours | 277 |
 | `src/components/ParcoursCard.tsx` | carte parcours en mode gestion (import GPX, actions admin) | 170 |
 | `src/components/ParticipantsTable.tsx` | tout le groupe en trois sections : présents en lignes + parcours, sans-réponse et absents en puces | 231 |
-| `src/components/UserMenu.tsx` | menu utilisateur : nom, édition, Sécurité, Notifications, déconnexion (retire l'abonnement push) | 268 |
+| `src/components/UserMenu.tsx` | menu utilisateur : nom, édition, Historique, Sécurité, Notifications, déconnexion (retire l'abonnement push) | 280 |
 | `src/components/NotificationsModal.tsx` | abonnement de l'appareil, deux catégories, états iPhone/navigateur | 279 |
 | `src/components/WeatherCard.tsx` | météo, deux mises en page (compacte / complète) | 146 |
 | `src/components/MapView.tsx` | carte Leaflet : polyligne + marqueurs départ/arrivée | 123 |
@@ -140,6 +145,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/components/MessagesButton.tsx` | entrée « Messages » de l'en-tête + pastille de non-lus (plafond « 99+ ») | 44 |
 | `src/components/RequireUser.tsx` | garde de route : redirige un visiteur vers `/`, attend le chargement | 26 |
 | `src/components/AdminPinResetModal.tsx` | réinitialisation d'un PIN : code provisoire ou retrait, sans jamais afficher le hash | 260 |
+| `src/components/DeclareRunModal.tsx` | déclaration du parcours personnel (liste ou « autre »), retrait confirmé, fermeture par Échap, aucune présélection sans indice | 295 |
 
 ### 2.4 Composants génériques
 
@@ -159,16 +165,19 @@ Toutes les lignes sont sous `running-app/`.
 | `src/hooks/useProfiles.ts` | annuaire complet, chargé une fois à la connexion (pas avant) | 52 |
 | `src/hooks/useWeather.ts` | météo, cache par semaine, rafraîchissement 30 min | 149 |
 | `src/hooks/useParcours.ts` | CRUD parcours, parsing GPX, polling 30 s | 80 |
-| `src/hooks/useTargetWednesday.ts` | horloge de semaine cible (tick 30 s, sans réseau) | 56 |
+| `src/hooks/useTargetWednesday.ts` | horloge de semaine cible (tick 30 s, sans réseau) ; expose `runStarted` dès 12h30 | 93 |
 | `src/hooks/useMessages.ts` | chat : polling 5 s / 30 s, envoi optimiste, lecture serveur, suppression, purge 30 j | 285 |
 | `src/hooks/useUnreadMessages.ts` | pastille : comptage des messages des autres, 30 s + focus/visibilité | 72 |
+| `src/hooks/useHistory.ts` | historique : 12 semaines chargées en une fois, `declare`, `retract`, refus des semaines figées et rafraîchissement | 194 |
+| `src/hooks/useLastRun.ts` | sortie encore déclarable pour l'accueil (mercredi précédent, ou le jour dès 12h30) | 113 |
 | `src/hooks/usePushNotifications.ts` | statut push, activation/désactivation de l'appareil, préférences par personne | 161 |
 
 ### 2.6 Services
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/services/supabaseService.ts` | toutes les requêtes Supabase | 562 |
+| `src/services/supabaseService.ts` | toutes les requêtes Supabase | 811 |
+| `src/services/history.ts` | logique pure de l'historique : semaines passées, sorties par personne, stats km/D+ | 251 |
 | `src/services/messages.ts` | chat : fenêtre de 30 j, validation, regroupement par jour, non-lus, dernière lecture, réactions | 273 |
 | `src/services/presenceRows.ts` | fusion annuaire + réponses : qui vient, qui est absent, qui n'a pas répondu | 50 |
 | `src/services/gpxParser.ts` | parse GPX XML (DOMParser natif) et JSON Strava, distance, dénivelé, simplification | 265 |
@@ -194,7 +203,7 @@ Toutes les lignes sont sous `running-app/`.
 
 ### 2.8 Tests
 
-53 fichiers, 661 tests, ~55 s.
+La suite complète tourne avec `npm test`.
 
 | Fichier | Couvre |
 |---|---|
@@ -220,11 +229,15 @@ Toutes les lignes sont sous `running-app/`.
 | `src/services/gpxParser.test.ts` | parser GPX XML/JSON, distance, dénivelé, simplification, bounds |
 | `src/services/weatherCode.test.ts` | mapping des 28 codes WMO |
 | `src/services/adminCode.test.ts` | verrou admin, ne mémorise rien |
-| `src/hooks/useTargetWednesday.test.ts` | horloge de semaine |
+| `src/hooks/useTargetWednesday.test.ts` | horloge de semaine, bascule de 12h30 et de 14h |
+| `src/hooks/useLastRun.test.tsx` | semaine déclarable, sortie existante, déclaration |
+| `src/pages/Home.lastRun.test.tsx` | rappel sur l'accueil, modale sans présélection |
 | `src/services/messages.test.ts` | fenêtre de 30 j, validation, regroupement par jour, non-lus |
 | `src/hooks/useMessages.test.tsx` | polling 5 s / 30 s, envoi optimiste, lecture serveur, échec, purge, course polling/envoi |
 | `src/hooks/useUnreadMessages.test.tsx` | pastille : première visite, période 30 s, retour d'onglet, exclusion de soi, erreur silencieuse |
 | `src/pages/Chat.test.tsx` | lecture ouverte, connexion pour écrire, fil vide, marquage lu, prénoms en double |
+| `src/pages/History.test.tsx` | mercredis, parcours confirmé/voté, confirmation « autre », correction, Échap |
+| `src/services/history.test.ts` | semaines passées, vote vs confirmation, auteur supprimé, stats |
 | `src/components/RequireUser.test.tsx` | visiteur redirigé, connecté autorisé, attente du chargement |
 | `src/pages/Home.messages.test.tsx` | Messages absent sans identité, présent une fois connecté |
 | `src/components/ChatComposer.test.tsx` | Entrée / Maj+Entrée / composition d'accent, compteur, lecture sans identité |
@@ -252,12 +265,13 @@ vides/invalides, conversion des coordonnées, distance, dénivelé (dont A8),
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `schema.sql` | structure complète, rejouable : 8 tables, index, RLS, triggers, purge des tables mortes | 448 |
-| `backup.py` | `save` / `list` / `restore` de la prod, via l'API REST | 449 |
+| `schema.sql` | structure complète, rejouable : 9 tables, index, RLS, triggers, purge des tables mortes | 560 |
+| `backup.py` | `save` / `list` / `restore` de la prod, via l'API REST (9 tables) | 644 |
 | `public/` | `favicon.png`, 4 PNG (192, 512, maskable 512, Apple 180) aux bonnes dimensions, plus `notification-badge.png` (silhouette 96×96 pour Android) | — |
 | `public/push-handler.js` | écouteurs `push` et `notificationclick` importés par le service worker généré ; badge Android dédié | 78 |
 | `supabase/functions/send-push/index.ts` | Edge Function : secret, préférences, envoi VAPID, nettoyage 404/410 | 194 |
 | `migrations/2026-11-04_tache31_notifications_push.sql` | `push_subscriptions`, `notification_preferences`, RLS et triggers | 87 |
+| `migrations/2026-11-12_tache35_historique.sql` | `weekly_runs` (clé `week_key,user_number`), index, RLS et `updated_at` | 97 |
 
 ### 2.10 Configuration
 

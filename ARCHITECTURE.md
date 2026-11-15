@@ -15,8 +15,8 @@ Inventaire exhaustif, fichier par fichier : **`CARTOGRAPHIE.md` §2**.
 
 | Couche | Dossier | Rôle |
 |---|---|---|
-| Entrée / routage | `src/main.tsx`, `src/App.tsx` | monte l'app, 2 routes |
-| Pages | `src/pages/` | `Home`, `ParcoursList` |
+| Entrée / routage | `src/main.tsx`, `src/App.tsx` | monte l'app, pages secondaires en lazy |
+| Pages | `src/pages/` | `Home`, `ParcoursList`, `Chat`, `History`, `Admin` |
 | Composants | `src/components/` | UI métier + `ui/` génériques |
 | Hooks | `src/hooks/` | état et polling |
 | Services | `src/services/` | Supabase, GPX, météo, semaine, PIN, code admin |
@@ -89,6 +89,7 @@ Reconnexion sur un autre appareil : on retrouve son `user_number` via
 | PIN hash | ❌ | ✅ `user_profiles.pin_hash` |
 | Parcours | ❌ | ✅ `parcours` |
 | Votes | ❌ | ✅ `participations` |
+| Historique (parcours couru) | ❌ | ✅ `weekly_runs` |
 
 `storage.ts` ne conserve que le cache utilisateur (`getUser`/`setUser`/`clearUser`). Les anciens helpers parcours/participations ont été retirés en tâche 13 : tout passe par Supabase.
 
@@ -102,10 +103,17 @@ Reconnexion sur un autre appareil : on retrouve son `user_number` via
 | `participations` | `id` (uuid) | **`(user_number, week_key)`** | `parcours_id` (FK, **CASCADE**), `user_number`, `status` (yes/no), `week_key` |
 | `attendances` | `id` (uuid) | **`(week_key, user_number)`** | `user_number`, `status` (going/skip), `week_key` |
 | `user_profiles` | `id` (uuid) | `user_number` | `user_number` (SEQUENCE, **stable**), `first_name`, `last_name`, `pin_hash` (nullable) |
+| `weekly_runs` | **`(week_key, user_number)`** | — | sortie **réellement courue** par une personne : `parcours_id` (FK, **SET NULL**), `parcours_name` (instantané), `distance_km` / `elevation_gain_m` (instantanés), `source` |
 
 > ⚠️ `participations` est en `UNIQUE(user_number, week_key)` : une personne ne
 > peut être comptée que sur **un seul parcours** par semaine. Le `onConflict`
 > de `castWeekVote()` doit refléter cet ordre, sinon l'upsert échoue.
+>
+> `weekly_runs` ne remplace pas `participations` : le vote dit ce que le
+> groupe préférait, `weekly_runs` dit ce que chaque personne a couru. La clé
+> primaire composite porte « une sortie par personne et par mercredi ».
+> `parcours_name`, `distance_km` et `elevation_gain_m` sont des instantanés :
+> supprimer ou renommer un parcours n'efface pas l'historique.
 >
 > `profiles` et `responses` sont des tables mortes (ancien identifiant dérivé
 > du nom). `schema.sql` les supprime.
@@ -162,6 +170,23 @@ ne sont pas dupliqués dans chaque table.
 ### Tri
 `rankedParcoursIds` trie par nombre de votes "yes" décroissant. Le 1er avec ≥1 vote
 est marqué "En tête" (le parcours retenu pour le run).
+
+### Historique
+`/historique` affiche les 12 derniers mercredis. Chaque personne y déclare
+**son** parcours (`weekly_runs`, une ligne par personne et par semaine) ; le
+groupe ne fait pas toujours le même parcours. Le parcours le plus voté reste
+affiché comme un simple indice, jamais comme un fait. Déclarer sa sortie remet
+sa présence de la semaine à « going ». La correction est un upsert sur
+`(week_key, user_number)`, sans validation admin — l'authentification étant
+côté client, une validation serait une sécurité de façade.
+
+Une semaine se fige au **mercredi suivant 14h** : seule la sortie la plus
+récente reste modifiable, les précédentes n'affichent plus de bouton et le hook
+refuse l'écriture. L'accueil porte un rappel (`useLastRun`) tant que la sortie
+déclarable manque : il apparaît dès **12h30 le jour du run**, sans attendre la
+bascule, et vise sinon le mercredi précédent. La modale ne présélectionne un
+parcours que s'il existe déjà une sortie ou un vote ; sinon « Enregistrer »
+reste inactif, pour ne jamais créer une sortie fausse d'un seul clic.
 
 ---
 

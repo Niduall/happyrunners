@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { getCurrentWeekKey, getTargetWednesday, formatWeekLabel, isRunDay } from '../services/weekKey'
+import { getCurrentWeekKey, getTargetWednesday, formatWeekLabel, isRunDay, hasRunStarted } from '../services/weekKey'
 
 /**
  * Horloge partagée : fournit la clé de semaine et se met à jour pour que la
@@ -27,9 +27,14 @@ export interface TargetWednesday {
   date: Date
   /** true si on est le jour du run (et pas encore 14h) */
   isRunDay: boolean
+  /**
+   * true le mercredi à partir de 12h30, jusqu'à 14h : la sortie vient d'avoir
+   * lieu et peut être déclarée sans attendre la bascule.
+   */
+  runStarted: boolean
 }
 
-/** Instantané courant. Son identité ne change qu'à la bascule de 14h. */
+/** Instantané courant. Son identité ne change qu'aux deux bascules du mercredi. */
 function read(): TargetWednesday {
   const now = new Date()
   const weekKey = getCurrentWeekKey()
@@ -38,6 +43,7 @@ function read(): TargetWednesday {
     weekLabel: formatWeekLabel(weekKey),
     date: getTargetWednesday(now),
     isRunDay: isRunDay(weekKey, now),
+    runStarted: hasRunStarted(weekKey, now),
   }
 }
 
@@ -47,8 +53,14 @@ const subscribers = new Set<() => void>()
 
 function tick(): void {
   const next = read()
-  // Même clé → aucun rendu : l'identité de l'instantané reste stable.
-  if (next.weekKey === snapshot.weekKey) return
+  // Rien de visible n'a changé → aucun rendu, l'instantané garde son identité.
+  // Deux transitions par semaine : 12h30 (le run part) et 14h (bascule).
+  if (
+    next.weekKey === snapshot.weekKey &&
+    next.runStarted === snapshot.runStarted
+  ) {
+    return
+  }
   snapshot = next
   for (const notify of subscribers) notify()
 }

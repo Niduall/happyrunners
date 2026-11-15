@@ -49,6 +49,7 @@ def make_dump(profiles: int = 2, attendances: int = 1) -> dict:
                 "status": "yes",
             }
         ],
+        "weekly_runs": [],
         "messages": [],
         "message_reactions": [],
         "push_subscriptions": [],
@@ -62,6 +63,24 @@ def with_chat(dump: dict | None = None) -> dict:
     dump["messages"] = [{"id": "m1", "user_number": 1, "body": "Salut"}]
     dump["message_reactions"] = [
         {"message_id": "m1", "user_number": 2, "reaction": "laugh"}
+    ]
+    return dump
+
+
+def with_history(dump: dict | None = None) -> dict:
+    """Ajoute une sortie déclarée pour la semaine du dump."""
+    dump = dump or make_dump()
+    dump["weekly_runs"] = [
+        {
+            "week_key": "2026-10-21",
+            "user_number": 1,
+            "parcours_id": "p1",
+            "parcours_name": "Boucle",
+            "source": "manual",
+            "distance_km": 8.4,
+            "elevation_gain_m": 120,
+            "declared_at": "2026-10-21T18:00:00Z",
+        }
     ]
     return dump
 
@@ -234,6 +253,83 @@ class ValidationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "reply_to_body hors bornes"):
             backup.validate_dump(dump)
 
+    def test_historique_valide(self):
+        counts = backup.validate_dump(with_history())
+        self.assertEqual(counts["weekly_runs"], 1)
+
+    def test_ancien_dump_sans_historique(self):
+        # Un dump de format 2 n'a pas la table : il doit rester restaurable,
+        # avec un historique vide.
+        dump = make_dump()
+        del dump["weekly_runs"]
+        counts = backup.validate_dump(dump)
+        self.assertEqual(counts["weekly_runs"], 0)
+
+    def test_ancienne_meta_sans_historique(self):
+        dump = make_dump()
+        del dump["weekly_runs"]
+        dump["_meta"] = {
+            "format": 2,
+            "counts": {
+                table: len(dump[table])
+                for table in backup.TABLES
+                if table != "weekly_runs"
+            },
+        }
+        self.assertEqual(backup.validate_dump(dump)["weekly_runs"], 0)
+
+    def test_historique_sans_parcours(self):
+        dump = with_history()
+        dump["weekly_runs"][0]["parcours_id"] = "inconnu"
+        with self.assertRaisesRegex(ValueError, "absent de parcours"):
+            backup.validate_dump(dump)
+
+    def test_historique_personne_inconnue(self):
+        dump = with_history()
+        dump["weekly_runs"][0]["user_number"] = 99
+        with self.assertRaisesRegex(ValueError, "user_number 99 absent"):
+            backup.validate_dump(dump)
+
+    def test_historique_deux_personnes_la_meme_semaine(self):
+        # Le groupe ne fait pas toujours le même parcours : une ligne par
+        # personne et par mercredi.
+        dump = with_history()
+        dump["weekly_runs"].append(
+            {
+                **dump["weekly_runs"][0],
+                "user_number": 2,
+                "parcours_id": None,
+                "parcours_name": "Boucle du parc",
+                "distance_km": None,
+                "elevation_gain_m": None,
+            }
+        )
+        self.assertEqual(backup.validate_dump(dump)["weekly_runs"], 2)
+
+    def test_historique_doublon_refuse(self):
+        dump = with_history()
+        dump["weekly_runs"].append(dict(dump["weekly_runs"][0]))
+        with self.assertRaisesRegex(ValueError, "en double"):
+            backup.validate_dump(dump)
+
+    def test_historique_source_inconnue(self):
+        dump = with_history()
+        dump["weekly_runs"][0]["source"] = "montre"
+        with self.assertRaisesRegex(ValueError, "source inconnue"):
+            backup.validate_dump(dump)
+
+    def test_historique_distance_negative(self):
+        dump = with_history()
+        dump["weekly_runs"][0]["distance_km"] = -1
+        with self.assertRaisesRegex(ValueError, "distance_km négatif"):
+            backup.validate_dump(dump)
+
+    def test_historique_sans_nom(self):
+        dump = with_history()
+        dump["weekly_runs"][0]["parcours_name"] = ""
+        with self.assertRaisesRegex(ValueError, "parcours_name manquant"):
+            backup.validate_dump(dump)
+
     def test_chaque_table_a_son_tri_et_sa_cle(self):
         self.assertEqual(set(backup.TABLE_ORDER), set(backup.TABLES))
         self.assertEqual(set(backup.TABLE_KEYS), set(backup.TABLES))
@@ -254,6 +350,33 @@ class DeleteTest(unittest.TestCase):
             calls,
             [("DELETE", "/notification_preferences?user_number=not.is.null")],
         )
+
+    def test_filtre_historique_sans_id(self):
+        calls = []
+
+        def fake_curl(method, path, body_file=None):
+            calls.append((method, path))
+            return b""
+
+        with mock.patch.object(backup, "curl", side_effect=fake_curl):
+            backup.api_delete_all("weekly_runs")
+
+        self.assertEqual(
+            calls,
+            [("DELETE", "/weekly_runs?week_key=not.is.null")],
+        )
+
+    def test_tri_composite_de_l_historique(self):
+        paths = []
+
+        def fake_curl(method, path, body_file=None):
+            paths.append(path)
+            return b"[]"
+
+        with mock.patch.object(backup, "curl", side_effect=fake_curl):
+            backup.api_get("weekly_runs")
+
+        self.assertIn("order=week_key.asc,user_number.asc", paths[0])
 
     def test_tri_composite_des_reactions(self):
         paths = []

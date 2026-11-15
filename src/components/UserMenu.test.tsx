@@ -183,6 +183,16 @@ describe('UserMenu — notifications', () => {
   })
 })
 
+describe('UserMenu — historique', () => {
+  it('ouvre l’historique depuis le menu', async () => {
+    const user = await renderMenu()
+    await user.click(screen.getByRole('button', { name: 'Menu utilisateur' }))
+    await user.click(screen.getByRole('button', { name: 'Historique' }))
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/historique')
+  })
+})
+
 describe('UserMenu — accès administration', () => {
   it('reste absent quand aucun code admin n’est configuré', async () => {
     const user = await renderMenu()

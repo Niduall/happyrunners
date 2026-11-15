@@ -38,7 +38,7 @@ BACKUP_DIR = ROOT / "backups"
 # Taille d'une page PostgREST. Le plafond par défaut de Supabase est 1000 :
 # sans pagination, une table plus grande serait exportée tronquée en silence.
 PAGE_SIZE = 1000
-FORMAT_VERSION = 2
+FORMAT_VERSION = 3
 
 # L'ordre compte à la restauration :
 # participations référence parcours, qui référence user_profiles ; les
@@ -48,6 +48,7 @@ TABLES = [
     "parcours",
     "attendances",
     "participations",
+    "weekly_runs",
     "messages",
     "message_reactions",
     "push_subscriptions",
@@ -62,6 +63,7 @@ TABLE_ORDER = {
     "parcours": "id.asc",
     "attendances": "id.asc",
     "participations": "id.asc",
+    "weekly_runs": "week_key.asc,user_number.asc",
     "messages": "created_at.asc,id.asc",
     "message_reactions": "message_id.asc,user_number.asc",
     "push_subscriptions": "id.asc",
@@ -75,6 +77,7 @@ TABLE_KEYS = {
     "parcours": ("id",),
     "attendances": ("id",),
     "participations": ("id",),
+    "weekly_runs": ("week_key", "user_number"),
     "messages": ("id",),
     "message_reactions": ("message_id", "user_number"),
     "push_subscriptions": ("id",),
@@ -91,6 +94,7 @@ SHORT_LABELS = {
     "parcours": "parc",
     "attendances": "pres",
     "participations": "votes",
+    "weekly_runs": "hist",
     "messages": "msg",
     "message_reactions": "react",
     "push_subscriptions": "push",
@@ -106,6 +110,7 @@ TABLE_DELETE_FILTER = {
 }
 TABLE_DELETE_FILTER["message_reactions"] = "message_id=not.is.null"
 TABLE_DELETE_FILTER["notification_preferences"] = "user_number=not.is.null"
+TABLE_DELETE_FILTER["weekly_runs"] = "week_key=not.is.null"
 
 
 def die(msg: str) -> None:
@@ -297,6 +302,10 @@ def validate_dump(dump: dict, allow_empty: bool = False) -> dict[str, int]:
     if not isinstance(dump, dict):
         raise ValueError("le fichier ne contient pas un objet JSON")
 
+    # Les dumps de format 2 (avant l'historique) n'ont pas `weekly_runs`.
+    # On les accepte : la table sera simplement vide après restauration.
+    dump.setdefault("weekly_runs", [])
+
     for table in TABLES:
         if table not in dump:
             raise ValueError(f"table absente : {table}")
@@ -450,11 +459,41 @@ def validate_dump(dump: dict, allow_empty: bool = False) -> dict[str, int]:
                 f"{row.get('user_number')} absent de user_profiles"
             )
 
+    for row in dump["weekly_runs"]:
+        if not row.get("week_key"):
+            raise ValueError("weekly_runs : week_key manquant")
+        if row.get("user_number") not in users:
+            raise ValueError(
+                "weekly_runs : user_number "
+                f"{row.get('user_number')} absent de user_profiles"
+            )
+        if not row.get("parcours_name"):
+            raise ValueError("weekly_runs : parcours_name manquant")
+        parcours_id = row.get("parcours_id")
+        if parcours_id is not None and parcours_id not in parcours_ids:
+            raise ValueError(
+                f"weekly_runs : parcours_id {parcours_id} absent de parcours"
+            )
+        if row.get("source", "manual") not in ("manual", "gpx", "strava"):
+            raise ValueError(
+                f"weekly_runs : source inconnue {row.get('source')!r}"
+            )
+        for field in ("distance_km", "elevation_gain_m"):
+            value = row.get(field)
+            if value is not None and value < 0:
+                raise ValueError(
+                    f"weekly_runs : {field} négatif ({value})"
+                )
+
     # Un fichier tronqué à l'écriture ou édité à la main se voit ici.
     meta_counts = (dump.get("_meta") or {}).get("counts")
     if meta_counts:
         for table in TABLES:
-            announced = meta_counts.get(table)
+            # Un dump de format 2 ne connaît pas encore `weekly_runs` :
+            # l'absence de la clé n'est pas une incohérence.
+            if table not in meta_counts:
+                continue
+            announced = meta_counts[table]
             if announced != len(dump[table]):
                 raise ValueError(
                     f"{table} : _meta annonce {announced} lignes, "

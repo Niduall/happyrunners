@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
-import { MapPin, RefreshCw, AlertCircle, Plus, Trophy } from 'lucide-react'
+import { MapPin, RefreshCw, AlertCircle, Plus, Trophy, Footprints } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { WeatherCard } from '../components/WeatherCard'
 import { AttendanceBanner } from '../components/AttendanceBanner'
 import { RunActions } from '../components/RunActions'
 import { ParcoursVoteCard } from '../components/ParcoursVoteCard'
 import { ParticipantsTable, type PresenceRow } from '../components/ParticipantsTable'
+import { DeclareRunModal } from '../components/DeclareRunModal'
 import { Button } from '../components/ui/Button'
 import { Card, CardContent } from '../components/ui/Card'
 import { LoginForm } from '../components/Auth'
@@ -18,9 +19,13 @@ import { useParcoursVotes } from '../hooks/useParcoursVotes'
 import { useAttendance } from '../hooks/useAttendance'
 import { useProfiles } from '../hooks/useProfiles'
 import { useUnreadMessages } from '../hooks/useUnreadMessages'
+import { useLastRun } from '../hooks/useLastRun'
 import { mergePresenceRows } from '../services/presenceRows'
+import { formatRunDay } from '../services/history'
 import { getRunForecast, getRunWindow, daysUntilRun } from '../services/weatherApi'
 import { useTargetWednesday } from '../hooks/useTargetWednesday'
+import type { RunChoice } from '../hooks/useHistory'
+import type { DeclareRunTarget } from '../components/DeclareRunModal'
 
 export function Home() {
   const navigate = useNavigate()
@@ -63,6 +68,39 @@ export function Home() {
 
   /** Pastille du chat : un simple comptage, sans charger les messages. */
   const unreadMessages = useUnreadMessages(isAuthenticated, user?.id ?? null)
+
+  /**
+   * La sortie la plus récente encore déclarable (jusqu'au mercredi suivant
+   * 14h, ou dès 12h30 le jour du run). Sert de rappel sur l'accueil : sans
+   * ça, il fallait penser à ouvrir l'historique dans la semaine.
+   */
+  const lastRun = useLastRun(isAuthenticated ? (user?.id ?? null) : null)
+  const [declaringLastRun, setDeclaringLastRun] = useState(false)
+
+  /**
+   * Ce que la modale attend. Sur l'accueil, il n'y a ni présence ni vote à
+   * afficher : seule la date et la sortie éventuelle comptent.
+   */
+  const lastRunTarget = useMemo<DeclareRunTarget | null>(() => {
+    if (lastRun.weekKey == null) return null
+    return {
+      weekKey: lastRun.weekKey,
+      dateLabel: formatRunDay(lastRun.weekKey),
+      myRun: lastRun.myRun
+        ? {
+            parcoursId: lastRun.myRun.parcours_id,
+            parcoursName: lastRun.myRun.parcours_name,
+          }
+        : null,
+      votedParcoursId: null,
+    }
+  }, [lastRun.weekKey, lastRun.myRun])
+
+  const handleDeclareLastRun = async (choice: RunChoice): Promise<boolean> => {
+    const ok = await lastRun.declare(choice)
+    if (ok) setDeclaringLastRun(false)
+    return ok
+  }
 
   /**
    * Qui a dit « je viens ». Passe aux votes pour qu'un choix d'un absent
@@ -211,6 +249,37 @@ export function Home() {
               />
               <RunActions weekKey={weekKey} />
             </div>
+
+            {/* Le rappel de la sortie passée : visible tant qu'elle n'est pas
+                déclarée, dès 12h30 le jour du run et jusqu'au mercredi
+                suivant 14h. La correction et le retrait restent dans
+                l'historique. */}
+            {lastRunTarget &&
+              !lastRun.loading &&
+              !lastRun.error &&
+              !lastRun.myRun && (
+                <div className="rounded-xl border border-accent/20 bg-accent-light p-4 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <Footprints className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-900">
+                        Tu as couru le {lastRunTarget.dateLabel.toLowerCase()} ?
+                      </p>
+                      <p className="mt-1 text-sm text-gray-600">
+                        Indique ton parcours : il comptera dans ton historique.
+                      </p>
+                      <Button
+                        variant="accent"
+                        size="sm"
+                        className="mt-3"
+                        onClick={() => setDeclaringLastRun(true)}
+                      >
+                        Indiquer mon parcours
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
             {attendanceError && (
               <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
@@ -366,6 +435,16 @@ export function Home() {
           </>
         )}
       </main>
+
+      {declaringLastRun && lastRunTarget && (
+        <DeclareRunModal
+          week={lastRunTarget}
+          parcours={parcoursList}
+          saving={lastRun.saving}
+          onDeclare={handleDeclareLastRun}
+          onClose={() => setDeclaringLastRun(false)}
+        />
+      )}
     </div>
   )
 }

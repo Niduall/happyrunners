@@ -20,6 +20,9 @@ const Chat = lazy(() =>
 const Admin = lazy(() =>
   import('./pages/Admin').then((module) => ({ default: module.Admin }))
 )
+const History = lazy(() =>
+  import('./pages/History').then((module) => ({ default: module.History }))
+)
 
 function PageLoader() {
   return (
@@ -45,6 +48,14 @@ function App() {
             element={
               <RequireUser>
                 <Chat />
+              </RequireUser>
+            }
+          />
+          <Route
+            path="/historique"
+            element={
+              <RequireUser>
+                <History />
               </RequireUser>
             }
           />

@@ -5,6 +5,7 @@ import {
   getCurrentWeekKey,
   formatWeekLabel,
   isRunDay,
+  hasRunStarted,
   weeksBetween,
 } from './weekKey'
 
@@ -171,5 +172,33 @@ describe('stabilité', () => {
     const apres = getCurrentWeekKey(at(2026, 10, 7, 14))
     expect(avant).not.toBe(apres)
     expect(apres).toBe('2026-10-14')
+  })
+})
+
+describe('hasRunStarted — la sortie peut être déclarée dès 12h30', () => {
+  const mercredi = (h: number, m = 0) => new Date(2026, 9, 7, h, m, 0)
+
+  it('faux le mercredi matin', () => {
+    expect(hasRunStarted('2026-10-07', mercredi(10))).toBe(false)
+  })
+
+  it('faux à 12h29', () => {
+    expect(hasRunStarted('2026-10-07', mercredi(12, 29))).toBe(false)
+  })
+
+  it('vrai à 12h30 pile', () => {
+    expect(hasRunStarted('2026-10-07', mercredi(12, 30))).toBe(true)
+  })
+
+  it('vrai à 13h59, avant la bascule', () => {
+    expect(hasRunStarted('2026-10-07', mercredi(13, 59))).toBe(true)
+  })
+
+  it('faux après 14h : la semaine a basculé', () => {
+    expect(hasRunStarted('2026-10-14', mercredi(14))).toBe(false)
+  })
+
+  it('faux les autres jours', () => {
+    expect(hasRunStarted('2026-10-07', at(2026, 10, 8, 13))).toBe(false)
   })
 })

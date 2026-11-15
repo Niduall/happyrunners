@@ -44,6 +44,16 @@ vi.mock('../hooks/useAttendance', () => ({
   }),
 }))
 vi.mock('../hooks/useProfiles', () => ({ useProfiles: () => ({ profiles: [] }) }))
+vi.mock('../hooks/useLastRun', () => ({
+  useLastRun: () => ({
+    weekKey: null,
+    myRun: null,
+    loading: false,
+    saving: false,
+    error: null,
+    declare: vi.fn(),
+  }),
+}))
 vi.mock('../hooks/useTargetWednesday', () => ({
   useTargetWednesday: () => ({ weekKey: '2026-11-04', date: new Date('2026-11-04T12:30:00') }),
 }))

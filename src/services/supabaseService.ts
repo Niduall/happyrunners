@@ -569,6 +569,51 @@ export async function deleteWeeklyRun(params: {
   if (error) throw error
 }
 
+/**
+ * La personne a-t-elle répondu « je n'ai pas couru » pour cette semaine ?
+ *
+ * Requête ciblée sur une seule ligne : le rappel de l'accueil ne vise qu'une
+ * semaine et qu'une personne, inutile de charger les réponses du groupe.
+ */
+export async function getWeeklyRunSkip(params: {
+  weekKey: string
+  userNumber: number
+}): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('weekly_run_skips')
+    .select('week_key')
+    .eq('week_key', params.weekKey)
+    .eq('user_number', params.userNumber)
+    .maybeSingle()
+
+  if (error) throw error
+  return data != null
+}
+
+/**
+ * Enregistre « je n'ai pas couru » pour une semaine, **par personne** : la
+ * réponse suit la personne d'un téléphone à l'autre.
+ *
+ * `ignoreDuplicates` : répondre deux fois ne réécrit pas `declared_at`, et la
+ * première réponse reste la date de référence. En base, un trigger ignore même
+ * la réponse si une sortie est déjà déclarée pour cette semaine : on ne peut
+ * pas avoir couru et déclaré ne pas avoir couru.
+ */
+export async function skipWeeklyRun(params: {
+  weekKey: string
+  userNumber: number
+}): Promise<void> {
+  const { error } = await supabase.from('weekly_run_skips').upsert(
+    {
+      week_key: params.weekKey,
+      user_number: params.userNumber,
+    },
+    { onConflict: 'week_key,user_number', ignoreDuplicates: true }
+  )
+
+  if (error) throw error
+}
+
 // ===== MESSAGES (fil de discussion) =====
 
 /**

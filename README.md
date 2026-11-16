@@ -79,10 +79,10 @@ python3 backup.py restore <fichier> --allow-empty
 ```
 
 `save` pagine par 1 000 lignes : aucune table n'est tronquée. Il couvre les
-neuf tables, y compris le chat (`messages`, `message_reactions`), le push
+dix tables, y compris le chat (`messages`, `message_reactions`), le push
 (`push_subscriptions`, `notification_preferences`) et l'historique
-(`weekly_runs`). Un dump antérieur à l'historique reste restaurable : la
-table est simplement recréée vide. `restore` valide le
+(`weekly_runs`, `weekly_run_skips`). Un dump antérieur à l'historique reste
+restaurable : la table manquante est simplement recréée vide. `restore` valide le
 fichier avant de supprimer quoi que ce soit (tables, comptes, clés
 étrangères), prend automatiquement une sauvegarde
 `happyrunners-pre-restore-<date>.json`, puis vérifie les comptes après
@@ -252,9 +252,10 @@ mercredis** : présents, vote indicatif et sorties **réellement courues**.
 - **L'accueil rappelle la sortie manquante** : une carte propose de l'indiquer
   dès 12h30 le jour du run, puis jusqu'au mercredi suivant 14h. Elle disparaît
   une fois la sortie déclarée.
-- **« Je n'ai pas couru »** coupe ce rappel pour la semaine, **sur cet appareil**
-  seulement : rien n'est écrit en base, puisque « pas de sortie déclarée » veut
-  déjà dire « n'a pas couru ».
+- **« Je n'ai pas couru »** coupe ce rappel pour la semaine, **par personne** :
+  la réponse est enregistrée dans `weekly_run_skips`, donc elle suit la
+  personne d'un téléphone à l'autre. Un repère local la double pour masquer la
+  carte sans réseau ; la base fait foi. Déclarer une sortie la supprime.
 - **Aucune présélection dans la modale** sans sortie déjà déclarée ni vote : le
   bouton « Enregistrer » reste inactif tant qu'aucun parcours n'est choisi.
 - Déclarer une sortie remet la présence de la semaine à « going » : quelqu'un

@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { declareWeeklyRun, getWeeklyRuns } from '../services/supabaseService'
+import {
+  declareWeeklyRun,
+  getWeeklyRunSkip,
+  getWeeklyRuns,
+  skipWeeklyRun,
+} from '../services/supabaseService'
 import { pastWeekKeys } from '../services/history'
 import {
+  clearRunReminderDismissal,
   dismissRunReminder,
   isRunReminderDismissed,
 } from '../services/runReminderDismissal'
@@ -20,7 +26,7 @@ export interface LastRun {
   saving: boolean
   error: string | null
   declare: (choice: RunChoice) => Promise<boolean>
-  /** Coupe le rappel de cette semaine, sans rien écrire en base */
+  /** Répond « je n'ai pas couru » pour cette semaine, en base et sur l'appareil */
   dismiss: () => void
 }
 
@@ -44,6 +50,8 @@ export function useLastRun(userNumber: number | null): LastRun {
   }, [runStarted, weekKey])
 
   const [myRun, setMyRun] = useState<WeeklyRun | null>(null)
+  /** Réponse « je n'ai pas couru » lue en base (elle suit la personne). */
+  const [skipped, setSkipped] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,23 +60,38 @@ export function useLastRun(userNumber: number | null): LastRun {
   const [, bumpDismissal] = useState(0)
 
   /**
-   * « Je n'ai pas couru » est mémorisé par appareil, donc lu à chaque rendu :
-   * c'est la seule source de vérité, et elle change sans passer par le réseau.
+   * La base fait foi : une réponse donnée sur un autre téléphone arrive ici au
+   * chargement. Le repère local ne sert qu'à masquer la carte tout de suite,
+   * ou si l'écriture en base n'a pas abouti (hors ligne).
    */
   const dismissed =
-    userNumber != null &&
-    declarableWeekKey != null &&
-    isRunReminderDismissed(userNumber, declarableWeekKey)
+    skipped ||
+    (userNumber != null &&
+      declarableWeekKey != null &&
+      isRunReminderDismissed(userNumber, declarableWeekKey))
 
   const dismiss = useCallback(() => {
     if (userNumber == null || declarableWeekKey == null) return
+
+    // Retour immédiat, même hors ligne : la carte se masque sans réseau.
     dismissRunReminder(userNumber, declarableWeekKey)
+    setSkipped(true)
     bumpDismissal((count) => count + 1)
+
+    // La base porte la réponse pour les autres appareils. Un échec laisse le
+    // repère local en place : la carte ne revient pas sur cet appareil.
+    void skipWeeklyRun({
+      weekKey: declarableWeekKey,
+      userNumber,
+    }).catch((err) => {
+      console.error('[DERNIÈRE SORTIE] Erreur « je n’ai pas couru »:', err)
+    })
   }, [userNumber, declarableWeekKey])
 
   const refresh = useCallback(async () => {
     if (declarableWeekKey == null || userNumber == null) {
       setMyRun(null)
+      setSkipped(false)
       setLoading(false)
       return
     }
@@ -77,9 +100,13 @@ export function useLastRun(userNumber: number | null): LastRun {
     const isStale = () => requestId !== requestIdRef.current
 
     try {
-      const runs = await getWeeklyRuns([declarableWeekKey])
+      const [runs, skippedInDb] = await Promise.all([
+        getWeeklyRuns([declarableWeekKey]),
+        getWeeklyRunSkip({ weekKey: declarableWeekKey, userNumber }),
+      ])
       if (isStale()) return
       setMyRun(runs.find((run) => run.user_number === userNumber) ?? null)
+      setSkipped(skippedInDb)
       setError(null)
     } catch (err) {
       if (isStale()) return
@@ -112,6 +139,11 @@ export function useLastRun(userNumber: number | null): LastRun {
           distanceKm: choice.distanceKm,
           elevationGainM: choice.elevationGainM,
         })
+        // La base supprime la réponse « je n'ai pas couru » de la semaine
+        // (trigger) : on oublie aussi le repère local, pour que le rappel
+        // puisse revenir si la sortie est retirée plus tard.
+        clearRunReminderDismissal(userNumber, declarableWeekKey)
+        setSkipped(false)
         await refresh()
         return true
       } catch (err) {

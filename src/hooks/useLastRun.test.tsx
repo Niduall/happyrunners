@@ -2,7 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useLastRun } from './useLastRun'
 import { useTargetWednesday } from './useTargetWednesday'
-import { declareWeeklyRun, getWeeklyRuns } from '../services/supabaseService'
+import {
+  declareWeeklyRun,
+  getWeeklyRunSkip,
+  getWeeklyRuns,
+  skipWeeklyRun,
+} from '../services/supabaseService'
 import {
   RUN_REMINDER_KEY,
   isRunReminderDismissed,
@@ -17,12 +22,16 @@ vi.mock('../services/supabaseService', async (importOriginal) => {
     ...actual,
     getWeeklyRuns: vi.fn(),
     declareWeeklyRun: vi.fn(),
+    getWeeklyRunSkip: vi.fn(),
+    skipWeeklyRun: vi.fn(),
   }
 })
 
 const mockTarget = vi.mocked(useTargetWednesday)
 const mockRuns = vi.mocked(getWeeklyRuns)
 const mockDeclare = vi.mocked(declareWeeklyRun)
+const mockSkipLookup = vi.mocked(getWeeklyRunSkip)
+const mockSkipWrite = vi.mocked(skipWeeklyRun)
 
 const ALICE = 1
 
@@ -65,6 +74,8 @@ beforeEach(() => {
   mockTarget.mockReturnValue(target())
   mockRuns.mockResolvedValue([])
   mockDeclare.mockResolvedValue(undefined)
+  mockSkipLookup.mockResolvedValue(false)
+  mockSkipWrite.mockResolvedValue(undefined)
 })
 
 describe('useLastRun — quelle semaine est encore déclarable', () => {
@@ -153,6 +164,17 @@ describe('useLastRun — « je n’ai pas couru »', () => {
     expect(result.current.dismissed).toBe(false)
   })
 
+  it('suit la personne : une réponse en base masque le rappel', async () => {
+    // Réponse donnée sur un autre téléphone : rien en local sur celui-ci.
+    mockSkipLookup.mockResolvedValue(true)
+
+    const { result } = renderHook(() => useLastRun(ALICE))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(result.current.dismissed).toBe(true)
+    expect(localStorage.getItem(RUN_REMINDER_KEY)).toBeNull()
+  })
+
   it('coupe le rappel de la semaine déclarable', async () => {
     const { result } = renderHook(() => useLastRun(ALICE))
     await waitFor(() => expect(result.current.loading).toBe(false))
@@ -163,6 +185,44 @@ describe('useLastRun — « je n’ai pas couru »', () => {
 
     expect(result.current.dismissed).toBe(true)
     expect(isRunReminderDismissed(ALICE, '2026-11-04')).toBe(true)
+    // La base porte la réponse pour les autres appareils.
+    expect(mockSkipWrite).toHaveBeenCalledWith({
+      weekKey: '2026-11-04',
+      userNumber: ALICE,
+    })
+  })
+
+  it('garde la carte masquée si l’écriture en base échoue', async () => {
+    mockSkipWrite.mockRejectedValueOnce(new Error('hors ligne'))
+
+    const { result } = renderHook(() => useLastRun(ALICE))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    act(() => {
+      result.current.dismiss()
+    })
+
+    // Le repère local prend le relais : pas de carte fantôme hors ligne.
+    expect(result.current.dismissed).toBe(true)
+    expect(isRunReminderDismissed(ALICE, '2026-11-04')).toBe(true)
+  })
+
+  it('oublie le repère local quand une sortie est déclarée', async () => {
+    const { result } = renderHook(() => useLastRun(ALICE))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    act(() => {
+      result.current.dismiss()
+    })
+    expect(isRunReminderDismissed(ALICE, '2026-11-04')).toBe(true)
+
+    await act(async () => {
+      await result.current.declare(CHOICE)
+    })
+
+    // La base a supprimé la réponse (trigger) : le local ne doit pas la
+    // ressusciter si la sortie est retirée plus tard.
+    expect(isRunReminderDismissed(ALICE, '2026-11-04')).toBe(false)
   })
 
   it('laisse revenir le rappel la semaine suivante', async () => {
@@ -177,12 +237,13 @@ describe('useLastRun — « je n’ai pas couru »', () => {
     // La bascule du mercredi suivant change la semaine visée : nouveau rappel.
     mockTarget.mockReturnValue(target({ weekKey: '2026-11-18' }))
     rerender()
-    await waitFor(() =>
-      expect(mockRuns).toHaveBeenCalledWith(['2026-11-11'])
-    )
+    await waitFor(() => expect(result.current.dismissed).toBe(false))
 
     expect(result.current.weekKey).toBe('2026-11-11')
-    expect(result.current.dismissed).toBe(false)
+    expect(mockSkipLookup).toHaveBeenCalledWith({
+      weekKey: '2026-11-11',
+      userNumber: ALICE,
+    })
   })
 
   it('n’écrit rien sans identité', async () => {
@@ -195,5 +256,6 @@ describe('useLastRun — « je n’ai pas couru »', () => {
 
     expect(result.current.dismissed).toBe(false)
     expect(localStorage.getItem(RUN_REMINDER_KEY)).toBeNull()
+    expect(mockSkipWrite).not.toHaveBeenCalled()
   })
 })

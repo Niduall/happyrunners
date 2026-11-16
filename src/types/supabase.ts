@@ -211,3 +211,19 @@ export interface WeeklyRunInsert {
   distance_km?: number | null
   elevation_gain_m?: number | null
 }
+
+/**
+ * Réponse explicite « je n'ai pas couru » pour un mercredi, par personne.
+ *
+ * Elle suit la personne d'un appareil à l'autre, contrairement à un repère
+ * local. Ce n'est pas `attendances.status = 'skip'` (« pas cette semaine »,
+ * une intention) : ici c'est un fait constaté après le run.
+ *
+ * Aucune sortie n'est créée et aucun total de km n'en tient compte. Déclarer
+ * une sortie supprime la réponse de la semaine (trigger en base).
+ */
+export interface WeeklyRunSkip {
+  week_key: string
+  user_number: number
+  declared_at: string
+}

@@ -15,6 +15,7 @@ import {
   type HistoryStats,
   type HistoryWeek,
 } from '../services/history'
+import { clearRunReminderDismissal } from '../services/runReminderDismissal'
 import { useTargetWednesday } from './useTargetWednesday'
 import type { ParcoursSummary, ProfileIdentity } from '../types/supabase'
 
@@ -151,6 +152,10 @@ export function useHistory(userNumber: number | null) {
           distanceKm: choice.distanceKm,
           elevationGainM: choice.elevationGainM,
         })
+        // Une sortie déclarée annule « je n'ai pas couru » pour la semaine
+        // (trigger en base) : le repère local de l'accueil disparaît aussi,
+        // pour que le rappel revienne si la sortie est retirée.
+        clearRunReminderDismissal(userNumber, weekKeyToSave)
         await refresh()
         return true
       } catch (err) {

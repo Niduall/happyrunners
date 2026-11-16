@@ -91,7 +91,7 @@ deux tables mortes supprimées à la fin du fichier (`schema.sql`).
 
    /historique ─▶ RequireUser ─▶ History.tsx
                     └─▶ useHistory (12 semaines, 3 requêtes groupées)
-                         └─▶ weekly_runs + attendances + participations
+                         └─▶ weekly_runs + weekly_run_skips + attendances + participations
 ```
 
 `localStorage` ne sert plus que de **secours** pour l'utilisateur
@@ -169,16 +169,16 @@ Toutes les lignes sont sous `running-app/`.
 | `src/hooks/useMessages.ts` | chat : polling 5 s / 30 s, envoi optimiste, lecture serveur, suppression, purge 30 j | 285 |
 | `src/hooks/useUnreadMessages.ts` | pastille : comptage des messages des autres, 30 s + focus/visibilité | 72 |
 | `src/hooks/useHistory.ts` | historique : 12 semaines chargées en une fois, `declare`, `retract` (jamais refusé), refus de correction sur semaine figée, rafraîchissement manuel et au retour sur l'onglet | 211 |
-| `src/hooks/useLastRun.ts` | sortie encore déclarable pour l'accueil (mercredi précédent, ou le jour dès 12h30) et « je n'ai pas couru » | 140 |
+| `src/hooks/useLastRun.ts` | sortie encore déclarable pour l'accueil (mercredi précédent, ou le jour dès 12h30) et « je n'ai pas couru » (base + repère local) | 172 |
 | `src/hooks/usePushNotifications.ts` | statut push, activation/désactivation de l'appareil, préférences par personne | 161 |
 
 ### 2.6 Services
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/services/supabaseService.ts` | toutes les requêtes Supabase | 811 |
+| `src/services/supabaseService.ts` | toutes les requêtes Supabase | 856 |
 | `src/services/history.ts` | logique pure de l'historique : semaines passées, sorties par personne, semaines vides, stats km/D+ | 261 |
-| `src/services/runReminderDismissal.ts` | « je n'ai pas couru » : rappel coupé par appareil, une semaine par personne | 66 |
+| `src/services/runReminderDismissal.ts` | « je n'ai pas couru » : repère local (secours de la base), une semaine par personne | 90 |
 | `src/services/messages.ts` | chat : fenêtre de 30 j, validation, regroupement par jour, non-lus, dernière lecture, réactions | 273 |
 | `src/services/presenceRows.ts` | fusion annuaire + réponses : qui vient, qui est absent, qui n'a pas répondu | 50 |
 | `src/services/gpxParser.ts` | parse GPX XML (DOMParser natif) et JSON Strava, distance, dénivelé, simplification | 265 |
@@ -196,7 +196,7 @@ Toutes les lignes sont sous `running-app/`.
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/types/supabase.ts` | types des lignes DB en snake_case — **source unique** de `GPXPoint`, `ProfileIdentity`, `NotificationPreferences` | 144 |
+| `src/types/supabase.ts` | types des lignes DB en snake_case — **source unique** de `GPXPoint`, `ProfileIdentity`, `NotificationPreferences` | 229 |
 | `src/types/index.ts` | types applicatifs (`User`, `UserIdentity`, `PresenceRow`) + ré-exports DB | 77 |
 | `src/lib/supabase.ts` | instancie le client Supabase | 15 |
 | `src/lib/utils.ts` | `cn()` = `clsx`, **sans fusion Tailwind** | 4 |
@@ -231,9 +231,9 @@ La suite complète tourne avec `npm test`.
 | `src/services/weatherCode.test.ts` | mapping des 28 codes WMO |
 | `src/services/adminCode.test.ts` | verrou admin, ne mémorise rien |
 | `src/hooks/useTargetWednesday.test.ts` | horloge de semaine, bascule de 12h30 et de 14h |
-| `src/hooks/useLastRun.test.tsx` | semaine déclarable, sortie existante, déclaration, « je n'ai pas couru » |
+| `src/hooks/useLastRun.test.tsx` | semaine déclarable, sortie existante, déclaration, « je n'ai pas couru » (base et local) |
 | `src/pages/Home.lastRun.test.tsx` | rappel sur l'accueil, modale sans présélection, réponse « je n'ai pas couru » |
-| `src/services/runReminderDismissal.test.ts` | réponse locale par profil et par semaine, repère illisible |
+| `src/services/runReminderDismissal.test.ts` | réponse locale par profil et par semaine, effacement, repère illisible |
 | `src/services/messages.test.ts` | fenêtre de 30 j, validation, regroupement par jour, non-lus |
 | `src/hooks/useMessages.test.tsx` | polling 5 s / 30 s, envoi optimiste, lecture serveur, échec, purge, course polling/envoi |
 | `src/hooks/useUnreadMessages.test.tsx` | pastille : première visite, période 30 s, retour d'onglet, exclusion de soi, erreur silencieuse |
@@ -267,13 +267,14 @@ vides/invalides, conversion des coordonnées, distance, dénivelé (dont A8),
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `schema.sql` | structure complète, rejouable : 9 tables, index, RLS, triggers, purge des tables mortes | 560 |
-| `backup.py` | `save` / `list` / `restore` de la prod, via l'API REST (9 tables) | 644 |
+| `schema.sql` | structure complète, rejouable : 10 tables, index, RLS, triggers, purge des tables mortes | 635 |
+| `backup.py` | `save` / `list` / `restore` de la prod, via l'API REST (10 tables) | 660 |
 | `public/` | `favicon.png`, 4 PNG (192, 512, maskable 512, Apple 180) aux bonnes dimensions, plus `notification-badge.png` (silhouette 96×96 pour Android) | — |
 | `public/push-handler.js` | écouteurs `push` et `notificationclick` importés par le service worker généré ; badge Android dédié | 78 |
 | `supabase/functions/send-push/index.ts` | Edge Function : secret, préférences, envoi VAPID, nettoyage 404/410 | 194 |
 | `migrations/2026-11-04_tache31_notifications_push.sql` | `push_subscriptions`, `notification_preferences`, RLS et triggers | 87 |
 | `migrations/2026-11-12_tache35_historique.sql` | `weekly_runs` (clé `week_key,user_number`), index, RLS et `updated_at` | 97 |
+| `migrations/2026-11-16_tache36_je_nai_pas_couru.sql` | `weekly_run_skips` (« je n'ai pas couru » par personne), index, triggers de cohérence et RLS | 120 |
 
 ### 2.10 Configuration
 

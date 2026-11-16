@@ -20,6 +20,8 @@ import {
   getWeeklyRuns,
   declareWeeklyRun,
   deleteWeeklyRun,
+  getWeeklyRunSkip,
+  skipWeeklyRun,
 } from './supabaseService'
 import { hashPin } from './pin'
 import { supabase } from '../lib/supabase'
@@ -740,5 +742,55 @@ describe('deleteWeeklyRun', () => {
     await expect(
       deleteWeeklyRun({ weekKey: '2026-11-04', userNumber: 3 })
     ).rejects.toThrow('suppression refusée')
+  })
+})
+
+describe('getWeeklyRunSkip', () => {
+  it('répond vrai quand la personne a déclaré « je n’ai pas couru »', async () => {
+    mockMaybeSingle.mockReturnValue({ week_key: '2026-11-04' })
+
+    await expect(
+      getWeeklyRunSkip({ weekKey: '2026-11-04', userNumber: 3 })
+    ).resolves.toBe(true)
+    expect(mockEq).toHaveBeenCalledWith('week_key', '2026-11-04')
+    expect(mockEq).toHaveBeenCalledWith('user_number', 3)
+  })
+
+  it('répond faux sans réponse', async () => {
+    await expect(
+      getWeeklyRunSkip({ weekKey: '2026-11-04', userNumber: 3 })
+    ).resolves.toBe(false)
+  })
+
+  it('propage une erreur de lecture', async () => {
+    mockMaybeSingleError.mockReturnValue(new Error('lecture refusée'))
+
+    await expect(
+      getWeeklyRunSkip({ weekKey: '2026-11-04', userNumber: 3 })
+    ).rejects.toThrow('lecture refusée')
+  })
+})
+
+describe('skipWeeklyRun', () => {
+  it('écrit la réponse par personne, sans écraser une réponse existante', async () => {
+    await skipWeeklyRun({ weekKey: '2026-11-04', userNumber: 3 })
+
+    expect(mockUpsertValues).toHaveBeenCalledWith({
+      week_key: '2026-11-04',
+      user_number: 3,
+    })
+    // `ignoreDuplicates` : `declared_at` garde la date de la première réponse.
+    expect(mockUpsertOptions).toHaveBeenCalledWith({
+      onConflict: 'week_key,user_number',
+      ignoreDuplicates: true,
+    })
+  })
+
+  it('propage une erreur d’écriture', async () => {
+    mockError.mockReturnValue(new Error('écriture refusée'))
+
+    await expect(
+      skipWeeklyRun({ weekKey: '2026-11-04', userNumber: 3 })
+    ).rejects.toThrow('écriture refusée')
   })
 })

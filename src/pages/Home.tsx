@@ -277,9 +277,9 @@ export function Home() {
                         >
                           Indiquer mon parcours
                         </Button>
-                        {/* Coupe le rappel pour cette semaine, sur cet appareil.
-                            Rien n'est écrit en base : « pas de sortie » veut
-                            déjà dire « n'a pas couru » pour les statistiques. */}
+                        {/* Répond « je n'ai pas couru » pour cette semaine :
+                            la réponse part en base, par personne, donc elle
+                            suit la personne d'un téléphone à l'autre. */}
                         <Button
                           variant="ghost"
                           size="sm"

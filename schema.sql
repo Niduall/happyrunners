@@ -264,6 +264,33 @@ CREATE INDEX IF NOT EXISTS idx_weekly_runs_user
   ON weekly_runs USING btree (user_number);
 
 -- ---------------------------------------------------------------------------
+-- Table : weekly_run_skips
+-- ---------------------------------------------------------------------------
+-- Réponse explicite « je n'ai pas couru » pour un mercredi, par PERSONNE et
+-- non par appareil : elle suit la personne d'un téléphone à l'autre.
+--
+-- Ce n'est pas `attendances.status = 'skip'`. Une présence « skip » dit « pas
+-- cette semaine » (une intention, avant le run) ; cette table dit « j'ai couru
+-- ? non » (un fait, après). Les deux peuvent coexister.
+--
+-- La ligne ne crée aucune sortie et n'entre dans aucun total de km. Elle coupe
+-- le rappel de l'accueil et, plus tard, distinguera un silence d'une absence
+-- déclarée dans une ligue.
+CREATE TABLE IF NOT EXISTS weekly_run_skips (
+  week_key     text    NOT NULL,
+  user_number  integer NOT NULL
+                 REFERENCES user_profiles(user_number) ON DELETE CASCADE,
+  declared_at  timestamptz NOT NULL DEFAULT now(),
+  -- Une seule réponse par personne et par semaine.
+  PRIMARY KEY (week_key, user_number)
+);
+
+-- La clé primaire commence par `week_key` : les statistiques personnelles
+-- (toutes les réponses d'une personne) ont besoin de cet index.
+CREATE INDEX IF NOT EXISTS idx_weekly_run_skips_user
+  ON weekly_run_skips USING btree (user_number);
+
+-- ---------------------------------------------------------------------------
 -- Règle métier : un vote exige une présence « going »
 -- ---------------------------------------------------------------------------
 -- La règle était purement côté client : un vote pouvait exister sans présence
@@ -361,6 +388,60 @@ CREATE TRIGGER attendances_remove_vote_on_delete
 -- permettrait de vérifier « c'est bien moi », un trigger ne protégerait rien.
 
 -- ---------------------------------------------------------------------------
+-- Cohérence : une sortie déclarée l'emporte sur « je n'ai pas couru »
+-- ---------------------------------------------------------------------------
+-- Déclarer une sortie (ou la corriger) supprime la réponse de la semaine.
+-- La règle vit en base : l'historique et l'accueil passent tous les deux par
+-- `weekly_runs`, aucun client ne peut oublier de nettoyer.
+CREATE OR REPLACE FUNCTION clear_run_skip_when_declared()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  DELETE FROM weekly_run_skips
+  WHERE week_key = NEW.week_key
+    AND user_number = NEW.user_number;
+
+  RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS weekly_runs_clear_skip ON weekly_runs;
+CREATE TRIGGER weekly_runs_clear_skip
+  AFTER INSERT OR UPDATE ON weekly_runs
+  FOR EACH ROW
+  EXECUTE FUNCTION clear_run_skip_when_declared();
+
+-- Sens inverse : une réponse tardive ne s'installe pas à côté d'une sortie
+-- déjà déclarée. Elle est ignorée, jamais remplacée par une suppression de
+-- sortie : effacer un fait serait pire que perdre une réponse.
+CREATE OR REPLACE FUNCTION ignore_run_skip_when_run_exists()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM weekly_runs
+    WHERE week_key = NEW.week_key
+      AND user_number = NEW.user_number
+  ) THEN
+    RETURN NULL;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS weekly_run_skips_ignore_if_run ON weekly_run_skips;
+CREATE TRIGGER weekly_run_skips_ignore_if_run
+  BEFORE INSERT OR UPDATE ON weekly_run_skips
+  FOR EACH ROW
+  EXECUTE FUNCTION ignore_run_skip_when_run_exists();
+
+-- ---------------------------------------------------------------------------
 -- Mise à jour automatique de updated_at
 -- ---------------------------------------------------------------------------
 -- `castWeekVote()` et `setAttendance()` font un upsert sans toucher
@@ -433,6 +514,7 @@ ALTER TABLE message_reactions        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE push_subscriptions       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE weekly_runs              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE weekly_run_skips         ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS profils_lire      ON user_profiles;
 DROP POLICY IF EXISTS profils_inserer   ON user_profiles;
@@ -530,6 +612,19 @@ CREATE POLICY weekly_runs_lire      ON weekly_runs FOR SELECT USING (true);
 CREATE POLICY weekly_runs_inserer   ON weekly_runs FOR INSERT WITH CHECK (true);
 CREATE POLICY weekly_runs_modifier  ON weekly_runs FOR UPDATE USING (true) WITH CHECK (true);
 CREATE POLICY weekly_runs_supprimer ON weekly_runs FOR DELETE USING (true);
+
+-- « Je n'ai pas couru » : quatre politiques comme les autres tables. L'upsert
+-- du client est un `ON CONFLICT DO NOTHING`, mais une réponse peut être
+-- réécrite un jour (annulation) sans redemander une migration.
+DROP POLICY IF EXISTS weekly_run_skips_lire      ON weekly_run_skips;
+DROP POLICY IF EXISTS weekly_run_skips_inserer   ON weekly_run_skips;
+DROP POLICY IF EXISTS weekly_run_skips_modifier  ON weekly_run_skips;
+DROP POLICY IF EXISTS weekly_run_skips_supprimer ON weekly_run_skips;
+
+CREATE POLICY weekly_run_skips_lire      ON weekly_run_skips FOR SELECT USING (true);
+CREATE POLICY weekly_run_skips_inserer   ON weekly_run_skips FOR INSERT WITH CHECK (true);
+CREATE POLICY weekly_run_skips_modifier  ON weekly_run_skips FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY weekly_run_skips_supprimer ON weekly_run_skips FOR DELETE USING (true);
 
 -- =============================================================================
 -- Tables héritées à supprimer

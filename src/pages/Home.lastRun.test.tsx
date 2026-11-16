@@ -5,7 +5,12 @@ import { MemoryRouter } from 'react-router-dom'
 import { Home } from './Home'
 import { useAuth } from '../hooks/useAuth'
 import { useTargetWednesday } from '../hooks/useTargetWednesday'
-import { declareWeeklyRun, getWeeklyRuns } from '../services/supabaseService'
+import {
+  declareWeeklyRun,
+  getWeeklyRunSkip,
+  getWeeklyRuns,
+  skipWeeklyRun,
+} from '../services/supabaseService'
 import type { WeeklyRun } from '../types/supabase'
 
 vi.mock('../hooks/useAuth', () => ({ useAuth: vi.fn() }))
@@ -73,6 +78,8 @@ vi.mock('../services/supabaseService', async (importOriginal) => {
     ...actual,
     getWeeklyRuns: vi.fn(),
     declareWeeklyRun: vi.fn(),
+    getWeeklyRunSkip: vi.fn(),
+    skipWeeklyRun: vi.fn(),
   }
 })
 
@@ -80,6 +87,8 @@ const mockAuth = vi.mocked(useAuth)
 const mockTarget = vi.mocked(useTargetWednesday)
 const mockRuns = vi.mocked(getWeeklyRuns)
 const mockDeclare = vi.mocked(declareWeeklyRun)
+const mockSkipLookup = vi.mocked(getWeeklyRunSkip)
+const mockSkipWrite = vi.mocked(skipWeeklyRun)
 
 function target(over: Partial<ReturnType<typeof useTargetWednesday>> = {}) {
   return {
@@ -125,6 +134,8 @@ beforeEach(() => {
   mockTarget.mockReturnValue(target())
   mockRuns.mockResolvedValue([])
   mockDeclare.mockResolvedValue(undefined)
+  mockSkipLookup.mockResolvedValue(false)
+  mockSkipWrite.mockResolvedValue(undefined)
 })
 
 describe('Accueil — rappel de la sortie à déclarer', () => {
@@ -203,6 +214,21 @@ describe('Accueil — rappel de la sortie à déclarer', () => {
     expect(screen.queryByText(/Tu as couru le/)).not.toBeInTheDocument()
     // Rien n'est déclaré : on n'écrit pas une fausse sortie pour autant.
     expect(mockDeclare).not.toHaveBeenCalled()
+    // La réponse part en base pour suivre la personne d'un téléphone à l'autre.
+    expect(mockSkipWrite).toHaveBeenCalledWith({
+      weekKey: '2026-11-04',
+      userNumber: 14,
+    })
+  })
+
+  it('disparaît si un autre appareil a déjà répondu', async () => {
+    // La réponse a été donnée sur un téléphone : rien en local sur celui-ci.
+    mockSkipLookup.mockResolvedValue(true)
+
+    renderHome()
+
+    await waitFor(() => expect(mockSkipLookup).toHaveBeenCalled())
+    expect(screen.queryByText(/Tu as couru le/)).not.toBeInTheDocument()
   })
 
   it('ne revient pas au rechargement de la page', async () => {

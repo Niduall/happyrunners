@@ -50,6 +50,7 @@ def make_dump(profiles: int = 2, attendances: int = 1) -> dict:
             }
         ],
         "weekly_runs": [],
+        "weekly_run_skips": [],
         "messages": [],
         "message_reactions": [],
         "push_subscriptions": [],
@@ -328,6 +329,62 @@ class ValidationTest(unittest.TestCase):
         dump = with_history()
         dump["weekly_runs"][0]["parcours_name"] = ""
         with self.assertRaisesRegex(ValueError, "parcours_name manquant"):
+            backup.validate_dump(dump)
+
+    def test_skip_valide(self):
+        dump = make_dump()
+        dump["weekly_run_skips"] = [
+            {"week_key": "2026-10-21", "user_number": 1}
+        ]
+        self.assertEqual(backup.validate_dump(dump)["weekly_run_skips"], 1)
+
+    def test_ancien_dump_sans_skip(self):
+        # Un dump de format 3 (avant « je n'ai pas couru ») n'a pas la table :
+        # il doit rester restaurable, avec des réponses vides.
+        dump = make_dump()
+        del dump["weekly_run_skips"]
+        dump["_meta"] = {
+            "format": 3,
+            "counts": {
+                table: len(dump[table])
+                for table in backup.TABLES
+                if table != "weekly_run_skips"
+            },
+        }
+        self.assertEqual(backup.validate_dump(dump)["weekly_run_skips"], 0)
+
+    def test_skip_personne_inconnue(self):
+        dump = make_dump()
+        dump["weekly_run_skips"] = [
+            {"week_key": "2026-10-21", "user_number": 99}
+        ]
+        with self.assertRaisesRegex(ValueError, "user_number 99 absent"):
+            backup.validate_dump(dump)
+
+    def test_skip_sans_semaine(self):
+        dump = make_dump()
+        dump["weekly_run_skips"] = [{"user_number": 1}]
+        # Le contrôle générique des clés passe avant la validation métier.
+        with self.assertRaisesRegex(ValueError, "ligne sans week_key"):
+            backup.validate_dump(dump)
+
+    def test_skip_doublon_refuse(self):
+        dump = make_dump()
+        dump["weekly_run_skips"] = [
+            {"week_key": "2026-10-21", "user_number": 1},
+            {"week_key": "2026-10-21", "user_number": 1},
+        ]
+        with self.assertRaisesRegex(ValueError, "en double"):
+            backup.validate_dump(dump)
+
+    def test_skip_et_sortie_refuses_ensemble(self):
+        # La base ignore la réponse quand une sortie existe : la restauration
+        # retrouverait moins de lignes que le fichier n'en annonce.
+        dump = with_history()
+        dump["weekly_run_skips"] = [
+            {"week_key": "2026-10-21", "user_number": 1}
+        ]
+        with self.assertRaisesRegex(ValueError, "sortie et « je n'ai pas couru »"):
             backup.validate_dump(dump)
 
     def test_chaque_table_a_son_tri_et_sa_cle(self):

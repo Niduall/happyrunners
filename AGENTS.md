@@ -324,13 +324,23 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   (`hasRunStarted`), pour ne pas faire attendre la bascule de 14h. Elle
   disparaît une fois la sortie déclarée ; correction et retrait restent dans
   l'historique.
-- **« Je n'ai pas couru » coupe ce rappel** : un second bouton sur la carte,
-  mémorisé **par appareil** (`localStorage`, une semaine par personne dans
-  `runReminderDismissal.ts`). Rien n'est écrit en base : « pas de sortie
-  déclarée » veut déjà dire « n'a pas couru » pour les statistiques, et une
-  ligne « je n'ai pas couru » n'apprendrait rien au groupe. Sur un autre
-  téléphone le rappel revient — gêne mineure, jamais donnée fausse. La semaine
-  suivante a son propre rappel, sans rien nettoyer.
+- **« Je n'ai pas couru » est enregistré par personne** (`weekly_run_skips`,
+  clé `(week_key, user_number)`) : la réponse suit la personne d'un téléphone à
+  l'autre. Un repère local (`runReminderDismissal.ts`) double l'écriture pour
+  masquer la carte tout de suite et tenir hors ligne ; **la base fait foi** au
+  chargement. C'est ce qui manquait quand la réponse vivait uniquement dans
+  `localStorage`.
+- **Ce n'est pas `attendances.status = 'skip'`** : « skip » dit « pas cette
+  semaine » (une intention, avant le run), cette table dit « j'ai couru ? non »
+  (un fait, après). Les deux peuvent coexister, et une réponse ne remplace
+  jamais une présence.
+- **Une sortie déclarée efface la réponse** (trigger `weekly_runs_clear_skip`),
+  et une réponse tardive est ignorée si une sortie existe
+  (`weekly_run_skips_ignore_if_run`) : on ne peut pas avoir couru et déclaré ne
+  pas avoir couru. Déclarer depuis l'historique oublie aussi le repère local,
+  pour que le rappel revienne si la sortie est retirée.
+- **La réponse ne crée aucune sortie** et n'entre dans aucun total de km. La
+  semaine suivante a son propre rappel, sans rien nettoyer.
 - **`parcours_name`, `distance_km` et `elevation_gain_m` sont des
   instantanés** pris à la déclaration. Renommer, modifier ou supprimer un
   parcours ne doit jamais réécrire les totaux d'une ligue passée.
@@ -681,7 +691,7 @@ base vide. Ne jamais décrire le schéma dans la prose ci-dessous : c'est ainsi
 que ce document avait fini par annoncer un `participations(local_user_id)`
 qui n'existait plus depuis la migration `user_number`.
 
-### Les 9 tables qui comptent
+### Les 10 tables qui comptent
 | Table | Clé | Particularité |
 |---|---|---|
 | `user_profiles` | `user_number` (SEQUENCE) | identifiant **stable**, indépendant du nom |
@@ -693,6 +703,7 @@ qui n'existait plus depuis la migration `user_number`.
 | `push_subscriptions` | `id` uuid, `endpoint` unique | un abonnement par appareil, supprimé avec le profil |
 | `notification_preferences` | `user_number` | un booléen par catégorie ; ligne absente = tout activé |
 | `weekly_runs` | `(week_key, user_number)` | sortie **réellement courue** par une personne ; nom, km et D+ figés |
+| `weekly_run_skips` | `(week_key, user_number)` | « je n'ai pas couru » : une réponse par **personne**, pas par appareil |
 
 ### Points non négociables
 - `participations.parcours_id` est en **`ON DELETE CASCADE`** : supprimer un
@@ -706,6 +717,9 @@ qui n'existait plus depuis la migration `user_number`.
   ne contredise pas l'historique. `weekly_runs.parcours_id` est en
   **`ON DELETE SET NULL`** et `parcours_name` garde le nom : supprimer un
   parcours ne doit jamais effacer une ligne d'historique.
+- **`weekly_run_skips` est une réponse, pas une sortie** : elle ne crée aucune
+  ligne dans `weekly_runs` et n'entre dans aucun total de km. Elle suit la
+  personne d'un appareil à l'autre, et déclarer une sortie la supprime.
 - **`updated_at` est tenu par la base** : les triggers `trg_parcours_touch`,
   `trg_attendances_touch` et `trg_participations_touch` appellent
   `touch_updated_at()` à chaque `UPDATE`. Ne pas compter sur le client pour
@@ -744,9 +758,10 @@ python3 backup.py restore <fichier> --dry-run
 python3 backup.py save --env .env.test  # cible la base de test
 ```
 
-`save` pagine par 1 000 lignes et couvre les **neuf tables**, chat, push et
-historique compris. Un dump de format 2 (sans `weekly_runs`) reste restaurable :
-la table est simplement vide. `restore` valide le fichier, sauvegarde l'état courant, supprime dans
+`save` pagine par 1 000 lignes et couvre les **dix tables**, chat, push et
+historique compris. Un dump de format 2 (sans `weekly_runs`) ou de format 3
+(sans `weekly_run_skips`) reste restaurable : la table manquante est simplement
+vide. `restore` valide le fichier, sauvegarde l'état courant, supprime dans
 l'ordre inverse et vérifie les comptes. Il refuse aussi un dump contenant un
 vote sans présence `going` (ancien vote orphelin), avant toute suppression. Il
 sort en **code 2** tant que le `setval` de `user_number_seq` n'a pas été
@@ -800,7 +815,7 @@ Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour l
 | `src/services/history.test.ts` | semaines passées, une sortie par personne, stats km/D+ |
 | `src/hooks/useHistory.test.tsx` | verrouillage : seule la semaine la plus récente est déclarable ou retirable |
 | `src/hooks/useLastRun.test.tsx` | semaine déclarable sur l'accueil, sortie existante, déclaration, « je n'ai pas couru » |
-| `src/services/runReminderDismissal.test.ts` | réponse locale par profil et par semaine, repère illisible |
+| `src/services/runReminderDismissal.test.ts` | réponse locale par profil et par semaine, effacement, repère illisible |
 | `src/pages/Home.lastRun.test.tsx` | rappel de la sortie à déclarer, modale sans présélection |
 | `src/pages/History.test.tsx` | mercredis, déclaration « autre », correction, retrait, semaine figée, Échap |
 | `src/components/RequireUser.test.tsx` | visiteur redirigé, connecté autorisé, attente du chargement |
@@ -936,6 +951,11 @@ les scénarios tournent **uniquement sur la base de test** (`.env.test`).
     test, puis en prod, et seulement ensuite pousser l'interface. Un dump
     antérieur (format 2) n'a pas cette table : `validate_dump` l'accepte et
     restaure un historique vide.
+7x. **« Je n'ai pas couru » se migre avant l'interface** — `getWeeklyRunSkip`
+    interroge `weekly_run_skips`. Appliquer
+    `migrations/2026-11-16_tache36_je_nai_pas_couru.sql` d'abord sur la base de
+    test, puis en prod, et seulement ensuite pousser. Sans la table, le
+    chargement du rappel échoue et la carte de l'accueil ne s'affiche plus.
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

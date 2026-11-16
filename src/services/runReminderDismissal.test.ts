@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
   RUN_REMINDER_KEY,
+  clearRunReminderDismissal,
   dismissRunReminder,
   isRunReminderDismissed,
 } from './runReminderDismissal'
@@ -63,6 +64,34 @@ describe('runReminderDismissal — « je n’ai pas couru »', () => {
     // Une réponse valide reste possible après un repère corrompu.
     dismissRunReminder(14, WEEK)
     expect(isRunReminderDismissed(14, WEEK)).toBe(true)
+  })
+
+  it('oublie la réponse d’une semaine', () => {
+    dismissRunReminder(14, WEEK)
+    clearRunReminderDismissal(14, WEEK)
+
+    expect(isRunReminderDismissed(14, WEEK)).toBe(false)
+    expect(localStorage.getItem(RUN_REMINDER_KEY)).toBe('{}')
+  })
+
+  it('ne touche pas la réponse d’une autre semaine', () => {
+    dismissRunReminder(14, NEXT_WEEK)
+    clearRunReminderDismissal(14, WEEK)
+
+    expect(isRunReminderDismissed(14, NEXT_WEEK)).toBe(true)
+  })
+
+  it('ne touche pas la réponse d’une autre personne', () => {
+    dismissRunReminder(9, WEEK)
+    clearRunReminderDismissal(14, WEEK)
+
+    expect(isRunReminderDismissed(9, WEEK)).toBe(true)
+  })
+
+  it('oublie sans planter un repère illisible', () => {
+    localStorage.setItem(RUN_REMINDER_KEY, 'pas du json')
+
+    expect(() => clearRunReminderDismissal(14, WEEK)).not.toThrow()
   })
 
   it('ignore une valeur qui n’est pas une semaine', () => {

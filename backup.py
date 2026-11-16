@@ -38,7 +38,7 @@ BACKUP_DIR = ROOT / "backups"
 # Taille d'une page PostgREST. Le plafond par défaut de Supabase est 1000 :
 # sans pagination, une table plus grande serait exportée tronquée en silence.
 PAGE_SIZE = 1000
-FORMAT_VERSION = 3
+FORMAT_VERSION = 4
 
 # L'ordre compte à la restauration :
 # participations référence parcours, qui référence user_profiles ; les
@@ -49,6 +49,7 @@ TABLES = [
     "attendances",
     "participations",
     "weekly_runs",
+    "weekly_run_skips",
     "messages",
     "message_reactions",
     "push_subscriptions",
@@ -64,6 +65,7 @@ TABLE_ORDER = {
     "attendances": "id.asc",
     "participations": "id.asc",
     "weekly_runs": "week_key.asc,user_number.asc",
+    "weekly_run_skips": "week_key.asc,user_number.asc",
     "messages": "created_at.asc,id.asc",
     "message_reactions": "message_id.asc,user_number.asc",
     "push_subscriptions": "id.asc",
@@ -78,6 +80,7 @@ TABLE_KEYS = {
     "attendances": ("id",),
     "participations": ("id",),
     "weekly_runs": ("week_key", "user_number"),
+    "weekly_run_skips": ("week_key", "user_number"),
     "messages": ("id",),
     "message_reactions": ("message_id", "user_number"),
     "push_subscriptions": ("id",),
@@ -95,6 +98,7 @@ SHORT_LABELS = {
     "attendances": "pres",
     "participations": "votes",
     "weekly_runs": "hist",
+    "weekly_run_skips": "skip",
     "messages": "msg",
     "message_reactions": "react",
     "push_subscriptions": "push",
@@ -111,6 +115,7 @@ TABLE_DELETE_FILTER = {
 TABLE_DELETE_FILTER["message_reactions"] = "message_id=not.is.null"
 TABLE_DELETE_FILTER["notification_preferences"] = "user_number=not.is.null"
 TABLE_DELETE_FILTER["weekly_runs"] = "week_key=not.is.null"
+TABLE_DELETE_FILTER["weekly_run_skips"] = "week_key=not.is.null"
 
 
 def die(msg: str) -> None:
@@ -302,9 +307,12 @@ def validate_dump(dump: dict, allow_empty: bool = False) -> dict[str, int]:
     if not isinstance(dump, dict):
         raise ValueError("le fichier ne contient pas un objet JSON")
 
-    # Les dumps de format 2 (avant l'historique) n'ont pas `weekly_runs`.
-    # On les accepte : la table sera simplement vide après restauration.
+    # Les dumps antérieurs n'ont pas toutes les tables :
+    #   - format 2 : pas de `weekly_runs` (historique) ;
+    #   - format 3 : pas de `weekly_run_skips` (« je n'ai pas couru »).
+    # On les accepte : la table manquante sera simplement vide.
     dump.setdefault("weekly_runs", [])
+    dump.setdefault("weekly_run_skips", [])
 
     for table in TABLES:
         if table not in dump:
@@ -485,11 +493,32 @@ def validate_dump(dump: dict, allow_empty: bool = False) -> dict[str, int]:
                     f"weekly_runs : {field} négatif ({value})"
                 )
 
+    runs = {
+        (row["week_key"], row["user_number"]) for row in dump["weekly_runs"]
+    }
+
+    for row in dump["weekly_run_skips"]:
+        if not row.get("week_key"):
+            raise ValueError("weekly_run_skips : week_key manquant")
+        if row.get("user_number") not in users:
+            raise ValueError(
+                "weekly_run_skips : user_number "
+                f"{row.get('user_number')} absent de user_profiles"
+            )
+        # Une sortie et « je n'ai pas couru » ne peuvent pas coexister : la
+        # base ignore la réponse, et la restauration ne retrouverait pas ses
+        # comptes. Autant refuser le fichier avant de supprimer quoi que ce soit.
+        if (row["week_key"], row["user_number"]) in runs:
+            raise ValueError(
+                "weekly_run_skips : sortie et « je n'ai pas couru » pour "
+                f"({row['week_key']}, {row['user_number']})"
+            )
+
     # Un fichier tronqué à l'écriture ou édité à la main se voit ici.
     meta_counts = (dump.get("_meta") or {}).get("counts")
     if meta_counts:
         for table in TABLES:
-            # Un dump de format 2 ne connaît pas encore `weekly_runs` :
+            # Un dump antérieur ne connaît pas les tables les plus récentes :
             # l'absence de la clé n'est pas une incohérence.
             if table not in meta_counts:
                 continue

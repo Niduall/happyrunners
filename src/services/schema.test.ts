@@ -8,6 +8,7 @@ import pushMigration from '../../migrations/2026-11-04_tache31_notifications_pus
 import reactionsMigration from '../../migrations/2026-11-06_tache32_reactions_chat.sql?raw'
 import repliesMigration from '../../migrations/2026-11-10_tache34_reponse_chat.sql?raw'
 import historyMigration from '../../migrations/2026-11-12_tache35_historique.sql?raw'
+import skipMigration from '../../migrations/2026-11-16_tache36_je_nai_pas_couru.sql?raw'
 
 /**
  * schema.sql est la source de vérité de la structure de la base.
@@ -20,7 +21,7 @@ import historyMigration from '../../migrations/2026-11-12_tache35_historique.sql
  */
 
 describe('schema.sql — structure', () => {
-  it('déclare les 9 tables utilisées par l\'app', () => {
+  it('déclare les 10 tables utilisées par l\'app', () => {
     for (const table of [
       'user_profiles',
       'parcours',
@@ -31,6 +32,7 @@ describe('schema.sql — structure', () => {
       'push_subscriptions',
       'notification_preferences',
       'weekly_runs',
+      'weekly_run_skips',
     ]) {
       expect(schema).toMatch(new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\b`))
     }
@@ -54,7 +56,7 @@ describe('schema.sql — structure', () => {
 
   it('ne déclare que les clés étrangères réellement présentes en prod', () => {
     const refs = [...schema.matchAll(/REFERENCES\s+(\w+)/g)].map((m) => m[1])
-    // 12 FK. Les historiques en CASCADE ; les deux de la réponse citée et
+    // 13 FK. Les historiques en CASCADE ; les deux de la réponse citée et
     // celles de l'historique en SET NULL, pour que supprimer l'original ne
     // supprime pas ce qui le cite.
     // `parcours.created_by` n'en a volontairement pas (colonne jamais lue).
@@ -71,6 +73,7 @@ describe('schema.sql — structure', () => {
       'user_profiles', // notification_preferences.user_number
       'user_profiles', // weekly_runs.user_number
       'parcours',      // weekly_runs.parcours_id
+      'user_profiles', // weekly_run_skips.user_number
     ])
   })
 
@@ -132,7 +135,7 @@ describe('schema.sql — structure', () => {
     expect(schema).toMatch(/pin_hash\s+text,/)
   })
 
-  it('active RLS et ouvre les 9 tables', () => {
+  it('active RLS et ouvre les 10 tables', () => {
     for (const table of [
       'user_profiles',
       'parcours',
@@ -143,13 +146,14 @@ describe('schema.sql — structure', () => {
       'push_subscriptions',
       'notification_preferences',
       'weekly_runs',
+      'weekly_run_skips',
     ]) {
       expect(schema).toMatch(
         new RegExp(`ALTER TABLE ${table}\\s+ENABLE ROW LEVEL SECURITY`)
       )
     }
-    // 8 tables × 4 politiques + messages × 3 (pas d'UPDATE)
-    expect([...schema.matchAll(/CREATE POLICY/g)]).toHaveLength(35)
+    // 9 tables × 4 politiques + messages × 3 (pas d'UPDATE)
+    expect([...schema.matchAll(/CREATE POLICY/g)]).toHaveLength(39)
   })
 
   it('rend un message immuable : aucune politique UPDATE', () => {
@@ -287,6 +291,81 @@ describe('migration 2026-11-12 (tâche 35)', () => {
   it('applique tout ou rien', () => {
     expect(historyMigration).toMatch(/^BEGIN;/m)
     expect(historyMigration.trimEnd().endsWith('COMMIT;')).toBe(true)
+  })
+})
+
+describe('table weekly_run_skips', () => {
+  it('garde une réponse par personne et par semaine', () => {
+    // La clé primaire porte la règle : répondre deux fois ne crée pas de
+    // doublon, et la réponse suit la personne d'un appareil à l'autre.
+    expect(schema).toMatch(
+      /CREATE TABLE IF NOT EXISTS weekly_run_skips[\s\S]*?PRIMARY KEY \(week_key, user_number\)/
+    )
+    expect(schema).toMatch(
+      /weekly_run_skips[\s\S]*?user_number\s+integer NOT NULL\s+REFERENCES user_profiles\(user_number\) ON DELETE CASCADE/
+    )
+  })
+
+  it('indexe la personne pour les statistiques', () => {
+    expect(schema).toMatch(
+      /CREATE INDEX IF NOT EXISTS idx_weekly_run_skips_user[\s\S]*?\(user_number\)/
+    )
+  })
+
+  it('efface la réponse quand une sortie est déclarée', () => {
+    // On ne peut pas avoir couru ET déclaré ne pas avoir couru.
+    expect(schema).toMatch(
+      /CREATE OR REPLACE FUNCTION clear_run_skip_when_declared/
+    )
+    expect(schema).toMatch(
+      /AFTER INSERT OR UPDATE ON weekly_runs[\s\S]*?clear_run_skip_when_declared\(\)/
+    )
+  })
+
+  it('ignore une réponse tardive si une sortie existe déjà', () => {
+    // Effacer la sortie serait pire que perdre la réponse : on l'ignore.
+    expect(schema).toMatch(
+      /CREATE OR REPLACE FUNCTION ignore_run_skip_when_run_exists/
+    )
+    expect(schema).toMatch(
+      /BEFORE INSERT OR UPDATE ON weekly_run_skips[\s\S]*?ignore_run_skip_when_run_exists\(\)/
+    )
+  })
+})
+
+describe('migration 2026-11-16 (tâche 36)', () => {
+  it('reprend la table, l’index, les triggers et les quatre politiques', () => {
+    expect(skipMigration).toMatch(
+      /CREATE TABLE IF NOT EXISTS weekly_run_skips/
+    )
+    expect(skipMigration).toMatch(/PRIMARY KEY \(week_key, user_number\)/)
+    expect(skipMigration).toMatch(
+      /CREATE INDEX IF NOT EXISTS idx_weekly_run_skips_user/
+    )
+    expect(skipMigration).toMatch(/CREATE TRIGGER weekly_runs_clear_skip/)
+    expect(skipMigration).toMatch(
+      /CREATE TRIGGER weekly_run_skips_ignore_if_run/
+    )
+
+    for (const action of ['lire', 'inserer', 'modifier', 'supprimer']) {
+      expect(skipMigration).toMatch(
+        new RegExp(`CREATE POLICY weekly_run_skips_${action}`)
+      )
+    }
+  })
+
+  it('est rejouable et ne supprime aucune donnée à l’exécution', () => {
+    expect(skipMigration).toMatch(/CREATE TABLE IF NOT EXISTS/)
+    expect(skipMigration).toMatch(/DROP POLICY IF EXISTS/)
+    expect(skipMigration).toMatch(/DROP TRIGGER IF EXISTS/)
+    // Le seul DELETE vit dans le corps d'un trigger, pas dans la migration.
+    expect(skipMigration).not.toMatch(/^DELETE FROM/m)
+    expect(skipMigration).not.toMatch(/TRUNCATE|DROP TABLE/)
+  })
+
+  it('applique tout ou rien', () => {
+    expect(skipMigration).toMatch(/^BEGIN;/m)
+    expect(skipMigration.trimEnd().endsWith('COMMIT;')).toBe(true)
   })
 })
 

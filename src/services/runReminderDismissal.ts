@@ -1,12 +1,15 @@
 /**
- * « Je n'ai pas couru » : couper le rappel de l'accueil sans rien écrire en base.
+ * « Je n'ai pas couru » : repère local, en secours de la base.
  *
- * Le rappel ne sert qu'à soi. Il n'apprend rien au groupe, et « pas de sortie
- * déclarée » veut déjà dire « n'a pas couru » pour les statistiques. Écrire une
- * ligne en base pour ça inventerait un fait que personne ne consulte.
+ * La réponse de référence vit dans `weekly_run_skips`, **par personne** : elle
+ * suit la personne d'un téléphone à l'autre. Ce module ne garde qu'un repère
+ * par appareil, pour deux cas :
  *
- * - Mémorisé dans `localStorage`, par appareil : sur un autre téléphone le
- *   rappel revient. C'est une gêne mineure, jamais une donnée fausse.
+ * - la carte disparaît tout de suite, sans attendre le réseau ;
+ * - la réponse tient même si l'écriture en base échoue (hors ligne).
+ *
+ * - Mémorisé dans `localStorage`, par appareil. Une réponse donnée sur un
+ *   autre téléphone ne passe pas par ici : c'est la base qui la rapporte.
  * - **Une seule semaine par personne** : la carte ne vise qu'une semaine à la
  *   fois, donc la dernière réponse remplace la précédente et le repère ne
  *   grossit pas au fil des semaines.
@@ -44,8 +47,10 @@ function read(): Dismissals {
 }
 
 /**
- * La personne a-t-elle déjà répondu « je n'ai pas couru » pour cette semaine
- * sur cet appareil ?
+ * Le repère LOCAL dit-il « je n'ai pas couru » pour cette semaine ?
+ *
+ * Répond pour cet appareil seulement : la réponse de référence est en base
+ * (`weekly_run_skips`), lue par `useLastRun`.
  */
 export function isRunReminderDismissed(
   userNumber: number,
@@ -62,5 +67,26 @@ export function dismissRunReminder(userNumber: number, weekKey: string): void {
     localStorage.setItem(RUN_REMINDER_KEY, JSON.stringify(all))
   } catch {
     // Sans stockage, la carte revient au prochain chargement : acceptable.
+  }
+}
+
+/**
+ * Oublie la réponse locale d'une semaine.
+ *
+ * Une sortie déclarée la rend inutile — et si elle est retirée plus tard, le
+ * rappel doit pouvoir revenir. On ne touche qu'à la semaine concernée : une
+ * réponse mémorisée pour une autre semaine reste valable.
+ */
+export function clearRunReminderDismissal(
+  userNumber: number,
+  weekKey: string
+): void {
+  try {
+    const all = read()
+    if (all[String(userNumber)] !== weekKey) return
+    delete all[String(userNumber)]
+    localStorage.setItem(RUN_REMINDER_KEY, JSON.stringify(all))
+  } catch {
+    // Sans stockage, il n'y a rien à oublier.
   }
 }

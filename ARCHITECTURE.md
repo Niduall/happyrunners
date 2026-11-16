@@ -190,7 +190,9 @@ la semaine ouverte où l'on vient déclarer. L'accueil porte un rappel
 (`useLastRun`) tant que la sortie déclarable manque : il apparaît dès
 **12h30 le jour du run**, sans attendre la bascule, et vise sinon le mercredi
 précédent. Un second bouton, « Je n'ai pas couru », coupe ce rappel pour la
-semaine **sur cet appareil** (`localStorage`), sans rien écrire en base. La
+semaine **par personne** (`weekly_run_skips`) : la réponse suit la personne
+d'un téléphone à l'autre. Un repère local la double pour masquer la carte sans
+réseau ; la base fait foi, et déclarer une sortie la supprime. La
 modale ne présélectionne un parcours que s'il existe déjà une
 sortie ou un vote ; sinon « Enregistrer » reste inactif, pour ne jamais créer
 une sortie fausse d'un seul clic. La page recharge au retour sur l'onglet

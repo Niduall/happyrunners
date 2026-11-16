@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { declareWeeklyRun, getWeeklyRuns } from '../services/supabaseService'
 import { pastWeekKeys } from '../services/history'
+import {
+  dismissRunReminder,
+  isRunReminderDismissed,
+} from '../services/runReminderDismissal'
 import { useTargetWednesday } from './useTargetWednesday'
 import type { RunChoice } from './useHistory'
 import type { WeeklyRun } from '../types/supabase'
@@ -10,10 +14,14 @@ export interface LastRun {
   weekKey: string | null
   /** La sortie de la personne connectée, si elle l'a déjà déclarée */
   myRun: WeeklyRun | null
+  /** La personne a répondu « je n'ai pas couru » pour cette semaine */
+  dismissed: boolean
   loading: boolean
   saving: boolean
   error: string | null
   declare: (choice: RunChoice) => Promise<boolean>
+  /** Coupe le rappel de cette semaine, sans rien écrire en base */
+  dismiss: () => void
 }
 
 /**
@@ -40,6 +48,23 @@ export function useLastRun(userNumber: number | null): LastRun {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const requestIdRef = useRef(0)
+  /** Sert uniquement à re-rendre après une réponse mémorisée localement. */
+  const [, bumpDismissal] = useState(0)
+
+  /**
+   * « Je n'ai pas couru » est mémorisé par appareil, donc lu à chaque rendu :
+   * c'est la seule source de vérité, et elle change sans passer par le réseau.
+   */
+  const dismissed =
+    userNumber != null &&
+    declarableWeekKey != null &&
+    isRunReminderDismissed(userNumber, declarableWeekKey)
+
+  const dismiss = useCallback(() => {
+    if (userNumber == null || declarableWeekKey == null) return
+    dismissRunReminder(userNumber, declarableWeekKey)
+    bumpDismissal((count) => count + 1)
+  }, [userNumber, declarableWeekKey])
 
   const refresh = useCallback(async () => {
     if (declarableWeekKey == null || userNumber == null) {
@@ -105,9 +130,11 @@ export function useLastRun(userNumber: number | null): LastRun {
   return {
     weekKey: declarableWeekKey,
     myRun,
+    dismissed,
     loading,
     saving,
     error,
     declare,
+    dismiss,
   }
 }

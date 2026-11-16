@@ -257,7 +257,8 @@ export function Home() {
             {lastRunTarget &&
               !lastRun.loading &&
               !lastRun.error &&
-              !lastRun.myRun && (
+              !lastRun.myRun &&
+              !lastRun.dismissed && (
                 <div className="rounded-xl border border-accent/20 bg-accent-light p-4 shadow-sm">
                   <div className="flex items-start gap-3">
                     <Footprints className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
@@ -268,14 +269,25 @@ export function Home() {
                       <p className="mt-1 text-sm text-gray-600">
                         Indique ton parcours : il comptera dans ton historique.
                       </p>
-                      <Button
-                        variant="accent"
-                        size="sm"
-                        className="mt-3"
-                        onClick={() => setDeclaringLastRun(true)}
-                      >
-                        Indiquer mon parcours
-                      </Button>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          variant="accent"
+                          size="sm"
+                          onClick={() => setDeclaringLastRun(true)}
+                        >
+                          Indiquer mon parcours
+                        </Button>
+                        {/* Coupe le rappel pour cette semaine, sur cet appareil.
+                            Rien n'est écrit en base : « pas de sortie » veut
+                            déjà dire « n'a pas couru » pour les statistiques. */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={lastRun.dismiss}
+                        >
+                          Je n’ai pas couru
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>

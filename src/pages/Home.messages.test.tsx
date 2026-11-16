@@ -48,10 +48,12 @@ vi.mock('../hooks/useLastRun', () => ({
   useLastRun: () => ({
     weekKey: null,
     myRun: null,
+    dismissed: false,
     loading: false,
     saving: false,
     error: null,
     declare: vi.fn(),
+    dismiss: vi.fn(),
   }),
 }))
 vi.mock('../hooks/useTargetWednesday', () => ({

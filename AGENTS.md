@@ -77,6 +77,7 @@ npm run build      # 0 erreur TypeScript
 | `src/pages/History.tsx` | historique `/historique` : 12 mercredis, stats personnelles, déclaration du parcours couru |
 | `src/services/history.ts` | logique pure de l'historique : semaines passées, sorties par personne, stats km/D+ |
 | `src/hooks/useHistory.ts` | chargement groupé des 12 semaines + `declare` |
+| `src/hooks/useLastRun.ts` | sortie encore déclarable pour le rappel de l'accueil + « je n'ai pas couru » |
 | `src/components/DeclareRunModal.tsx` | déclaration du parcours personnel (liste ou « autre ») |
 | `src/components/ChatComposer.tsx` | saisie du chat (Entrée envoie, Maj+Entrée à la ligne) |
 | `src/components/ChatMessageBubble.tsx` | bulle, état d'envoi, suppression par l'auteur |
@@ -323,6 +324,13 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   (`hasRunStarted`), pour ne pas faire attendre la bascule de 14h. Elle
   disparaît une fois la sortie déclarée ; correction et retrait restent dans
   l'historique.
+- **« Je n'ai pas couru » coupe ce rappel** : un second bouton sur la carte,
+  mémorisé **par appareil** (`localStorage`, une semaine par personne dans
+  `runReminderDismissal.ts`). Rien n'est écrit en base : « pas de sortie
+  déclarée » veut déjà dire « n'a pas couru » pour les statistiques, et une
+  ligne « je n'ai pas couru » n'apprendrait rien au groupe. Sur un autre
+  téléphone le rappel revient — gêne mineure, jamais donnée fausse. La semaine
+  suivante a son propre rappel, sans rien nettoyer.
 - **`parcours_name`, `distance_km` et `elevation_gain_m` sont des
   instantanés** pris à la déclaration. Renommer, modifier ou supprimer un
   parcours ne doit jamais réécrire les totaux d'une ligue passée.
@@ -791,7 +799,8 @@ Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour l
 | `src/pages/Chat.test.tsx` | lecture ouverte, fil, marquage lu, prénoms en double |
 | `src/services/history.test.ts` | semaines passées, une sortie par personne, stats km/D+ |
 | `src/hooks/useHistory.test.tsx` | verrouillage : seule la semaine la plus récente est déclarable ou retirable |
-| `src/hooks/useLastRun.test.tsx` | semaine déclarable sur l'accueil, sortie existante, déclaration |
+| `src/hooks/useLastRun.test.tsx` | semaine déclarable sur l'accueil, sortie existante, déclaration, « je n'ai pas couru » |
+| `src/services/runReminderDismissal.test.ts` | réponse locale par profil et par semaine, repère illisible |
 | `src/pages/Home.lastRun.test.tsx` | rappel de la sortie à déclarer, modale sans présélection |
 | `src/pages/History.test.tsx` | mercredis, déclaration « autre », correction, retrait, semaine figée, Échap |
 | `src/components/RequireUser.test.tsx` | visiteur redirigé, connecté autorisé, attente du chargement |

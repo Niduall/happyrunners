@@ -189,7 +189,9 @@ présence ni sortie sont masquées (un bouton déplie les N semaines vides), sau
 la semaine ouverte où l'on vient déclarer. L'accueil porte un rappel
 (`useLastRun`) tant que la sortie déclarable manque : il apparaît dès
 **12h30 le jour du run**, sans attendre la bascule, et vise sinon le mercredi
-précédent. La modale ne présélectionne un parcours que s'il existe déjà une
+précédent. Un second bouton, « Je n'ai pas couru », coupe ce rappel pour la
+semaine **sur cet appareil** (`localStorage`), sans rien écrire en base. La
+modale ne présélectionne un parcours que s'il existe déjà une
 sortie ou un vote ; sinon « Enregistrer » reste inactif, pour ne jamais créer
 une sortie fausse d'un seul clic. La page recharge au retour sur l'onglet
 (`visibilitychange`) et par un bouton « Actualiser » : pas de polling, mais

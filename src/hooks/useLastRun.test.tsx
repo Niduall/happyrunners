@@ -3,6 +3,10 @@ import { renderHook, act, waitFor } from '@testing-library/react'
 import { useLastRun } from './useLastRun'
 import { useTargetWednesday } from './useTargetWednesday'
 import { declareWeeklyRun, getWeeklyRuns } from '../services/supabaseService'
+import {
+  RUN_REMINDER_KEY,
+  isRunReminderDismissed,
+} from '../services/runReminderDismissal'
 import type { WeeklyRun } from '../types/supabase'
 
 vi.mock('./useTargetWednesday', () => ({ useTargetWednesday: vi.fn() }))
@@ -57,6 +61,7 @@ function target(over: Partial<ReturnType<typeof useTargetWednesday>> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  localStorage.clear()
   mockTarget.mockReturnValue(target())
   mockRuns.mockResolvedValue([])
   mockDeclare.mockResolvedValue(undefined)
@@ -137,5 +142,58 @@ describe('useLastRun — déclaration', () => {
 
     expect(ok).toBe(false)
     expect(result.current.error).toBe('écriture refusée')
+  })
+})
+
+describe('useLastRun — « je n’ai pas couru »', () => {
+  it('ne coupe rien au départ', async () => {
+    const { result } = renderHook(() => useLastRun(ALICE))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(result.current.dismissed).toBe(false)
+  })
+
+  it('coupe le rappel de la semaine déclarable', async () => {
+    const { result } = renderHook(() => useLastRun(ALICE))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    act(() => {
+      result.current.dismiss()
+    })
+
+    expect(result.current.dismissed).toBe(true)
+    expect(isRunReminderDismissed(ALICE, '2026-11-04')).toBe(true)
+  })
+
+  it('laisse revenir le rappel la semaine suivante', async () => {
+    const { result, rerender } = renderHook(() => useLastRun(ALICE))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    act(() => {
+      result.current.dismiss()
+    })
+    expect(result.current.dismissed).toBe(true)
+
+    // La bascule du mercredi suivant change la semaine visée : nouveau rappel.
+    mockTarget.mockReturnValue(target({ weekKey: '2026-11-18' }))
+    rerender()
+    await waitFor(() =>
+      expect(mockRuns).toHaveBeenCalledWith(['2026-11-11'])
+    )
+
+    expect(result.current.weekKey).toBe('2026-11-11')
+    expect(result.current.dismissed).toBe(false)
+  })
+
+  it('n’écrit rien sans identité', async () => {
+    const { result } = renderHook(() => useLastRun(null))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    act(() => {
+      result.current.dismiss()
+    })
+
+    expect(result.current.dismissed).toBe(false)
+    expect(localStorage.getItem(RUN_REMINDER_KEY)).toBeNull()
   })
 })

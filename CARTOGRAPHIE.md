@@ -117,7 +117,7 @@ Toutes les lignes sont sous `running-app/`.
 
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
-| `src/pages/Home.tsx` | page principale : auth, présence, météo, vote, tableau des participants, entrée du chat (connectés seulement), rappel de la sortie à déclarer | 447 |
+| `src/pages/Home.tsx` | page principale : auth, présence, météo, vote, tableau des participants, entrée du chat (connectés seulement), rappel de la sortie à déclarer (« je n'ai pas couru » compris) | 462 |
 | `src/pages/ParcoursList.tsx` | gestion : liste, import GPX, suppression, verrou admin | 316 |
 | `src/pages/Chat.tsx` | fil de discussion : groupes par jour, auto-défilement, envoi, suppression, noms désambiguïsés | 205 |
 | `src/pages/History.tsx` | historique : 12 mercredis, stats personnelles (km/D+), sorties déclarées par personne, déclaration et retrait (même sur semaine clôturée), verrouillage de la correction, semaines vides masquées, bouton d'actualisation | 401 |
@@ -169,7 +169,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/hooks/useMessages.ts` | chat : polling 5 s / 30 s, envoi optimiste, lecture serveur, suppression, purge 30 j | 285 |
 | `src/hooks/useUnreadMessages.ts` | pastille : comptage des messages des autres, 30 s + focus/visibilité | 72 |
 | `src/hooks/useHistory.ts` | historique : 12 semaines chargées en une fois, `declare`, `retract` (jamais refusé), refus de correction sur semaine figée, rafraîchissement manuel et au retour sur l'onglet | 211 |
-| `src/hooks/useLastRun.ts` | sortie encore déclarable pour l'accueil (mercredi précédent, ou le jour dès 12h30) | 113 |
+| `src/hooks/useLastRun.ts` | sortie encore déclarable pour l'accueil (mercredi précédent, ou le jour dès 12h30) et « je n'ai pas couru » | 140 |
 | `src/hooks/usePushNotifications.ts` | statut push, activation/désactivation de l'appareil, préférences par personne | 161 |
 
 ### 2.6 Services
@@ -178,6 +178,7 @@ Toutes les lignes sont sous `running-app/`.
 |---|---|---|
 | `src/services/supabaseService.ts` | toutes les requêtes Supabase | 811 |
 | `src/services/history.ts` | logique pure de l'historique : semaines passées, sorties par personne, semaines vides, stats km/D+ | 261 |
+| `src/services/runReminderDismissal.ts` | « je n'ai pas couru » : rappel coupé par appareil, une semaine par personne | 66 |
 | `src/services/messages.ts` | chat : fenêtre de 30 j, validation, regroupement par jour, non-lus, dernière lecture, réactions | 273 |
 | `src/services/presenceRows.ts` | fusion annuaire + réponses : qui vient, qui est absent, qui n'a pas répondu | 50 |
 | `src/services/gpxParser.ts` | parse GPX XML (DOMParser natif) et JSON Strava, distance, dénivelé, simplification | 265 |
@@ -230,8 +231,9 @@ La suite complète tourne avec `npm test`.
 | `src/services/weatherCode.test.ts` | mapping des 28 codes WMO |
 | `src/services/adminCode.test.ts` | verrou admin, ne mémorise rien |
 | `src/hooks/useTargetWednesday.test.ts` | horloge de semaine, bascule de 12h30 et de 14h |
-| `src/hooks/useLastRun.test.tsx` | semaine déclarable, sortie existante, déclaration |
-| `src/pages/Home.lastRun.test.tsx` | rappel sur l'accueil, modale sans présélection |
+| `src/hooks/useLastRun.test.tsx` | semaine déclarable, sortie existante, déclaration, « je n'ai pas couru » |
+| `src/pages/Home.lastRun.test.tsx` | rappel sur l'accueil, modale sans présélection, réponse « je n'ai pas couru » |
+| `src/services/runReminderDismissal.test.ts` | réponse locale par profil et par semaine, repère illisible |
 | `src/services/messages.test.ts` | fenêtre de 30 j, validation, regroupement par jour, non-lus |
 | `src/hooks/useMessages.test.tsx` | polling 5 s / 30 s, envoi optimiste, lecture serveur, échec, purge, course polling/envoi |
 | `src/hooks/useUnreadMessages.test.tsx` | pastille : première visite, période 30 s, retour d'onglet, exclusion de soi, erreur silencieuse |

@@ -252,6 +252,9 @@ mercredis** : présents, vote indicatif et sorties **réellement courues**.
 - **L'accueil rappelle la sortie manquante** : une carte propose de l'indiquer
   dès 12h30 le jour du run, puis jusqu'au mercredi suivant 14h. Elle disparaît
   une fois la sortie déclarée.
+- **« Je n'ai pas couru »** coupe ce rappel pour la semaine, **sur cet appareil**
+  seulement : rien n'est écrit en base, puisque « pas de sortie déclarée » veut
+  déjà dire « n'a pas couru ».
 - **Aucune présélection dans la modale** sans sortie déjà déclarée ni vote : le
   bouton « Enregistrer » reste inactif tant qu'aucun parcours n'est choisi.
 - Déclarer une sortie remet la présence de la semaine à « going » : quelqu'un

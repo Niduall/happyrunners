@@ -117,6 +117,7 @@ function renderHome() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  localStorage.clear()
   mockAuth.mockReturnValue({
     isAuthenticated: true,
     user: { id: 14, firstName: 'Julie', lastName: 'Moudin', name: 'Julie Moudin' },
@@ -189,5 +190,33 @@ describe('Accueil — rappel de la sortie à déclarer', () => {
     await waitFor(() =>
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     )
+  })
+
+  it('disparaît quand on répond « je n’ai pas couru »', async () => {
+    const user = userEvent.setup()
+    renderHome()
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Je n’ai pas couru' })
+    )
+
+    expect(screen.queryByText(/Tu as couru le/)).not.toBeInTheDocument()
+    // Rien n'est déclaré : on n'écrit pas une fausse sortie pour autant.
+    expect(mockDeclare).not.toHaveBeenCalled()
+  })
+
+  it('ne revient pas au rechargement de la page', async () => {
+    const user = userEvent.setup()
+    const first = renderHome()
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Je n’ai pas couru' })
+    )
+    first.unmount()
+
+    // Même appareil, même personne, même semaine : la réponse est retenue.
+    renderHome()
+    await waitFor(() => expect(mockRuns).toHaveBeenCalled())
+    expect(screen.queryByText(/Tu as couru le/)).not.toBeInTheDocument()
   })
 })

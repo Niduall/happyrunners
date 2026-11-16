@@ -1,6 +1,6 @@
 # Feuille de route — HappyRunners
 
-Dernière mise à jour : **12 novembre 2026**
+Dernière mise à jour : **16 novembre 2026**
 
 Cette feuille de route garde les idées d’amélioration et les fonctionnalités
 envisagées, avec leur priorité et leur coût. Elle ne remplace pas `AGENTS.md`
@@ -29,7 +29,7 @@ envisagées, avec leur priorité et leur coût. Elle ne remplace pas `AGENTS.md`
 |---|---|---|---|
 | **Sauvegardes planifiées** | Job quotidien qui exécute `backup.py save` et conserve un artefact chiffré, au lieu de dépendre d’une action manuelle. | M | ✅ Livré |
 
-`backup.py` couvre désormais les **neuf tables** (chat, push et historique
+`backup.py` couvre désormais les **dix tables** (chat, push et historique
 compris), et
 `.github/workflows/backup.yml` sauvegarde la prod chaque jour à 3 h UTC dans
 un artefact chiffré conservé 30 jours.
@@ -46,12 +46,11 @@ un artefact chiffré conservé 30 jours.
 |---|---|---|---|
 | **Tests de bout en bout** | Trois scénarios Playwright sur la base de test : connexion → présence/vote, envoi d’un message avec réponse citée, réaction puis « qui a réagi ». Ils ont déjà révélé une course entre « Je viens » et le chargement initial, corrigée. | M | ✅ Livré |
 
-## En cours — Historique des sorties (12 novembre 2026)
+## Livré — Historique des sorties (16 novembre 2026)
 
 | Tâche | Pourquoi | Effort | État |
 |---|---|---|---|
-| **Historique des sorties** | Page `/historique` : 12 mercredis passés, présents, et **une sortie par personne et par semaine** (`weekly_runs`, clé `week_key,user_number`). Chacun déclare son propre parcours (liste ou « autre »), peut le corriger ou le retirer — le retrait reste possible même après la clôture ; déclarer remet la présence à « going ». Une semaine se fige au mercredi suivant 14h : seule la sortie la plus récente reste déclarable et corrigeable, et les cartes figées portent une mention « Semaine clôturée ». Les semaines sans présence ni sortie sont masquées (avec un compteur pour les déplier), sauf la semaine ouverte où l'on vient déclarer. L'accueil rappelle la sortie manquante dès 12h30 le jour du run, et un bouton « Je n'ai pas couru » coupe ce rappel **par personne** (`weekly_run_skips`, la réponse suit la personne d'un appareil à l'autre) ; la modale ne présélectionne rien sans indice. Nom, km et D+ sont figés à la déclaration, les stats personnelles comptent les valeurs connues. Le vote reste un simple indice. Source `manual`, prête pour GPX/Strava. | M | 🚧 En cours |
-| **Ligue et badges** | S'appuyer sur les sorties déclarées (une par personne et par mercredi) pour un classement et des badges. À cadrer : critères (régularité, km, D+, série), périodes, égalités. | M | À cadrer |
+| **Historique des sorties** | Page `/historique` : 12 mercredis passés, présents, et **une sortie par personne et par semaine** (`weekly_runs`, clé `week_key,user_number`). Chacun déclare son propre parcours (liste ou « autre »), peut le corriger ou le retirer — le retrait reste possible même après la clôture ; déclarer remet la présence à « going ». Une semaine se fige au mercredi suivant 14h : seule la sortie la plus récente reste déclarable et corrigeable, et les cartes figées portent une mention « Semaine clôturée ». Les semaines sans présence ni sortie sont masquées (avec un compteur pour les déplier), sauf la semaine ouverte où l'on vient déclarer. L'accueil rappelle la sortie manquante dès 12h30 le jour du run, et un bouton « Je n'ai pas couru » coupe ce rappel **par personne** (`weekly_run_skips`, la réponse suit la personne d'un appareil à l'autre) ; la modale ne présélectionne rien sans indice. Nom, km et D+ sont figés à la déclaration, les stats personnelles comptent les valeurs connues. Le vote reste un simple indice. Source `manual`, prête pour GPX/Strava. | M | ✅ Livré |
 
 ## À faire ensuite
 
@@ -60,6 +59,7 @@ un artefact chiffré conservé 30 jours.
 | Idée | Détail | Effort |
 |---|---|---|
 | **Hors ligne réel** | Le README promet « fonctionne hors ligne », mais seule la coquille est précachée. Cacher le dernier état de Home et afficher un bandeau « données du … » quand le réseau manque. | M |
+| **GPX pour une sortie « Autre »** | Dans la modale de déclaration, joindre un fichier GPX remplit la distance et le D+ au lieu de les laisser vides : une sortie improvisée compte enfin dans les stats. `gpxParser` existe déjà (XML et JSON Strava) ; il faut passer `source: 'gpx'` jusqu'à `declareWeeklyRun`, qui l'écrit en dur à `manual` aujourd'hui. **Aucune migration** : `weekly_runs.source` (`manual` \| `gpx` \| `strava`), `distance_km` et `elevation_gain_m` existent déjà. À trancher : garder le tracé (`points jsonb`, migration + poids) ou seulement les chiffres — le second suffit pour les stats, le premier ouvre la carte des sorties passées. | S/M |
 
 ### Priorité 2 — confort et fiabilité
 
@@ -68,6 +68,7 @@ un artefact chiffré conservé 30 jours.
 | **Palette de réactions beaucoup plus large** | Aujourd'hui 5 emoji fixes (`like`, `love`, `laugh`, `run`, `fire`). Ouvrir un vrai choix, avec catégories et recherche si besoin. Deux contraintes à ne pas oublier : le `CHECK` de `message_reactions.reaction` doit être élargi par une migration (sinon l'insertion est refusée), et les pastilles doivent rester lisibles quand un message en accumule beaucoup. La clé primaire garde « une seule réaction par personne et par message ». | M |
 | **Sous-titre météo trop discret** | « Prévision à 12h30 », sous « Météo pour la course », est en `text-sm` gris : il se lit mal. Le remonter d'un cran (taille ou contraste) sans refaire la carte. | S |
 | **Message épinglé** | Un message important (parcours du jour, consignes) reste en haut du fil. | S/M |
+| **Ligue et badges** | S'appuyer sur les sorties déclarées (une par personne et par mercredi) pour un classement et des badges. À cadrer : critères (régularité, km, D+, série), périodes, égalités. | M |
 | **Annulation météo** | État « Sortie annulée » avec motif, visible sur Home et notifié aux personnes qui viennent. | M |
 
 ### Priorité 3 — selon le besoin réel
@@ -77,6 +78,20 @@ un artefact chiffré conservé 30 jours.
 | **Covoiturage** | « Je peux emmener N personnes » / « Je cherche une place » pour la sortie de la semaine. | M |
 | **Export CSV de la saison** | Présences et parcours, pour le club. | S |
 | **Fusion des doublons de profil** | Console admin : repérer deux profils créés pour la même personne. Opération sensible (votes, réactions, présences à reporter). | M |
+
+## Exploré plus tard — montres et plateformes
+
+Idées notées le 16 novembre 2026. Aucune n'est engagée : elles demandent des
+comptes développeur, des secrets serveur ou une application native, donc un
+autre projet que cette PWA.
+
+| Piste | Ce qu'il faudrait | Réalité à connaître |
+|---|---|---|
+| **Import GPX / FIT depuis une montre** | Un simple champ fichier dans la déclaration de sortie. GPX est déjà lu (`gpxParser`) ; le FIT de Garmin demanderait un parseur dédié. | La plus simple, et elle règle 90 % du besoin : la personne exporte depuis sa montre et dépose le fichier. Aucun compte tiers, aucun secret. À faire avant toute intégration. |
+| **Strava** | OAuth (client id + **secret**, donc une Edge Function) puis l'API Activities, avec des limites de débit. | Le secret ne peut pas vivre dans le bundle. Acceptable, mais c'est le premier vrai bout de serveur du projet. Le dépôt manuel du GPX exporté par Strava donne le même résultat pour beaucoup moins. |
+| **Apple Health** | Aucune API web : HealthKit exige une app native iOS. Le chemin réaliste est un raccourci iOS qui exporte la sortie et partage un fichier à l'app. | Sur iPhone, « exporter vers HappyRunners » via Raccourcis est faisable ; une intégration directe ne l'est pas dans une PWA. |
+| **Garmin** | Garmin Connect API réservée au programme partenaire (approbation, conditions). | À oublier côté API sauf besoin réel. L'export GPX/FIT manuel reste la voie. |
+| **Application sur montre** | watchOS ou Wear OS : une app native, donc Swift/Kotlin, un compte développeur Apple (99 $/an) et une revalidation. | Une PWA ne tourne pas sur une montre. C'est un second produit, pas une tâche de cette feuille de route. |
 
 ## Écarté volontairement
 
@@ -94,6 +109,10 @@ un artefact chiffré conservé 30 jours.
 
 ## Déjà livré (ne pas reproposer)
 
+- Historique `/historique` : une sortie par personne et par mercredi, correction
+  et retrait, semaines vides masquées, semaine clôturée annoncée.
+- « Je n'ai pas couru » **par personne** (`weekly_run_skips`) : la réponse suit
+  la personne d'un téléphone à l'autre, et déclarer une sortie l'efface.
 - Chat sur 30 jours glissants, envoi optimiste, non-lus, polling 5 s / 30 s.
 - Réactions à palette fixe et **liste des personnes ayant réagi** au clic sur
   une pastille.

@@ -117,6 +117,22 @@ export function useHistory(userNumber: number | null) {
     void refresh()
   }, [refresh])
 
+  /**
+   * Revenir sur l'onglet recharge l'historique : les autres appareils ne
+   * préviennent pas, et une sortie déclarée entre-temps restait invisible
+   * jusqu'au rechargement complet de la page. Pas de `loading` ici : on
+   * rafraîchit en silence, sans faire clignoter la page.
+   */
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void refresh()
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () =>
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [refresh])
+
   const declare = useCallback(
     async (weekKeyToSave: string, choice: RunChoice): Promise<boolean> => {
       if (userNumber == null) {
@@ -156,8 +172,9 @@ export function useHistory(userNumber: number | null) {
         setError('Connecte-toi pour retirer ta sortie')
         return false
       }
-      if (refuseIfFrozen(weekKeyToSave)) return false
-
+      // Pas de refus sur une semaine figée : un retrait ne peut que baisser
+      // ses propres totaux, jamais réécrire le classement des autres. Une
+      // sortie déclarée par erreur doit rester réparable, même tard.
       setSavingWeek(weekKeyToSave)
       try {
         await deleteWeeklyRun({ weekKey: weekKeyToSave, userNumber })
@@ -171,7 +188,7 @@ export function useHistory(userNumber: number | null) {
         setSavingWeek(null)
       }
     },
-    [userNumber, refresh, refuseIfFrozen]
+    [userNumber, refresh]
   )
 
   const stats: HistoryStats = useMemo(

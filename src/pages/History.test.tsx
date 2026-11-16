@@ -240,8 +240,122 @@ describe('Historique — semaines passées', () => {
     await screen.findByText('Mercredi 4 novembre')
 
     expect(
-      screen.getByText(/Seule la sortie la plus récente/)
-    ).toHaveTextContent(/jusqu’au mercredi 14h/)
+      screen.getByText(/déclarer ou corriger ta sortie/)
+    ).toHaveTextContent(/jusqu’au mercredi suivant, 14h/)
+  })
+
+  it('masque les semaines sans présence ni sortie', async () => {
+    renderHistory()
+
+    await screen.findByText('Mercredi 4 novembre')
+
+    // 11 semaines sur 12 n'ont ni présence ni sortie : une seule est ouverte.
+    expect(screen.queryByText('Mercredi 21 octobre')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Afficher les 10 semaines vides' })
+    ).toBeInTheDocument()
+  })
+
+  it('garde la semaine ouverte même sans présence ni sortie', async () => {
+    mockAttendances.mockResolvedValue([])
+    mockVotes.mockResolvedValue([])
+    mockRuns.mockResolvedValue([])
+
+    renderHistory()
+
+    // C'est la semaine où l'on vient déclarer : elle doit rester visible.
+    expect(await screen.findByText('Mercredi 4 novembre')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', {
+        name: /Indiquer mon parcours du mercredi 4 novembre/,
+      })
+    ).toBeInTheDocument()
+    // Les onze autres sont vides : masquées.
+    expect(screen.queryByText('Mercredi 28 octobre')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Afficher les 11 semaines vides' })
+    ).toBeInTheDocument()
+  })
+
+  it('affiche les semaines vides à la demande', async () => {
+    const user = userEvent.setup()
+    renderHistory()
+
+    await screen.findByText('Mercredi 4 novembre')
+    await user.click(
+      screen.getByRole('button', { name: 'Afficher les 10 semaines vides' })
+    )
+
+    expect(screen.getByText('Mercredi 21 octobre')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Masquer les semaines vides' })
+    ).toBeInTheDocument()
+  })
+
+  it('signale les semaines clôturées', async () => {
+    renderHistory()
+
+    await screen.findByText('Mercredi 4 novembre')
+
+    // Une seule semaine visible est figée : 28 octobre.
+    expect(screen.getAllByText('Semaine clôturée')).toHaveLength(1)
+  })
+
+  it('permet de retirer sa sortie sur une semaine clôturée', async () => {
+    // 28 octobre est figée, et c'est là qu'Alice a déclaré.
+    mockRuns.mockResolvedValue([declaredRun({ week_key: '2026-10-28' })])
+    const user = userEvent.setup()
+    renderHistory()
+
+    await screen.findByText('Mercredi 28 octobre')
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Retirer ma sortie du mercredi 28 octobre',
+      })
+    )
+    expect(
+      screen.getByText(/Retirer ta sortie du mercredi 28 octobre/)
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Retirer' }))
+
+    await waitFor(() =>
+      expect(mockDelete).toHaveBeenCalledWith({
+        weekKey: '2026-10-28',
+        userNumber: 1,
+      })
+    )
+  })
+
+  it('n’offre le retrait que sur ses propres sorties', async () => {
+    // Bob a déclaré, pas Alice : aucun bouton de retrait sur la carte.
+    mockRuns.mockResolvedValue([
+      declaredRun({ week_key: '2026-10-28', user_number: 2 }),
+    ])
+    renderHistory()
+
+    await screen.findByText('Mercredi 28 octobre')
+    expect(
+      screen.queryByRole('button', {
+        name: 'Retirer ma sortie du mercredi 28 octobre',
+      })
+    ).not.toBeInTheDocument()
+  })
+
+  it('actualise l’historique à la demande', async () => {
+    const user = userEvent.setup()
+    renderHistory()
+
+    await screen.findByText('Mercredi 4 novembre')
+    const callsBefore = mockAttendances.mock.calls.length
+
+    await user.click(
+      screen.getByRole('button', { name: 'Actualiser l’historique' })
+    )
+
+    await waitFor(() =>
+      expect(mockAttendances.mock.calls.length).toBe(callsBefore + 1)
+    )
   })
 
   it('signale une erreur et permet de réessayer', async () => {

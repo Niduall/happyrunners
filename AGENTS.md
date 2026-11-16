@@ -295,12 +295,19 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   effacer une réponse réelle ni en inventer une.
 - **Une semaine se fige au mercredi suivant 14h** : seule la sortie la plus
   récente (`weekKeys[0]`, la semaine qui vient de se terminer) reste
-  déclarable, corrigeable et retirable. Au-delà, aucun bouton n'est proposé et
-  `useHistory` refuse l'écriture (`refuseIfFrozen`). Une fois la bascule
+  déclarable et corrigeable. Au-delà, aucun bouton de correction n'est proposé
+  et `useHistory` refuse l'écriture (`refuseIfFrozen`). Une fois la bascule
   passée, un oubli est définitif : c'est la règle annoncée dans l'interface.
   ⚠️ C'est une **règle d'interface**, pas une sécurité : la RLS est ouverte et
   la clé anon est dans le bundle. Elle empêche une correction de bonne foi de
   réécrire un classement passé, pas une écriture délibérée via l'API.
+- **Le retrait, lui, reste toujours possible**, y compris sur une semaine
+  clôturée. C'est un choix explicite : un retrait ne peut que **baisser ses
+  propres totaux**, il ne réécrit jamais le classement des autres, et une
+  sortie déclarée par erreur doit rester réparable. Les cartes figées portent
+  donc un « Retirer ma sortie » discret, avec confirmation sur place (pas de
+  modale pour une seule action destructive). Ne pas l'aligner sur la règle de
+  correction : ce sont deux gestes différents.
 - **Déclarer sa sortie remet la présence de la semaine à « going »**
   (`declareWeeklyRun` écrit la présence puis la sortie). Quelqu'un qui a couru
   sans avoir répondu doit pouvoir déclarer. Il n'y a donc **pas** de trigger
@@ -331,6 +338,20 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - **Douze semaines** (`HISTORY_WEEKS`) : un trimestre, assez pour voir une
   série et léger à charger. Présences, votes et sorties arrivent en trois
   requêtes groupées (`IN (week_keys)`), pas une par semaine.
+- **Les semaines vides sont masquées** : une semaine sans présence ni sortie
+  n'apprend rien et noyait les vraies sorties sous du bruit. Exception
+  volontaire : **la semaine encore ouverte reste toujours visible**, même vide,
+  parce que c'est là qu'on vient déclarer. Un bouton « Afficher les N semaines
+  vides » les déplie toutes, et son compteur n'inclut pas la semaine ouverte
+  (déjà affichée). Une réponse « pas cette semaine » ne rend pas une semaine
+  intéressante : c'est un refus, pas une sortie.
+- **Une carte figée le dit** : « Semaine clôturée », discret, en haut à droite.
+  Sans ça, l'absence de bouton ressemblait à un oubli de l'interface.
+- **L'historique se rafraîchit au retour sur l'onglet** (`visibilitychange`,
+  comme le chat et la pastille) **et par un bouton « Actualiser »** dans
+  l'en-tête. Pas de polling : la page n'a pas besoin de vivre, mais elle ne
+  doit pas non plus afficher des données périmées après un aller-retour.
+  Le rafraîchissement d'arrière-plan ne repasse pas par l'écran de chargement.
 - ⚠️ **Ordre de déploiement obligatoire** : appliquer
   `migrations/2026-11-12_tache35_historique.sql` **avant** de déployer
   l'interface. `useHistory` interroge `weekly_runs` : sans la table, la page

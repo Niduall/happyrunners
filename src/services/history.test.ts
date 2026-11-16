@@ -6,6 +6,7 @@ import {
   formatElevation,
   formatKm,
   formatRunDay,
+  isEmptyWeek,
   pastWeekKeys,
   type HistoryWeek,
 } from './history'
@@ -348,5 +349,44 @@ describe('computeHistoryStats', () => {
       distanceKm: 0,
       elevationGainM: 0,
     })
+  })
+})
+
+describe('isEmptyWeek', () => {
+  function build(over: {
+    attendances?: HistoryAttendance[]
+    runs?: WeeklyRun[]
+  }): HistoryWeek {
+    return buildHistoryWeeks({
+      weekKeys: ['2026-11-04'],
+      attendances: over.attendances ?? [],
+      votes: [],
+      runs: over.runs ?? [],
+      parcours: [parcours('p1', 'Bords de Marne')],
+      profiles: PROFILES,
+      userNumber: 1,
+    })[0]
+  }
+
+  it('vide sans présence ni sortie', () => {
+    expect(isEmptyWeek(build({}))).toBe(true)
+  })
+
+  it('pas vide dès qu’une personne est présente', () => {
+    expect(isEmptyWeek(build({ attendances: [attendance('2026-11-04', ALICE)] }))).toBe(false)
+  })
+
+  it('pas vide dès qu’une sortie est déclarée', () => {
+    // Déclarer remet la présence à « going », mais la sortie suffit à elle
+    // seule : une ligne d'historique ne doit jamais être masquée.
+    expect(isEmptyWeek(build({ runs: [run({ week_key: '2026-11-04' })] }))).toBe(false)
+  })
+
+  it('reste vide avec un simple refus', () => {
+    expect(
+      isEmptyWeek(
+        build({ attendances: [attendance('2026-11-04', ALICE, 'skip')] })
+      )
+    ).toBe(true)
   })
 })

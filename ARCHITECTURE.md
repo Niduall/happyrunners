@@ -181,12 +181,19 @@ sa présence de la semaine à « going ». La correction est un upsert sur
 côté client, une validation serait une sécurité de façade.
 
 Une semaine se fige au **mercredi suivant 14h** : seule la sortie la plus
-récente reste modifiable, les précédentes n'affichent plus de bouton et le hook
-refuse l'écriture. L'accueil porte un rappel (`useLastRun`) tant que la sortie
-déclarable manque : il apparaît dès **12h30 le jour du run**, sans attendre la
-bascule, et vise sinon le mercredi précédent. La modale ne présélectionne un
-parcours que s'il existe déjà une sortie ou un vote ; sinon « Enregistrer »
-reste inactif, pour ne jamais créer une sortie fausse d'un seul clic.
+récente reste déclarable et corrigeable, les précédentes n'affichent plus de
+bouton de correction, portent la mention « Semaine clôturée » et le hook refuse
+l'écriture. Le **retrait reste possible partout** : il ne peut que baisser ses
+propres totaux, jamais réécrire le classement des autres. Les semaines sans
+présence ni sortie sont masquées (un bouton déplie les N semaines vides), sauf
+la semaine ouverte où l'on vient déclarer. L'accueil porte un rappel
+(`useLastRun`) tant que la sortie déclarable manque : il apparaît dès
+**12h30 le jour du run**, sans attendre la bascule, et vise sinon le mercredi
+précédent. La modale ne présélectionne un parcours que s'il existe déjà une
+sortie ou un vote ; sinon « Enregistrer » reste inactif, pour ne jamais créer
+une sortie fausse d'un seul clic. La page recharge au retour sur l'onglet
+(`visibilitychange`) et par un bouton « Actualiser » : pas de polling, mais
+jamais de données périmées après un aller-retour.
 
 ---
 

@@ -6,9 +6,11 @@ import { Card, CardContent } from '../components/ui/Card'
 import { DeclareRunModal } from '../components/DeclareRunModal'
 import { useAuth } from '../hooks/useAuth'
 import { HISTORY_WEEKS, useHistory, type RunChoice } from '../hooks/useHistory'
+import { cn } from '../lib/utils'
 import {
   formatElevation,
   formatKm,
+  isEmptyWeek,
   type HistoryPerson,
   type HistoryWeek,
 } from '../services/history'
@@ -53,29 +55,48 @@ function WeekCard({
   week,
   userNumber,
   editable,
+  saving,
   onDeclare,
+  onRetract,
 }: {
   week: HistoryWeek
   userNumber: number | null
   editable: boolean
+  saving: boolean
   onDeclare: (week: HistoryWeek) => void
+  onRetract: (week: HistoryWeek) => Promise<boolean>
 }) {
   const nothingDeclared = week.runs.length === 0
+  const [confirmRetract, setConfirmRetract] = useState(false)
+
+  const handleRetract = async () => {
+    const ok = await onRetract(week)
+    if (ok) setConfirmRetract(false)
+  }
 
   return (
     <Card>
       <CardContent className="space-y-3">
-        <div>
-          <h2 className="text-base font-semibold text-gray-900">
-            {week.dateLabel}
-          </h2>
-          <p className="mt-0.5 text-sm text-gray-600">
-            {week.going.length === 0
-              ? 'Aucune présence enregistrée'
-              : `${week.going.length} ${
-                  week.going.length > 1 ? 'présents' : 'présent'
-                } · ${peopleLabel(week.going)}`}
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-gray-900">
+              {week.dateLabel}
+            </h2>
+            <p className="mt-0.5 text-sm text-gray-600">
+              {week.going.length === 0
+                ? 'Aucune présence enregistrée'
+                : `${week.going.length} ${
+                    week.going.length > 1 ? 'présents' : 'présent'
+                  } · ${peopleLabel(week.going)}`}
+            </p>
+          </div>
+          {/* Dit pourquoi le bouton manque, sans répéter la règle à chaque
+              carte : une semaine figée ne se corrige plus. */}
+          {!editable && (
+            <span className="shrink-0 text-xs text-gray-500">
+              Semaine clôturée
+            </span>
+          )}
         </div>
 
         {nothingDeclared ? (
@@ -129,6 +150,47 @@ function WeekCard({
             {week.myRun ? 'Corriger mon parcours' : 'Indiquer mon parcours'}
           </Button>
         )}
+
+        {/* Une semaine clôturée n'accepte plus de correction, mais un retrait
+            reste possible : il ne peut que baisser ses propres totaux, et une
+            sortie déclarée par erreur doit pouvoir être réparée. */}
+        {!editable &&
+          week.myRun &&
+          (confirmRetract ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+              <p className="text-sm text-red-700">
+                Retirer ta sortie du {week.dateLabel.toLowerCase()} ? Elle ne
+                comptera plus dans tes statistiques.
+              </p>
+              <div className="mt-2 flex justify-end gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setConfirmRetract(false)}
+                  disabled={saving}
+                >
+                  Annuler
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => void handleRetract()}
+                  disabled={saving}
+                >
+                  {saving ? 'Retrait...' : 'Retirer'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmRetract(true)}
+              aria-label={`Retirer ma sortie du ${week.dateLabel.toLowerCase()}`}
+            >
+              Retirer ma sortie
+            </Button>
+          ))}
       </CardContent>
     </Card>
   )
@@ -151,6 +213,32 @@ export function History() {
     refresh,
   } = useHistory(userNumber)
   const [declaring, setDeclaring] = useState<HistoryWeek | null>(null)
+  const [showEmptyWeeks, setShowEmptyWeeks] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+
+  /**
+   * Douze semaines dont la plupart sont vides : les afficher toutes noie les
+   * sorties réelles sous du bruit. On masque les semaines sans présence ni
+   * sortie, **sauf la semaine encore ouverte** — c'est justement celle où l'on
+   * vient déclarer, même si personne n'a encore répondu.
+   */
+  const hiddenEmptyWeeks = weeks.filter(
+    (week) => isEmptyWeek(week) && week.weekKey !== editableWeekKey
+  )
+  const visibleWeeks = showEmptyWeeks
+    ? weeks
+    : weeks.filter(
+        (week) => !isEmptyWeek(week) || week.weekKey === editableWeekKey
+      )
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await refresh()
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   const handleDeclare = async (choice: RunChoice): Promise<boolean> => {
     if (!declaring) return false
@@ -165,6 +253,10 @@ export function History() {
     if (ok) setDeclaring(null)
     return ok
   }
+
+  /** Retrait direct depuis une carte clôturée : pas de modale pour ça. */
+  const handleCardRetract = (week: HistoryWeek): Promise<boolean> =>
+    retract(week.weekKey)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -181,6 +273,19 @@ export function History() {
             <span className="ml-1 hidden sm:inline">Accueil</span>
           </Button>
           <h1 className="text-xl font-bold text-primary">Historique</h1>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void handleRefresh()}
+            disabled={loading || refreshing}
+            aria-label="Actualiser l’historique"
+            className="ml-auto shrink-0 px-2 sm:px-3"
+          >
+            <RefreshCw
+              className={cn('w-4 h-4', refreshing && 'animate-spin')}
+            />
+            <span className="ml-1 hidden sm:inline">Actualiser</span>
+          </Button>
         </div>
       </header>
 
@@ -216,8 +321,9 @@ export function History() {
 
         {!loading && weeks.length > 0 && (
           <p className="text-sm text-gray-600">
-            Seule la sortie la plus récente peut être déclarée ou corrigée,
-            jusqu’au mercredi 14h. Les semaines précédentes sont figées.
+            Tu peux déclarer ou corriger ta sortie jusqu’au mercredi suivant,
+            14h. Ensuite la semaine est clôturée, mais tu peux toujours retirer
+            une sortie déclarée par erreur.
           </p>
         )}
 
@@ -248,15 +354,34 @@ export function History() {
           </p>
         ) : (
           <div className="space-y-4">
-            {weeks.map((week) => (
+            {visibleWeeks.map((week) => (
               <WeekCard
                 key={week.weekKey}
                 week={week}
                 userNumber={userNumber}
                 editable={week.weekKey === editableWeekKey}
+                saving={savingWeek === week.weekKey}
                 onDeclare={setDeclaring}
+                onRetract={handleCardRetract}
               />
             ))}
+
+            {(showEmptyWeeks || hiddenEmptyWeeks.length > 0) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowEmptyWeeks((shown) => !shown)}
+                aria-expanded={showEmptyWeeks}
+              >
+                {showEmptyWeeks
+                  ? 'Masquer les semaines vides'
+                  : `Afficher les ${hiddenEmptyWeeks.length} ${
+                      hiddenEmptyWeeks.length > 1
+                        ? 'semaines vides'
+                        : 'semaine vide'
+                    }`}
+              </Button>
+            )}
           </div>
         )}
       </main>

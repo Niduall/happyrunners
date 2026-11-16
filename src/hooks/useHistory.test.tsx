@@ -90,17 +90,23 @@ describe('useHistory — verrouillage au mercredi 14h', () => {
     expect(result.current.error).toMatch(/figée/)
   })
 
-  it('refuse un retrait sur une semaine figée', async () => {
+  it('accepte un retrait sur une semaine figée', async () => {
     const { result } = await renderLoadedHistory()
 
-    let ok = true
+    let ok = false
     await act(async () => {
       ok = await result.current.retract('2026-10-28')
     })
 
-    expect(ok).toBe(false)
-    expect(mockDelete).not.toHaveBeenCalled()
-    expect(result.current.error).toMatch(/figée/)
+    // Corriger un classement passé reste interdit, mais réparer une sortie
+    // déclarée par erreur doit rester possible : un retrait ne peut que
+    // baisser ses propres totaux.
+    expect(ok).toBe(true)
+    expect(mockDelete).toHaveBeenCalledWith({
+      weekKey: '2026-10-28',
+      userNumber: ALICE,
+    })
+    expect(result.current.error).toBeNull()
   })
 
   it('accepte une déclaration sur la semaine ouverte', async () => {
@@ -132,5 +138,31 @@ describe('useHistory — verrouillage au mercredi 14h', () => {
       weekKey: '2026-11-04',
       userNumber: ALICE,
     })
+  })
+})
+
+describe('useHistory — fraîcheur des données', () => {
+  it('recharge au retour sur l’onglet, sans repasser par l’écran de chargement', async () => {
+    await renderLoadedHistory()
+    const callsBefore = mockAttendances.mock.calls.length
+
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
+    await waitFor(() =>
+      expect(mockAttendances.mock.calls.length).toBe(callsBefore + 1)
+    )
+  })
+
+  it('arrête d’écouter au démontage', async () => {
+    const { unmount } = await renderLoadedHistory()
+    const callsBefore = mockAttendances.mock.calls.length
+    unmount()
+
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    // Aucune requête ne doit partir d'un hook démonté.
+    expect(mockAttendances.mock.calls.length).toBe(callsBefore)
   })
 })

@@ -199,6 +199,16 @@ export function buildHistoryWeeks({
   })
 }
 
+/**
+ * Une semaine sans présence ni sortie n'apprend rien : la page la masque par
+ * défaut, sauf la semaine encore ouverte où l'on peut déclarer. Une réponse
+ * « pas cette semaine » n'est pas une présence : elle ne suffit pas non plus à
+ * rendre la semaine intéressante.
+ */
+export function isEmptyWeek(week: HistoryWeek): boolean {
+  return week.going.length === 0 && week.runs.length === 0
+}
+
 export interface HistoryStats {
   /** Semaines où la personne a déclaré une sortie */
   runs: number

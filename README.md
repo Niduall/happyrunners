@@ -236,10 +236,19 @@ mercredis** : présents, vote indicatif et sorties **réellement courues**.
 - **Chacun déclare son propre parcours** (liste des parcours ou « autre » avec
   un libellé libre), et peut le corriger ou **retirer sa sortie**. Le groupe ne
   fait pas toujours le même parcours : une ligne par personne et par mercredi.
-- **Une sortie se déclare jusqu'au mercredi suivant 14h.** Ensuite la semaine
-  est figée : plus de bouton, et l'application refuse l'écriture. Un oubli
+- **Une sortie se déclare ou se corrige jusqu'au mercredi suivant 14h.**
+  Ensuite la semaine est clôturée : plus de bouton de correction, la carte porte
+  la mention « Semaine clôturée », et l'application refuse l'écriture. Un oubli
   après la bascule est donc définitif — c'est la règle annoncée à l'écran.
   C'est une règle d'interface, pas une authentification serveur.
+- **Le retrait, lui, reste toujours possible**, même sur une semaine clôturée :
+  il ne peut que baisser ses propres totaux, et une sortie déclarée par erreur
+  doit pouvoir être réparée.
+- **Les semaines vides sont masquées** (ni présence ni sortie), sauf la semaine
+  encore ouverte, toujours affichée puisqu'on y déclare. Un bouton déplie les
+  semaines vides, avec leur nombre.
+- **La page se rafraîchit au retour sur l'onglet** et par le bouton
+  « Actualiser » : pas de polling, mais pas de données périmées non plus.
 - **L'accueil rappelle la sortie manquante** : une carte propose de l'indiquer
   dès 12h30 le jour du run, puis jusqu'au mercredi suivant 14h. Elle disparaît
   une fois la sortie déclarée.

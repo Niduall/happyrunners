@@ -120,7 +120,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/pages/Home.tsx` | page principale : auth, présence, météo, vote, tableau des participants, entrée du chat (connectés seulement), rappel de la sortie à déclarer | 447 |
 | `src/pages/ParcoursList.tsx` | gestion : liste, import GPX, suppression, verrou admin | 316 |
 | `src/pages/Chat.tsx` | fil de discussion : groupes par jour, auto-défilement, envoi, suppression, noms désambiguïsés | 205 |
-| `src/pages/History.tsx` | historique : 12 mercredis, stats personnelles (km/D+), sorties déclarées par personne, déclaration et retrait, verrouillage de la semaine | 276 |
+| `src/pages/History.tsx` | historique : 12 mercredis, stats personnelles (km/D+), sorties déclarées par personne, déclaration et retrait (même sur semaine clôturée), verrouillage de la correction, semaines vides masquées, bouton d'actualisation | 401 |
 | `src/pages/Admin.tsx` | console admin : liste des profils, recherche, réinitialisation ou retrait du PIN | 283 |
 
 ### 2.3 Composants métier
@@ -168,7 +168,7 @@ Toutes les lignes sont sous `running-app/`.
 | `src/hooks/useTargetWednesday.ts` | horloge de semaine cible (tick 30 s, sans réseau) ; expose `runStarted` dès 12h30 | 93 |
 | `src/hooks/useMessages.ts` | chat : polling 5 s / 30 s, envoi optimiste, lecture serveur, suppression, purge 30 j | 285 |
 | `src/hooks/useUnreadMessages.ts` | pastille : comptage des messages des autres, 30 s + focus/visibilité | 72 |
-| `src/hooks/useHistory.ts` | historique : 12 semaines chargées en une fois, `declare`, `retract`, refus des semaines figées et rafraîchissement | 194 |
+| `src/hooks/useHistory.ts` | historique : 12 semaines chargées en une fois, `declare`, `retract` (jamais refusé), refus de correction sur semaine figée, rafraîchissement manuel et au retour sur l'onglet | 211 |
 | `src/hooks/useLastRun.ts` | sortie encore déclarable pour l'accueil (mercredi précédent, ou le jour dès 12h30) | 113 |
 | `src/hooks/usePushNotifications.ts` | statut push, activation/désactivation de l'appareil, préférences par personne | 161 |
 
@@ -177,7 +177,7 @@ Toutes les lignes sont sous `running-app/`.
 | Fichier | Responsabilité | Lignes |
 |---|---|---|
 | `src/services/supabaseService.ts` | toutes les requêtes Supabase | 811 |
-| `src/services/history.ts` | logique pure de l'historique : semaines passées, sorties par personne, stats km/D+ | 251 |
+| `src/services/history.ts` | logique pure de l'historique : semaines passées, sorties par personne, semaines vides, stats km/D+ | 261 |
 | `src/services/messages.ts` | chat : fenêtre de 30 j, validation, regroupement par jour, non-lus, dernière lecture, réactions | 273 |
 | `src/services/presenceRows.ts` | fusion annuaire + réponses : qui vient, qui est absent, qui n'a pas répondu | 50 |
 | `src/services/gpxParser.ts` | parse GPX XML (DOMParser natif) et JSON Strava, distance, dénivelé, simplification | 265 |

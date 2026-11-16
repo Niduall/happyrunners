@@ -65,6 +65,8 @@ un artefact chiffré conservé 30 jours.
 
 | Idée | Détail | Effort |
 |---|---|---|
+| **Palette de réactions beaucoup plus large** | Aujourd'hui 5 emoji fixes (`like`, `love`, `laugh`, `run`, `fire`). Ouvrir un vrai choix, avec catégories et recherche si besoin. Deux contraintes à ne pas oublier : le `CHECK` de `message_reactions.reaction` doit être élargi par une migration (sinon l'insertion est refusée), et les pastilles doivent rester lisibles quand un message en accumule beaucoup. La clé primaire garde « une seule réaction par personne et par message ». | M |
+| **Sous-titre météo trop discret** | « Prévision à 12h30 », sous « Météo pour la course », est en `text-sm` gris : il se lit mal. Le remonter d'un cran (taille ou contraste) sans refaire la carte. | S |
 | **Message épinglé** | Un message important (parcours du jour, consignes) reste en haut du fil. | S/M |
 | **Annulation météo** | État « Sortie annulée » avec motif, visible sur Home et notifié aux personnes qui viennent. | M |
 

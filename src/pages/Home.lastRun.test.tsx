@@ -196,6 +196,7 @@ describe('Accueil — rappel de la sortie à déclarer', () => {
         parcoursName: 'Bords de Marne',
         distanceKm: 8,
         elevationGainM: 100,
+        source: 'manual',
       })
     )
     await waitFor(() =>

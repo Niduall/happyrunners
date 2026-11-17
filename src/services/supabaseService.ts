@@ -20,6 +20,7 @@ import type {
   ReactionKey,
   WeeklyRun,
   WeeklyRunInsert,
+  WeeklyRunSource,
 } from '../types/supabase'
 import type { PushSubscriptionRecord } from './push'
 
@@ -526,6 +527,11 @@ export async function declareWeeklyRun(params: {
   parcoursName: string
   distanceKm?: number | null
   elevationGainM?: number | null
+  /**
+   * D'où viennent les chiffres : `manual` par défaut, `gpx` quand la distance
+   * et le D+ sont lus dans un fichier joint à une sortie « autre ».
+   */
+  source?: WeeklyRunSource
 }): Promise<void> {
   await setAttendance({
     weekKey: params.weekKey,
@@ -539,7 +545,7 @@ export async function declareWeeklyRun(params: {
       user_number: params.userNumber,
       parcours_id: params.parcoursId,
       parcours_name: params.parcoursName,
-      source: 'manual',
+      source: params.source ?? 'manual',
       distance_km: params.distanceKm ?? null,
       elevation_gain_m: params.elevationGainM ?? null,
     } as WeeklyRunInsert,

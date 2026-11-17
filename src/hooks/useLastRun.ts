@@ -138,6 +138,7 @@ export function useLastRun(userNumber: number | null): LastRun {
           parcoursName: choice.parcoursName,
           distanceKm: choice.distanceKm,
           elevationGainM: choice.elevationGainM,
+          source: choice.source ?? 'manual',
         })
         // La base supprime la réponse « je n'ai pas couru » de la semaine
         // (trigger) : on oublie aussi le repère local, pour que le rappel

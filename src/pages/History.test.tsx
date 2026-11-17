@@ -402,6 +402,7 @@ describe('Historique — déclaration du parcours', () => {
         parcoursName: 'Boucle du parc',
         distanceKm: null,
         elevationGainM: null,
+        source: 'manual',
       })
     )
   })
@@ -433,6 +434,7 @@ describe('Historique — déclaration du parcours', () => {
         parcoursName: 'Bords de Marne',
         distanceKm: 8,
         elevationGainM: 100,
+        source: 'manual',
       })
     )
   })

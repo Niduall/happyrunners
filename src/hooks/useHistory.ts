@@ -17,7 +17,11 @@ import {
 } from '../services/history'
 import { clearRunReminderDismissal } from '../services/runReminderDismissal'
 import { useTargetWednesday } from './useTargetWednesday'
-import type { ParcoursSummary, ProfileIdentity } from '../types/supabase'
+import type {
+  ParcoursSummary,
+  ProfileIdentity,
+  WeeklyRunSource,
+} from '../types/supabase'
 
 /** Douze mercredis : un trimestre, assez pour voir une série et rester léger. */
 export const HISTORY_WEEKS = 12
@@ -27,6 +31,12 @@ export interface RunChoice {
   parcoursName: string
   distanceKm: number | null
   elevationGainM: number | null
+  /**
+   * D'où viennent la distance et le D+ : `manual` pour un parcours de la
+   * liste, `gpx` quand un fichier a été joint à une sortie « autre ».
+   * Absent = `manual`.
+   */
+  source?: WeeklyRunSource
 }
 
 export function useHistory(userNumber: number | null) {
@@ -151,6 +161,7 @@ export function useHistory(userNumber: number | null) {
           parcoursName: choice.parcoursName,
           distanceKm: choice.distanceKm,
           elevationGainM: choice.elevationGainM,
+          source: choice.source ?? 'manual',
         })
         // Une sortie déclarée annule « je n'ai pas couru » pour la semaine
         // (trigger en base) : le repère local de l'accueil disparaît aussi,

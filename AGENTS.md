@@ -345,11 +345,21 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   instantanés** pris à la déclaration. Renommer, modifier ou supprimer un
   parcours ne doit jamais réécrire les totaux d'une ligue passée.
   `parcours_id` est un lien facultatif (`ON DELETE SET NULL`).
-- **Une sortie « autre » n'a pas de distance** : `parcours_id` NULL,
-  `parcours_name` porte le libellé libre, km et D+ restent NULL. On ne compte
-  que le connu, jamais un chiffre inventé.
-- **`source` est prête pour la preuve** : `manual` aujourd'hui, `gpx` puis
-  `strava` plus tard. Aucune de ces deux dernières n'est encore écrite.
+- **Une sortie « autre » peut joindre un GPX** : `parcours_id` NULL et
+  `parcours_name` porte le libellé libre. Sans fichier, km et D+ restent NULL :
+  on ne compte que le connu, jamais un chiffre inventé. Avec un GPX, la distance
+  et le D+ lus remplissent la ligne (`source = 'gpx'`) et la sortie compte dans
+  les stats. Le tracé n'est **pas** conservé : `weekly_runs` n'a pas de colonne
+  `points`, et la carte des sorties passées demanderait une migration.
+- **Un fichier refusé ne casse pas un import en place** : remplacer un GPX
+  valide par un fichier illisible garde les chiffres déjà lus et le dit. Un
+  GPX sans tracé laisse simplement la sortie sans distance — il ne bloque pas
+  l'enregistrement, mais le message annonce la conséquence. Le bouton qui
+  oublie le fichier dit « Retirer le GPX » : « Retirer » seul se confondrait
+  avec « Retirer ma sortie ».
+- **`source` dit d'où viennent les chiffres** : `manual` par défaut, `gpx` quand
+  un fichier a fourni km et D+. `strava` existe en base pour plus tard et n'est
+  encore jamais écrit.
 - **Les stats sont personnelles** : sorties, série, cumul des km et du D+
   **connus** de la personne connectée. Une sortie « autre » compte comme
   sortie mais n'ajoute ni km ni D+.
@@ -822,6 +832,7 @@ Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour l
 | `src/hooks/useLastRun.test.tsx` | semaine déclarable sur l'accueil, sortie existante, déclaration, « je n'ai pas couru » |
 | `src/services/runReminderDismissal.test.ts` | réponse locale par profil et par semaine, effacement, repère illisible |
 | `src/pages/Home.lastRun.test.tsx` | rappel de la sortie à déclarer, modale sans présélection |
+| `src/components/DeclareRunModal.test.tsx` | GPX d'une sortie « autre » : lecture, fichier refusé, import conservé, retrait |
 | `src/pages/History.test.tsx` | mercredis, déclaration « autre », correction, retrait, semaine figée, Échap |
 | `src/components/RequireUser.test.tsx` | visiteur redirigé, connecté autorisé, attente du chargement |
 | `src/pages/Home.messages.test.tsx` | Messages absent sans identité, présent une fois connecté |

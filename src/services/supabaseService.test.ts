@@ -714,6 +714,27 @@ describe('declareWeeklyRun', () => {
     )
   })
 
+  it('enregistre la source `gpx` quand les chiffres viennent d’un fichier', async () => {
+    await declareWeeklyRun({
+      weekKey: '2026-11-04',
+      userNumber: 3,
+      parcoursId: null,
+      parcoursName: 'Boucle du parc',
+      distanceKm: 12.6,
+      elevationGainM: 210,
+      source: 'gpx',
+    })
+
+    expect(mockUpsertValues).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        parcours_id: null,
+        distance_km: 12.6,
+        elevation_gain_m: 210,
+        source: 'gpx',
+      })
+    )
+  })
+
   it('propage une erreur d’enregistrement', async () => {
     mockError.mockReturnValue(new Error('écriture refusée'))
 

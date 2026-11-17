@@ -122,6 +122,33 @@ describe('useHistory — verrouillage au mercredi 14h', () => {
       weekKey: '2026-11-04',
       userNumber: ALICE,
       ...CHOICE,
+      source: 'manual',
+    })
+  })
+
+  it('transmet la source `gpx` d’une sortie « autre » importée', async () => {
+    const { result } = await renderLoadedHistory()
+
+    let ok = false
+    await act(async () => {
+      ok = await result.current.declare('2026-11-04', {
+        parcoursId: null,
+        parcoursName: 'Boucle du parc',
+        distanceKm: 12.6,
+        elevationGainM: 210,
+        source: 'gpx',
+      })
+    })
+
+    expect(ok).toBe(true)
+    expect(mockDeclare).toHaveBeenCalledWith({
+      weekKey: '2026-11-04',
+      userNumber: ALICE,
+      parcoursId: null,
+      parcoursName: 'Boucle du parc',
+      distanceKm: 12.6,
+      elevationGainM: 210,
+      source: 'gpx',
     })
   })
 

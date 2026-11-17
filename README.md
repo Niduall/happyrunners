@@ -261,8 +261,13 @@ mercredis** : présents, vote indicatif et sorties **réellement courues**.
 - Déclarer une sortie remet la présence de la semaine à « going » : quelqu'un
   qui a couru sans avoir répondu peut tout de même la renseigner.
 - Les stats sont personnelles : sorties, série en cours, cumul des km et du
-  D+ **connus**. Une sortie « autre » compte comme sortie mais n'invente ni
-  distance ni dénivelé.
+  D+ **connus**. Une sortie « autre » compte comme sortie ; sans GPX, elle
+  n'invente ni distance ni dénivelé.
+- **Joindre un GPX à une sortie « autre »** remplit sa distance et son D+
+  (XML GPX ou export JSON Strava). Seuls les chiffres sont gardés : le tracé
+  n'est pas stocké, donc pas de carte des sorties passées. Un fichier illisible
+  est refusé avec un message ; s'il remplaçait un GPX déjà lu, l'import en
+  place est conservé.
 
 Table : `weekly_runs`, clé `(week_key, user_number)`. Le nom du parcours, la
 distance et le dénivelé sont figés à la déclaration pour survivre à la

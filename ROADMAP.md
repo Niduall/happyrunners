@@ -50,7 +50,7 @@ un artefact chiffré conservé 30 jours.
 
 | Tâche | Pourquoi | Effort | État |
 |---|---|---|---|
-| **Historique des sorties** | Page `/historique` : 12 mercredis passés, présents, et **une sortie par personne et par semaine** (`weekly_runs`, clé `week_key,user_number`). Chacun déclare son propre parcours (liste ou « autre »), peut le corriger ou le retirer — le retrait reste possible même après la clôture ; déclarer remet la présence à « going ». Une semaine se fige au mercredi suivant 14h : seule la sortie la plus récente reste déclarable et corrigeable, et les cartes figées portent une mention « Semaine clôturée ». Les semaines sans présence ni sortie sont masquées (avec un compteur pour les déplier), sauf la semaine ouverte où l'on vient déclarer. L'accueil rappelle la sortie manquante dès 12h30 le jour du run, et un bouton « Je n'ai pas couru » coupe ce rappel **par personne** (`weekly_run_skips`, la réponse suit la personne d'un appareil à l'autre) ; la modale ne présélectionne rien sans indice. Nom, km et D+ sont figés à la déclaration, les stats personnelles comptent les valeurs connues. Le vote reste un simple indice. Source `manual`, prête pour GPX/Strava. | M | ✅ Livré |
+| **Historique des sorties** | Page `/historique` : 12 mercredis passés, présents, et **une sortie par personne et par semaine** (`weekly_runs`, clé `week_key,user_number`). Chacun déclare son propre parcours (liste ou « autre »), peut le corriger ou le retirer — le retrait reste possible même après la clôture ; déclarer remet la présence à « going ». Une semaine se fige au mercredi suivant 14h : seule la sortie la plus récente reste déclarable et corrigeable, et les cartes figées portent une mention « Semaine clôturée ». Les semaines sans présence ni sortie sont masquées (avec un compteur pour les déplier), sauf la semaine ouverte où l'on vient déclarer. L'accueil rappelle la sortie manquante dès 12h30 le jour du run, et un bouton « Je n'ai pas couru » coupe ce rappel **par personne** (`weekly_run_skips`, la réponse suit la personne d'un appareil à l'autre) ; la modale ne présélectionne rien sans indice. Nom, km et D+ sont figés à la déclaration, les stats personnelles comptent les valeurs connues. Le vote reste un simple indice. Source `manual` ou `gpx` selon que les chiffres ont été saisis ou lus dans un fichier ; `strava` reste à venir. | M | ✅ Livré |
 
 ## À faire ensuite
 
@@ -59,15 +59,14 @@ un artefact chiffré conservé 30 jours.
 | Idée | Détail | Effort |
 |---|---|---|
 | **Hors ligne réel** | Le README promet « fonctionne hors ligne », mais seule la coquille est précachée. Cacher le dernier état de Home et afficher un bandeau « données du … » quand le réseau manque. | M |
-| **GPX pour une sortie « Autre »** | Dans la modale de déclaration, joindre un fichier GPX remplit la distance et le D+ au lieu de les laisser vides : une sortie improvisée compte enfin dans les stats. `gpxParser` existe déjà (XML et JSON Strava) ; il faut passer `source: 'gpx'` jusqu'à `declareWeeklyRun`, qui l'écrit en dur à `manual` aujourd'hui. **Aucune migration** : `weekly_runs.source` (`manual` \| `gpx` \| `strava`), `distance_km` et `elevation_gain_m` existent déjà. À trancher : garder le tracé (`points jsonb`, migration + poids) ou seulement les chiffres — le second suffit pour les stats, le premier ouvre la carte des sorties passées. | S/M |
 
 ### Priorité 2 — confort et fiabilité
 
 | Idée | Détail | Effort |
 |---|---|---|
 | **Palette de réactions beaucoup plus large** | Aujourd'hui 5 emoji fixes (`like`, `love`, `laugh`, `run`, `fire`). Ouvrir un vrai choix, avec catégories et recherche si besoin. Deux contraintes à ne pas oublier : le `CHECK` de `message_reactions.reaction` doit être élargi par une migration (sinon l'insertion est refusée), et les pastilles doivent rester lisibles quand un message en accumule beaucoup. La clé primaire garde « une seule réaction par personne et par message ». | M |
-| **Message épinglé** | Un message important (parcours du jour, consignes) reste en haut du fil. | S/M |
-| **Ligue et badges** | S'appuyer sur les sorties déclarées (une par personne et par mercredi) pour un classement et des badges. À cadrer : critères (régularité, km, D+, série), périodes, égalités. | M |
+| **Message épinglé** | Un message important (parcours du jour, consignes) reste en haut du fil. | S/M || **Ligue et badges** | S'appuyer sur les sorties déclarées (une par personne et par mercredi) pour un classement et des badges. À cadrer : critères (régularité, km, D+, série), périodes, égalités. | M |
+| **Tracé des sorties « autre »** | Aujourd'hui le GPX joint ne garde que les chiffres : `weekly_runs` n'a pas de colonne `points`. Stocker le tracé ouvrirait la carte des sorties passées, au prix d'une migration et de quelques dizaines de Ko par sortie. À décider quand la carte servira vraiment. | M |
 | **Annulation météo** | État « Sortie annulée » avec motif, visible sur Home et notifié aux personnes qui viennent. | M |
 
 ### Priorité 3 — selon le besoin réel
@@ -110,6 +109,8 @@ autre projet que cette PWA.
 
 - Historique `/historique` : une sortie par personne et par mercredi, correction
   et retrait, semaines vides masquées, semaine clôturée annoncée.
+- **GPX d'une sortie « autre »** : le fichier remplit la distance et le D+
+  (`source = 'gpx'`), les chiffres seuls sont gardés. Aucune migration.
 - « Je n'ai pas couru » **par personne** (`weekly_run_skips`) : la réponse suit
   la personne d'un téléphone à l'autre, et déclarer une sortie l'efface.
 - Chat sur 30 jours glissants, envoi optimiste, non-lus, polling 5 s / 30 s.

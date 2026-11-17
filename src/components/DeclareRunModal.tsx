@@ -1,10 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ChangeEvent } from 'react'
+import { Upload } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
+import { parseGPX } from '../services/gpxParser'
+import { formatElevation, formatKm } from '../services/history'
 import type { RunChoice } from '../hooks/useHistory'
 import type { ParcoursSummary } from '../types/supabase'
 
 const OTHER = 'other'
+
+/**
+ * Ce qu'un GPX apporte à une sortie « autre » : la distance et le D+.
+ * Le tracé n'est pas conservé — la table n'a pas de colonne pour lui.
+ */
+interface ImportedRun {
+  distanceKm: number
+  elevationGainM: number | null
+}
 
 /**
  * Ce dont la modale a besoin : la date, la sortie déjà déclarée et l'indice
@@ -18,6 +30,8 @@ export interface DeclareRunTarget {
   myRun: {
     parcoursId: string | null
     parcoursName: string
+    distanceKm?: number | null
+    elevationGainM?: number | null
   } | null
   /** Parcours le plus voté, s'il y en a un */
   votedParcoursId: string | null
@@ -72,6 +86,22 @@ export function DeclareRunModal({
   const [formError, setFormError] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [confirmRetract, setConfirmRetract] = useState(false)
+  /**
+   * Distance et D+ lus dans un fichier GPX, pour une sortie « autre ».
+   * `null` = aucun fichier : la sortie reste sans distance.
+   *
+   * Une correction repart de l'import déjà enregistré : sans ça, rouvrir la
+   * modale pour renommer la sortie effacerait ses kilomètres.
+   */
+  const [imported, setImported] = useState<ImportedRun | null>(() => {
+    if (!mine || myParcoursExists || mine.distanceKm == null) return null
+    return {
+      distanceKm: mine.distanceKm,
+      elevationGainM: mine.elevationGainM ?? null,
+    }
+  })
+  const [importName, setImportName] = useState('')
+  const [gpxError, setGpxError] = useState('')
 
   // Échap ferme la modale, sauf pendant l'écriture.
   useEffect(() => {
@@ -86,6 +116,50 @@ export function DeclareRunModal({
     setSelected(value)
     setFormError('')
     setSubmitError('')
+  }
+
+  /**
+   * Lit le fichier et garde ses chiffres.
+   *
+   * Un fichier refusé ne touche pas à l'import en place : si on remplaçait un
+   * GPX valide par un fichier illisible, les kilomètres déjà lus ne doivent pas
+   * disparaître. Le message dit la conséquence : sans chiffres, la distance
+   * n'est pas comptée.
+   */
+  const handleGpx = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target
+    const file = input.files?.[0]
+    if (!file) return
+
+    setGpxError('')
+    setFormError('')
+    setSubmitError('')
+    try {
+      const parsed = parseGPX(await file.text())
+      if (!parsed || !(parsed.distance_km > 0)) {
+        setGpxError(
+          imported
+            ? 'Ce fichier ne contient pas de tracé lisible : l’import précédent est conservé.'
+            : 'Ce fichier ne contient pas de tracé lisible : la distance ne sera pas comptée.'
+        )
+        return
+      }
+      setImported({
+        distanceKm: parsed.distance_km,
+        elevationGainM: parsed.elevation_gain_m ?? null,
+      })
+      setImportName(file.name)
+    } catch {
+      setGpxError('Lecture du fichier impossible : la distance ne sera pas comptée.')
+    } finally {
+      input.value = ''
+    }
+  }
+
+  const clearImport = () => {
+    setImported(null)
+    setImportName('')
+    setGpxError('')
   }
 
   const handleRetract = async () => {
@@ -112,8 +186,9 @@ export function DeclareRunModal({
       const ok = await onDeclare({
         parcoursId: null,
         parcoursName: label,
-        distanceKm: null,
-        elevationGainM: null,
+        distanceKm: imported?.distanceKm ?? null,
+        elevationGainM: imported?.elevationGainM ?? null,
+        source: imported ? 'gpx' : 'manual',
       })
       if (!ok) setSubmitError('Enregistrement impossible. Réessaie.')
       return
@@ -230,9 +305,57 @@ export function DeclareRunModal({
               maxLength={80}
               autoFocus
             />
-            <p className="mt-1 text-xs text-gray-500">
-              La distance ne sera pas comptée pour un parcours non enregistré.
-            </p>
+            <div className="mt-3">
+              <input
+                type="file"
+                accept=".gpx,.json"
+                onChange={handleGpx}
+                className="sr-only"
+                id="history-other-gpx"
+                aria-label="Joindre un fichier GPX"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() =>
+                    document.getElementById('history-other-gpx')?.click()
+                  }
+                >
+                  <Upload className="h-4 w-4" />
+                  {imported ? 'Changer le GPX' : 'Joindre un GPX'}
+                </Button>
+                {imported && (
+                  <Button variant="ghost" size="sm" onClick={clearImport}>
+                    Retirer le GPX
+                  </Button>
+                )}
+              </div>
+
+              {imported ? (
+                <p className="mt-2 text-sm text-gray-700">
+                  {formatKm(imported.distanceKm)}
+                  {imported.elevationGainM != null &&
+                  imported.elevationGainM > 0
+                    ? ` · ${formatElevation(imported.elevationGainM)} D+`
+                    : ''}
+                  {importName && (
+                    <span className="text-gray-500"> — {importName}</span>
+                  )}
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-gray-500">
+                  Facultatif. Sans GPX, la distance ne sera pas comptée.
+                </p>
+              )}
+
+              {gpxError && (
+                <p role="alert" className="mt-2 text-sm text-red-700">
+                  {gpxError}
+                </p>
+              )}
+            </div>
           </div>
         )}
 

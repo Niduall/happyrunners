@@ -136,6 +136,7 @@ describe('useLastRun — déclaration', () => {
       weekKey: '2026-11-04',
       userNumber: ALICE,
       ...CHOICE,
+      source: 'manual',
     })
     expect(result.current.myRun?.parcours_name).toBe('Bords de Marne')
   })

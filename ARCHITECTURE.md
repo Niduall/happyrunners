@@ -195,7 +195,10 @@ d'un téléphone à l'autre. Un repère local la double pour masquer la carte sa
 réseau ; la base fait foi, et déclarer une sortie la supprime. La
 modale ne présélectionne un parcours que s'il existe déjà une
 sortie ou un vote ; sinon « Enregistrer » reste inactif, pour ne jamais créer
-une sortie fausse d'un seul clic. La page recharge au retour sur l'onglet
+une sortie fausse d'un seul clic. Une sortie « autre » peut joindre un GPX
+(XML ou JSON Strava) : seuls la distance et le D+ sont retenus et enregistrés
+avec `source = 'gpx'` — le tracé n'est pas conservé, `weekly_runs` n'a pas de
+colonne `points`. La page recharge au retour sur l'onglet
 (`visibilitychange`) et par un bouton « Actualiser » : pas de polling, mais
 jamais de données périmées après un aller-retour.
 

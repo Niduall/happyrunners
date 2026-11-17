@@ -304,8 +304,13 @@ export function Home() {
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">Météo pour la course</h2>
+                  {/* Ce sous-titre dit ce que montre la carte : il porte
+                      l'information, il ne doit pas être un texte secondaire
+                      discret (16 px, gris 700). */}
                   <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
-                    {hasForecast ? 'Prévision à 12h30' : 'Météo actuelle'}
+                    <span className="text-base font-medium text-gray-700">
+                      {hasForecast ? 'Prévision à 12h30' : 'Météo actuelle'}
+                    </span>
                     {weatherFreshness && (
                       <span className="text-xs text-gray-500">· {weatherFreshness}</span>
                     )}

@@ -441,6 +441,11 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
 - Icônes via `weatherCode.ts` (mapping WMO → emoji), pas d'images externes
 - Hors couverture → `getRunForecast` renvoie `null`, l'app affiche la météo du
   jour avec un badge explicite
+- **Le sous-titre de la météo n'est pas un texte secondaire** : « Prévision à
+  12h30 » (ou « Météo actuelle ») est à **16 px, gris 700**, sous le titre de
+  section. C'est lui qui dit ce que montre la carte ; à 14 px gris 500 il se
+  lisait mal dehors. Ne pas le redescendre : l'heure de fraîcheur (`text-xs`,
+  gris 500) reste, elle, une métadonnée.
 
 ### Verrou admin (suppression / modification des parcours)
 - Défini par `VITE_ADMIN_CODE`. **Variable absente = aucun cadenas** : ne

@@ -66,7 +66,6 @@ un artefact chiffré conservé 30 jours.
 | Idée | Détail | Effort |
 |---|---|---|
 | **Palette de réactions beaucoup plus large** | Aujourd'hui 5 emoji fixes (`like`, `love`, `laugh`, `run`, `fire`). Ouvrir un vrai choix, avec catégories et recherche si besoin. Deux contraintes à ne pas oublier : le `CHECK` de `message_reactions.reaction` doit être élargi par une migration (sinon l'insertion est refusée), et les pastilles doivent rester lisibles quand un message en accumule beaucoup. La clé primaire garde « une seule réaction par personne et par message ». | M |
-| **Sous-titre météo trop discret** | « Prévision à 12h30 », sous « Météo pour la course », est en `text-sm` gris : il se lit mal. Le remonter d'un cran (taille ou contraste) sans refaire la carte. | S |
 | **Message épinglé** | Un message important (parcours du jour, consignes) reste en haut du fil. | S/M |
 | **Ligue et badges** | S'appuyer sur les sorties déclarées (une par personne et par mercredi) pour un classement et des badges. À cadrer : critères (régularité, km, D+, série), périodes, égalités. | M |
 | **Annulation météo** | État « Sortie annulée » avec motif, visible sur Home et notifié aux personnes qui viennent. | M |
@@ -125,6 +124,8 @@ autre projet que cette PWA.
   base de test uniquement.
 - PIN optionnel, appareil de confiance, console de réinitialisation admin.
 - Météo Open-Meteo 16 jours, bandeau « autour de 12h30 ».
+- Sous-titre « Prévision à 12h30 » remonté à 16 px gris 700 : il porte
+  l'information, il n'est plus un texte secondaire discret.
 - Présences, votes multi-parcours, tableau « Qui vient ? ».
 - Import GPX (XML et JSON Strava), carte Leaflet chargée à la demande.
 - Sauvegarde/restauration `backup.py`, CI lint + tests + build.

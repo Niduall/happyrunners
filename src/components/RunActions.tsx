@@ -2,34 +2,9 @@ import { useState } from 'react'
 import { CalendarPlus, Share2 } from 'lucide-react'
 import { Button } from './ui/Button'
 import { downloadRunIcs } from '../services/calendar'
+import { copyText } from '../lib/clipboard'
 
 type ShareStatus = 'idle' | 'copied' | 'error'
-
-/**
- * Copie avec repli `execCommand` : certains navigateurs (ou contextes sans
- * permission presse-papiers) refusent `navigator.clipboard`. C'est le même
- * repli que « Copier le message » dans le chat.
- */
-async function copyUrl(url: string): Promise<void> {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(url)
-      return
-    }
-  } catch {
-    // On tente le repli ci-dessous.
-  }
-
-  const textarea = document.createElement('textarea')
-  textarea.value = url
-  textarea.style.position = 'fixed'
-  textarea.style.opacity = '0'
-  document.body.appendChild(textarea)
-  textarea.select()
-  const copied = document.execCommand('copy')
-  textarea.remove()
-  if (!copied) throw new Error('Copie impossible')
-}
 
 /**
  * Deux actions discrètes sous « Tu viens ? » : mettre la sortie dans son
@@ -59,7 +34,7 @@ export function RunActions({ weekKey }: { weekKey: string }) {
           // Autre échec du partage natif : on tente la copie.
         }
       }
-      await copyUrl(url)
+      await copyText(url)
       setStatus('copied')
     } catch {
       setStatus('error')

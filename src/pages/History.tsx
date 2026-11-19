@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, RefreshCw } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Watch } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card, CardContent } from '../components/ui/Card'
 import { DeclareRunModal } from '../components/DeclareRunModal'
@@ -14,6 +14,7 @@ import {
   type HistoryPerson,
   type HistoryWeek,
 } from '../services/history'
+import type { ImportProposal } from '../types/supabase'
 
 /** Prénoms séparés par des virgules, initiale du nom en cas de doublon. */
 function peopleLabel(people: HistoryPerson[]): string {
@@ -29,6 +30,80 @@ function peopleLabel(people: HistoryPerson[]): string {
         : person.firstName
     )
     .join(', ')
+}
+
+/** « mercredi 18 novembre · 8,2 km · 42 min » — ce que la montre a mesuré. */
+function proposalSummary(proposal: ImportProposal): string {
+  const date = new Date(proposal.started_at).toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
+
+  const parts = [date]
+  if (proposal.distance_m != null) {
+    parts.push(formatKm(proposal.distance_m / 1000))
+  }
+  if (proposal.duration_s != null) {
+    const minutes = Math.round(proposal.duration_s / 60)
+    parts.push(
+      minutes >= 60
+        ? `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')}`
+        : `${minutes} min`
+    )
+  }
+  return parts.join(' · ')
+}
+
+/**
+ * Ce que la montre a proposé, en attente de validation.
+ *
+ * C'est le seul endroit où une sortie issue du téléphone entre dans le
+ * classement — et seulement après un clic. Le D+ n'est pas fourni par le
+ * carnet de santé : on ne compte que le connu, jamais un chiffre inventé.
+ */
+function ProposalCard({
+  proposal,
+  busy,
+  onAccept,
+  onIgnore,
+}: {
+  proposal: ImportProposal
+  busy: boolean
+  onAccept: () => void
+  onIgnore: () => void
+}) {
+  return (
+    <Card>
+      <CardContent className="space-y-3">
+        <div className="flex items-start gap-2">
+          <Watch className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-gray-900">
+              Ta montre propose une sortie
+            </h2>
+            <p className="mt-0.5 text-sm text-gray-600">
+              {proposalSummary(proposal)}
+            </p>
+          </div>
+        </div>
+
+        <p className="text-xs text-gray-500">
+          Rien n’est enregistré tant que tu n’as pas validé. Le dénivelé n’est
+          pas fourni par le téléphone : la sortie comptera sans D+.
+        </p>
+
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" onClick={onAccept} disabled={busy}>
+            {busy ? 'Validation...' : 'Valider'}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onIgnore} disabled={busy}>
+            Ignorer
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 function StatCard({
@@ -210,11 +285,15 @@ export function History() {
     declare,
     retract,
     editableWeekKey,
+    openProposal,
+    acceptProposal,
+    ignoreProposal,
     refresh,
   } = useHistory(userNumber)
   const [declaring, setDeclaring] = useState<HistoryWeek | null>(null)
   const [showEmptyWeeks, setShowEmptyWeeks] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [handlingProposal, setHandlingProposal] = useState(false)
 
   /**
    * Douze semaines dont la plupart sont vides : les afficher toutes noie les
@@ -257,6 +336,34 @@ export function History() {
   /** Retrait direct depuis une carte clôturée : pas de modale pour ça. */
   const handleCardRetract = (week: HistoryWeek): Promise<boolean> =>
     retract(week.weekKey)
+
+  /**
+   * La proposition ne s'affiche que si la semaine ouverte n'a pas déjà de
+   * sortie déclarée : sinon « Valider » écraserait un choix volontaire.
+   */
+  const openWeekRun =
+    weeks.find((week) => week.weekKey === editableWeekKey)?.myRun ?? null
+  const showProposal = openProposal !== null && openWeekRun === null
+
+  const handleAcceptProposal = async () => {
+    if (!openProposal) return
+    setHandlingProposal(true)
+    try {
+      await acceptProposal(openProposal)
+    } finally {
+      setHandlingProposal(false)
+    }
+  }
+
+  const handleIgnoreProposal = async () => {
+    if (!openProposal) return
+    setHandlingProposal(true)
+    try {
+      await ignoreProposal(openProposal)
+    } finally {
+      setHandlingProposal(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -325,6 +432,15 @@ export function History() {
             14h. Ensuite la semaine est clôturée, mais tu peux toujours retirer
             une sortie déclarée par erreur.
           </p>
+        )}
+
+        {!loading && showProposal && openProposal && (
+          <ProposalCard
+            proposal={openProposal}
+            busy={handlingProposal}
+            onAccept={() => void handleAcceptProposal()}
+            onIgnore={() => void handleIgnoreProposal()}
+          />
         )}
 
         {error && (

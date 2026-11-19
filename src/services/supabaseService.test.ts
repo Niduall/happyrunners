@@ -22,6 +22,11 @@ import {
   deleteWeeklyRun,
   getWeeklyRunSkip,
   skipWeeklyRun,
+  getDeviceLink,
+  saveDeviceLink,
+  deleteDeviceLinks,
+  getPendingProposals,
+  setProposalStatus,
 } from './supabaseService'
 import { hashPin } from './pin'
 import { supabase } from '../lib/supabase'
@@ -41,6 +46,7 @@ const mockCount = vi.fn()
 const mockUpsertValues = vi.fn()
 const mockUpsertOptions = vi.fn()
 const mockEq = vi.fn()
+const mockInsertValues = vi.fn()
 const mockMaybeSingle = vi.fn()
 const mockMaybeSingleError = vi.fn()
 
@@ -67,6 +73,10 @@ vi.mock('../lib/supabase', () => ({
       q.upsert = (values?: unknown, options?: unknown) => {
         mockUpsertValues(values)
         mockUpsertOptions(options)
+        return q
+      }
+      q.insert = (values?: unknown) => {
+        mockInsertValues(values)
         return q
       }
       q.delete = () => q
@@ -126,6 +136,7 @@ beforeEach(() => {
   mockUpsertValues.mockReset()
   mockUpsertOptions.mockReset()
   mockEq.mockReset()
+  mockInsertValues.mockReset()
   mockMaybeSingle.mockReset()
   mockMaybeSingleError.mockReset()
 
@@ -813,5 +824,105 @@ describe('skipWeeklyRun', () => {
     await expect(
       skipWeeklyRun({ weekKey: '2026-11-04', userNumber: 3 })
     ).rejects.toThrow('écriture refusée')
+  })
+})
+
+describe('montre — le lien personnel', () => {
+  it('ne lit jamais l’empreinte du jeton', async () => {
+    mockMaybeSingle.mockReturnValue({
+      id: 'l1',
+      user_number: 1,
+      label: 'Montre',
+      created_at: '',
+      last_seen_at: null,
+      updated_at: '',
+    })
+
+    const link = await getDeviceLink(1)
+
+    expect(mockSelectColumns).toHaveBeenCalledWith(
+      expect.not.stringContaining('token_hash')
+    )
+    expect(link).toEqual(
+      expect.objectContaining({ id: 'l1', user_number: 1 })
+    )
+  })
+
+  it('répond null quand aucune montre n’est liée', async () => {
+    await expect(getDeviceLink(3)).resolves.toBeNull()
+  })
+
+  it('remplace l’ancien lien et n’enregistre que l’empreinte', async () => {
+    mockRows.mockReturnValue({
+      id: 'l2',
+      user_number: 1,
+      label: 'Montre',
+      created_at: '',
+      last_seen_at: null,
+      updated_at: '',
+    })
+
+    await saveDeviceLink(1, 'a'.repeat(64))
+
+    // Le téléphone perdu doit cesser de poster : on révoque avant de créer.
+    expect(mockEq).toHaveBeenCalledWith('user_number', 1)
+    expect(mockInsertValues).toHaveBeenCalledWith({
+      user_number: 1,
+      token_hash: 'a'.repeat(64),
+      label: 'Montre',
+    })
+  })
+
+  it('révoque tous les liens d’une personne', async () => {
+    await deleteDeviceLinks(2)
+
+    expect(mockEq).toHaveBeenCalledWith('user_number', 2)
+  })
+})
+
+describe('montre — les propositions', () => {
+  it('ne demande que les propositions en attente', async () => {
+    mockRows.mockReturnValue([
+      {
+        id: 'prop-1',
+        user_number: 1,
+        source: 'health',
+        external_id: '2026-11-04T12:30:00Z',
+        activity_type: 'RUNNING',
+        started_at: '2026-11-04T12:30:00Z',
+        duration_s: 2520,
+        distance_m: 8200,
+        status: 'pending',
+        created_at: '2026-11-04T13:00:00Z',
+      },
+    ])
+
+    const list = await getPendingProposals(1)
+
+    expect(mockEq).toHaveBeenCalledWith('user_number', 1)
+    expect(mockEq).toHaveBeenCalledWith('status', 'pending')
+    expect(list).toHaveLength(1)
+    expect(list[0].distance_m).toBe(8200)
+  })
+
+  it('propage une erreur de lecture', async () => {
+    mockError.mockReturnValue(new Error('lecture refusée'))
+
+    await expect(getPendingProposals(1)).rejects.toThrow('lecture refusée')
+  })
+
+  it('marque une proposition comme validée ou ignorée', async () => {
+    await setProposalStatus('prop-1', 'accepted')
+
+    expect(mockUpdateValues).toHaveBeenCalledWith({ status: 'accepted' })
+    expect(mockEq).toHaveBeenCalledWith('id', 'prop-1')
+  })
+
+  it('propage une erreur d’écriture', async () => {
+    mockError.mockReturnValue(new Error('écriture refusée'))
+
+    await expect(setProposalStatus('prop-1', 'ignored')).rejects.toThrow(
+      'écriture refusée'
+    )
   })
 })

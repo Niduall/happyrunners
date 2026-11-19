@@ -242,7 +242,7 @@ CREATE TABLE IF NOT EXISTS weekly_runs (
   parcours_id       uuid REFERENCES parcours(id) ON DELETE SET NULL,
   parcours_name     text    NOT NULL CHECK (btrim(parcours_name) <> ''),
   source            text    NOT NULL DEFAULT 'manual'
-                      CHECK (source IN ('manual', 'gpx', 'strava')),
+                      CHECK (source IN ('manual', 'gpx', 'strava', 'health')),
   distance_km       numeric
                       CHECK (distance_km IS NULL OR distance_km >= 0),
   elevation_gain_m  numeric
@@ -289,6 +289,68 @@ CREATE TABLE IF NOT EXISTS weekly_run_skips (
 -- (toutes les réponses d'une personne) ont besoin de cet index.
 CREATE INDEX IF NOT EXISTS idx_weekly_run_skips_user
   ON weekly_run_skips USING btree (user_number);
+
+-- ---------------------------------------------------------------------------
+-- Table : device_links
+-- ---------------------------------------------------------------------------
+-- Un lien par personne entre une application de santé du téléphone et
+-- HappyRunners. On ne stocke que l'**empreinte** SHA-256 du jeton, jamais le
+-- jeton lui-même : une fuite de la table ne permet pas de poster des sorties.
+-- Le jeton en clair ne vit que sur le téléphone (localStorage) et dans
+-- l'application qui l'envoie.
+--
+-- Ce n'est pas une authentification : la RLS reste ouverte comme ailleurs.
+-- C'est un tuyau, et la personne qui connaît le jeton peut écrire des sorties
+-- pour ce profil — exactement ce que la clé anon permet déjà.
+CREATE TABLE IF NOT EXISTS device_links (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_number  integer NOT NULL
+                 REFERENCES user_profiles(user_number) ON DELETE CASCADE,
+  label        text    NOT NULL DEFAULT 'Montre'
+                 CHECK (btrim(label) <> ''),
+  -- SHA-256 hexadécimal : 64 caractères.
+  token_hash   text    NOT NULL UNIQUE
+                 CHECK (char_length(token_hash) = 64),
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  last_seen_at timestamptz,
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_device_links_user
+  ON device_links USING btree (user_number);
+
+-- ---------------------------------------------------------------------------
+-- Table : import_proposals
+-- ---------------------------------------------------------------------------
+-- Ce que la montre a proposé, **avant validation**. Rien n'entre dans le
+-- classement sans accord : `pending` → `accepted` (une sortie est déclarée)
+-- ou `ignored`.
+--
+-- `external_id` est l'heure de début de la séance. La contrainte d'unicité
+-- empêche une synchronisation toutes les 15 minutes de créer cinquante
+-- doublons de la même course.
+--
+-- **Pas de `week_key`** : la règle du mercredi 14h vit dans `weekKey.ts`,
+-- testée. La dupliquer en SQL créerait deux vérités.
+CREATE TABLE IF NOT EXISTS import_proposals (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_number   integer NOT NULL
+                  REFERENCES user_profiles(user_number) ON DELETE CASCADE,
+  source        text    NOT NULL DEFAULT 'health'
+                  CHECK (source IN ('health')),
+  external_id   text    NOT NULL CHECK (btrim(external_id) <> ''),
+  activity_type text    NOT NULL DEFAULT 'RUNNING',
+  started_at    timestamptz NOT NULL,
+  duration_s    integer CHECK (duration_s IS NULL OR duration_s >= 0),
+  distance_m    integer CHECK (distance_m IS NULL OR distance_m >= 0),
+  status        text    NOT NULL DEFAULT 'pending'
+                  CHECK (status IN ('pending', 'accepted', 'ignored')),
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_number, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_proposals_user_status
+  ON import_proposals USING btree (user_number, status, started_at DESC);
 
 -- ---------------------------------------------------------------------------
 -- Règle métier : un vote exige une présence « going »
@@ -493,6 +555,11 @@ CREATE TRIGGER trg_weekly_runs_touch
   BEFORE UPDATE ON weekly_runs
   FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 
+DROP TRIGGER IF EXISTS trg_device_links_touch ON device_links;
+CREATE TRIGGER trg_device_links_touch
+  BEFORE UPDATE ON device_links
+  FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
 -- =============================================================================
 -- Row Level Security
 -- =============================================================================
@@ -515,6 +582,8 @@ ALTER TABLE push_subscriptions       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE weekly_runs              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE weekly_run_skips         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE device_links             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE import_proposals         ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS profils_lire      ON user_profiles;
 DROP POLICY IF EXISTS profils_inserer   ON user_profiles;
@@ -625,6 +694,29 @@ CREATE POLICY weekly_run_skips_lire      ON weekly_run_skips FOR SELECT USING (t
 CREATE POLICY weekly_run_skips_inserer   ON weekly_run_skips FOR INSERT WITH CHECK (true);
 CREATE POLICY weekly_run_skips_modifier  ON weekly_run_skips FOR UPDATE USING (true) WITH CHECK (true);
 CREATE POLICY weekly_run_skips_supprimer ON weekly_run_skips FOR DELETE USING (true);
+
+-- Montre : quatre politiques. `device_links` ne contient que des empreintes de
+-- jetons, pas les jetons. `import_proposals` ne contient que ce que la montre
+-- a proposé — la validation reste un geste humain.
+DROP POLICY IF EXISTS device_links_lire      ON device_links;
+DROP POLICY IF EXISTS device_links_inserer   ON device_links;
+DROP POLICY IF EXISTS device_links_modifier  ON device_links;
+DROP POLICY IF EXISTS device_links_supprimer ON device_links;
+
+CREATE POLICY device_links_lire      ON device_links FOR SELECT USING (true);
+CREATE POLICY device_links_inserer   ON device_links FOR INSERT WITH CHECK (true);
+CREATE POLICY device_links_modifier  ON device_links FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY device_links_supprimer ON device_links FOR DELETE USING (true);
+
+DROP POLICY IF EXISTS import_proposals_lire      ON import_proposals;
+DROP POLICY IF EXISTS import_proposals_inserer   ON import_proposals;
+DROP POLICY IF EXISTS import_proposals_modifier  ON import_proposals;
+DROP POLICY IF EXISTS import_proposals_supprimer ON import_proposals;
+
+CREATE POLICY import_proposals_lire      ON import_proposals FOR SELECT USING (true);
+CREATE POLICY import_proposals_inserer   ON import_proposals FOR INSERT WITH CHECK (true);
+CREATE POLICY import_proposals_modifier  ON import_proposals FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY import_proposals_supprimer ON import_proposals FOR DELETE USING (true);
 
 -- =============================================================================
 -- Tables héritées à supprimer

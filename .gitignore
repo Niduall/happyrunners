@@ -50,3 +50,6 @@ __pycache__/
 
 # Base de test — ne jamais versionner
 .env.test
+
+# État local de la CLI Supabase (référence du projet lié)
+supabase/.temp/

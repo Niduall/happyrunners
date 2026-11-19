@@ -62,6 +62,23 @@ export function getCurrentWeekKey(from: Date = new Date()): string {
   return toISODate(getTargetWednesday(from))
 }
 
+/**
+ * Clé de semaine d'une sortie importée : **seul un mercredi compte**.
+ *
+ * Renvoie `null` pour tout autre jour. C'est une règle métier, pas un détail :
+ * le groupe court le mercredi, et l'historique ne compte qu'une sortie par
+ * personne et par semaine. Accepter un run du mardi ou du vendredi ferait
+ * compter une sortie qui n'est pas celle du groupe, ou pousserait un run du
+ * vendredi sur le mercredi suivant.
+ *
+ * ⚠️ Le jour est celui du **navigateur** (comme `getCurrentWeekKey`) : la
+ * montre envoie un ISO avec fuseau, `new Date` le ramène à l'heure locale.
+ */
+export function weekKeyForRunDate(startedAt: Date): string | null {
+  if (startedAt.getDay() !== 3) return null
+  return toISODate(startedAt)
+}
+
 /** Libellé lisible, ex: "semaine du 7 oct." */
 export function formatWeekLabel(weekKey: string, locale = 'fr-FR'): string {
   const [y, m, d] = weekKey.split('-').map(Number)

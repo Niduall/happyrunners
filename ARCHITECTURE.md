@@ -90,6 +90,7 @@ Reconnexion sur un autre appareil : on retrouve son `user_number` via
 | Parcours | ❌ | ✅ `parcours` |
 | Votes | ❌ | ✅ `participations` |
 | Historique (parcours couru) | ❌ | ✅ `weekly_runs` |
+| Jeton de la montre | ✅ `watch_token_<user_number>` (clair) | ✅ `device_links` (**empreinte SHA-256** seulement) |
 
 `storage.ts` ne conserve que le cache utilisateur (`getUser`/`setUser`/`clearUser`). Les anciens helpers parcours/participations ont été retirés en tâche 13 : tout passe par Supabase.
 
@@ -103,7 +104,9 @@ Reconnexion sur un autre appareil : on retrouve son `user_number` via
 | `participations` | `id` (uuid) | **`(user_number, week_key)`** | `parcours_id` (FK, **CASCADE**), `user_number`, `status` (yes/no), `week_key` |
 | `attendances` | `id` (uuid) | **`(week_key, user_number)`** | `user_number`, `status` (going/skip), `week_key` |
 | `user_profiles` | `id` (uuid) | `user_number` | `user_number` (SEQUENCE, **stable**), `first_name`, `last_name`, `pin_hash` (nullable) |
-| `weekly_runs` | **`(week_key, user_number)`** | — | sortie **réellement courue** par une personne : `parcours_id` (FK, **SET NULL**), `parcours_name` (instantané), `distance_km` / `elevation_gain_m` (instantanés), `source` |
+| `weekly_runs` | **`(week_key, user_number)`** | — | sortie **réellement courue** par une personne : `parcours_id` (FK, **SET NULL**), `parcours_name` (instantané), `distance_km` / `elevation_gain_m` (instantanés), `source` (`manual`, `gpx`, `health`) |
+| `device_links` | `id` (uuid) | `token_hash` | lien entre une application de santé et un profil : **empreinte SHA-256** du jeton, jamais le jeton ; `last_seen_at` pour dire « ça marche » |
+| `import_proposals` | `id` (uuid) | **`(user_number, external_id)`** | ce que la montre a proposé : `started_at`, `duration_s`, `distance_m`, `status` (`pending` / `accepted` / `ignored`) |
 
 > ⚠️ `participations` est en `UNIQUE(user_number, week_key)` : une personne ne
 > peut être comptée que sur **un seul parcours** par semaine. Le `onConflict`
@@ -202,6 +205,22 @@ colonne `points`. La page recharge au retour sur l'onglet
 (`visibilitychange`) et par un bouton « Actualiser » : pas de polling, mais
 jamais de données périmées après un aller-retour.
 
+La **montre propose, la personne valide**. Une application de santé du
+téléphone poste ses séances sur l'Edge Function `ingest` avec un jeton
+personnel ; la fonction dépose des lignes `pending` dans `import_proposals` et
+n'écrit **jamais** dans `weekly_runs`. L'historique affiche au plus une
+proposition, pour la semaine encore ouverte et seulement si aucune sortie n'y
+est déjà déclarée. « Valider » déclare la sortie avec `source = 'health'`, la
+distance convertie en kilomètres et **sans D+** (Health Connect ne le fournit
+pas) ; « Ignorer » la marque `ignored`. La proposition est rattachée à sa
+semaine par `weekKeyForRunDate(started_at)`, pas par une colonne `week_key` :
+**seul un mercredi compte**, et une sortie du mercredi reste sur ce mercredi
+même après 14h, comme la déclaration manuelle. Un run du mardi ou du vendredi
+n'est jamais proposé (le groupe court le mercredi, une sortie par semaine).
+Le jeton n'est jamais stocké
+en clair côté base, et ce tuyau n'est pas une authentification — la RLS reste
+ouverte comme ailleurs.
+
 ---
 
 ## Météo — Open-Meteo
@@ -272,6 +291,7 @@ npm test:watch    # watch mode
 | `src/services/storage.test.ts` | cache local, invalidation des ids non entiers |
 | `src/services/gpxParser.test.ts` | XML/JSON GPX, distance, dénivelé, simplification, bounds |
 | `src/services/pin.test.ts` | `hashPin` (déterminisme, format, zéros en tête) |
+| `src/services/watchLink.test.ts` | jeton base64url, SHA-256 de référence, URL encodée, stockage local |
 | `src/hooks/useAuth.integration.test.tsx` | Flux complet : first_login, création, PIN, nouvel appareil, reconnexion, robustesse |
 
 Supabase est mocké globalement dans `src/test/setup.ts` — aucun appel réseau en test.

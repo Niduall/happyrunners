@@ -51,6 +51,8 @@ def make_dump(profiles: int = 2, attendances: int = 1) -> dict:
         ],
         "weekly_runs": [],
         "weekly_run_skips": [],
+        "device_links": [],
+        "import_proposals": [],
         "messages": [],
         "message_reactions": [],
         "push_subscriptions": [],
@@ -390,6 +392,89 @@ class ValidationTest(unittest.TestCase):
     def test_chaque_table_a_son_tri_et_sa_cle(self):
         self.assertEqual(set(backup.TABLE_ORDER), set(backup.TABLES))
         self.assertEqual(set(backup.TABLE_KEYS), set(backup.TABLES))
+
+    def test_montre_valide(self):
+        dump = make_dump()
+        dump["device_links"] = [
+            {
+                "id": "l1",
+                "user_number": 1,
+                "label": "Montre",
+                "token_hash": "a" * 64,
+            }
+        ]
+        dump["import_proposals"] = [
+            {
+                "id": "prop-1",
+                "user_number": 1,
+                "source": "health",
+                "external_id": "2026-11-04T12:30:00Z",
+                "activity_type": "RUNNING",
+                "started_at": "2026-11-04T12:30:00Z",
+                "status": "pending",
+            }
+        ]
+
+        counts = backup.validate_dump(dump)
+        self.assertEqual(counts["device_links"], 1)
+        self.assertEqual(counts["import_proposals"], 1)
+
+    def test_ancien_dump_sans_montre(self):
+        # Un dump de format 4 (avant la montre) n'a pas ces tables : il doit
+        # rester restaurable, avec des liens et des propositions vides.
+        dump = make_dump()
+        del dump["device_links"]
+        del dump["import_proposals"]
+        dump["_meta"] = {
+            "format": 4,
+            "counts": {
+                table: len(dump[table])
+                for table in backup.TABLES
+                if table not in ("device_links", "import_proposals")
+            },
+        }
+
+        counts = backup.validate_dump(dump)
+        self.assertEqual(counts["device_links"], 0)
+        self.assertEqual(counts["import_proposals"], 0)
+
+    def test_lien_sans_empreinte_refuse(self):
+        # Un jeton en clair dans un dump serait une capacité d'écriture qui
+        # traîne dans un fichier.
+        dump = make_dump()
+        dump["device_links"] = [
+            {"id": "l1", "user_number": 1, "token_hash": "jeton-en-clair"}
+        ]
+        with self.assertRaisesRegex(ValueError, "token_hash invalide"):
+            backup.validate_dump(dump)
+
+    def test_proposition_statut_inconnu(self):
+        dump = make_dump()
+        dump["import_proposals"] = [
+            {
+                "id": "prop-1",
+                "user_number": 1,
+                "external_id": "2026-11-04T12:30:00Z",
+                "started_at": "2026-11-04T12:30:00Z",
+                "status": "peut-être",
+            }
+        ]
+        with self.assertRaisesRegex(ValueError, "statut invalide"):
+            backup.validate_dump(dump)
+
+    def test_proposition_personne_inconnue(self):
+        dump = make_dump()
+        dump["import_proposals"] = [
+            {
+                "id": "prop-1",
+                "user_number": 99,
+                "external_id": "2026-11-04T12:30:00Z",
+                "started_at": "2026-11-04T12:30:00Z",
+                "status": "pending",
+            }
+        ]
+        with self.assertRaisesRegex(ValueError, "user_number 99 absent"):
+            backup.validate_dump(dump)
 
 
 class DeleteTest(unittest.TestCase):

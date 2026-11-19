@@ -9,6 +9,7 @@ import reactionsMigration from '../../migrations/2026-11-06_tache32_reactions_ch
 import repliesMigration from '../../migrations/2026-11-10_tache34_reponse_chat.sql?raw'
 import historyMigration from '../../migrations/2026-11-12_tache35_historique.sql?raw'
 import skipMigration from '../../migrations/2026-11-16_tache36_je_nai_pas_couru.sql?raw'
+import watchMigration from '../../migrations/2026-11-17_tache37_montre.sql?raw'
 
 /**
  * schema.sql est la source de vérité de la structure de la base.
@@ -21,7 +22,7 @@ import skipMigration from '../../migrations/2026-11-16_tache36_je_nai_pas_couru.
  */
 
 describe('schema.sql — structure', () => {
-  it('déclare les 10 tables utilisées par l\'app', () => {
+  it('déclare les 12 tables utilisées par l\'app', () => {
     for (const table of [
       'user_profiles',
       'parcours',
@@ -33,6 +34,8 @@ describe('schema.sql — structure', () => {
       'notification_preferences',
       'weekly_runs',
       'weekly_run_skips',
+      'device_links',
+      'import_proposals',
     ]) {
       expect(schema).toMatch(new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\b`))
     }
@@ -74,6 +77,8 @@ describe('schema.sql — structure', () => {
       'user_profiles', // weekly_runs.user_number
       'parcours',      // weekly_runs.parcours_id
       'user_profiles', // weekly_run_skips.user_number
+      'user_profiles', // device_links.user_number
+      'user_profiles', // import_proposals.user_number
     ])
   })
 
@@ -135,7 +140,7 @@ describe('schema.sql — structure', () => {
     expect(schema).toMatch(/pin_hash\s+text,/)
   })
 
-  it('active RLS et ouvre les 10 tables', () => {
+  it('active RLS et ouvre les 12 tables', () => {
     for (const table of [
       'user_profiles',
       'parcours',
@@ -147,13 +152,15 @@ describe('schema.sql — structure', () => {
       'notification_preferences',
       'weekly_runs',
       'weekly_run_skips',
+      'device_links',
+      'import_proposals',
     ]) {
       expect(schema).toMatch(
         new RegExp(`ALTER TABLE ${table}\\s+ENABLE ROW LEVEL SECURITY`)
       )
     }
-    // 9 tables × 4 politiques + messages × 3 (pas d'UPDATE)
-    expect([...schema.matchAll(/CREATE POLICY/g)]).toHaveLength(39)
+    // 11 tables × 4 politiques + messages × 3 (pas d'UPDATE)
+    expect([...schema.matchAll(/CREATE POLICY/g)]).toHaveLength(47)
   })
 
   it('rend un message immuable : aucune politique UPDATE', () => {
@@ -246,7 +253,7 @@ describe('table weekly_runs', () => {
 
   it('borne la source et les valeurs', () => {
     expect(schema).toMatch(
-      /CHECK \(source IN \('manual', 'gpx', 'strava'\)\)/
+      /CHECK \(source IN \('manual', 'gpx', 'strava', 'health'\)\)/
     )
     expect(schema).toMatch(/distance_km IS NULL OR distance_km >= 0/)
     expect(schema).toMatch(/elevation_gain_m IS NULL OR elevation_gain_m >= 0/)
@@ -603,5 +610,42 @@ describe('migration 2026-11-10 (tâche 34)', () => {
   it('applique tout ou rien', () => {
     expect(repliesMigration).toMatch(/^BEGIN;/m)
     expect(repliesMigration.trimEnd().endsWith('COMMIT;')).toBe(true)
+  })
+})
+
+describe('migration 2026-11-17 (tâche 37)', () => {
+  it('crée le lien de la montre et les propositions', () => {
+    expect(watchMigration).toMatch(/CREATE TABLE IF NOT EXISTS device_links/)
+    expect(watchMigration).toMatch(/CREATE TABLE IF NOT EXISTS import_proposals/)
+    // On ne stocke qu'une empreinte : un jeton en clair en base serait une
+    // fuite de capacité d'écriture.
+    expect(watchMigration).toMatch(/token_hash\s+text\s+NOT NULL UNIQUE/)
+    expect(watchMigration).toMatch(/char_length\(token_hash\) = 64/)
+    expect(watchMigration).toMatch(/UNIQUE \(user_number, external_id\)/)
+    expect(watchMigration).toMatch(
+      /idx_import_proposals_user_status[\s\S]*?user_number, status, started_at DESC/
+    )
+  })
+
+  it('élargit la source sans perdre les valeurs existantes', () => {
+    expect(watchMigration).toMatch(
+      /CHECK \(source IN \('manual', 'gpx', 'strava', 'health'\)\)/
+    )
+    // La contrainte est retirée par son contenu, pas par son nom : la prod
+    // peut l'avoir nommée autrement.
+    expect(watchMigration).toMatch(/pg_get_constraintdef\(oid\) ILIKE '%source%'/)
+  })
+
+  it('est rejouable et ne supprime aucune donnée à l’exécution', () => {
+    expect(watchMigration).toMatch(/CREATE TABLE IF NOT EXISTS/)
+    expect(watchMigration).toMatch(/DROP POLICY IF EXISTS/)
+    expect(watchMigration).toMatch(/DROP TRIGGER IF EXISTS/)
+    expect(watchMigration).not.toMatch(/^DELETE FROM/m)
+    expect(watchMigration).not.toMatch(/TRUNCATE|DROP TABLE/)
+  })
+
+  it('applique tout ou rien', () => {
+    expect(watchMigration).toMatch(/^BEGIN;/m)
+    expect(watchMigration.trimEnd().endsWith('COMMIT;')).toBe(true)
   })
 })

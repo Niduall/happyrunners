@@ -51,8 +51,6 @@ def make_dump(profiles: int = 2, attendances: int = 1) -> dict:
         ],
         "weekly_runs": [],
         "weekly_run_skips": [],
-        "device_links": [],
-        "import_proposals": [],
         "messages": [],
         "message_reactions": [],
         "push_subscriptions": [],
@@ -321,6 +319,14 @@ class ValidationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "source inconnue"):
             backup.validate_dump(dump)
 
+    def test_historique_source_health_refusee(self):
+        # `health` n'existe plus dans le CHECK : un dump de format 5 qui en
+        # contient serait refusé par la base au milieu de la restauration.
+        dump = with_history()
+        dump["weekly_runs"][0]["source"] = "health"
+        with self.assertRaisesRegex(ValueError, "source inconnue"):
+            backup.validate_dump(dump)
+
     def test_historique_distance_negative(self):
         dump = with_history()
         dump["weekly_runs"][0]["distance_km"] = -1
@@ -393,88 +399,35 @@ class ValidationTest(unittest.TestCase):
         self.assertEqual(set(backup.TABLE_ORDER), set(backup.TABLES))
         self.assertEqual(set(backup.TABLE_KEYS), set(backup.TABLES))
 
-    def test_montre_valide(self):
+    def test_dump_format_5_ignore_la_montre(self):
+        # Le format 5 (tâche 37) contenait `device_links` et
+        # `import_proposals`, deux tables supprimées avec le lien montre. Un
+        # ancien dump reste restaurable : ces tables sont ignorées, pas
+        # restaurées, puisque le schéma ne les connaît plus.
         dump = make_dump()
         dump["device_links"] = [
-            {
-                "id": "l1",
-                "user_number": 1,
-                "label": "Montre",
-                "token_hash": "a" * 64,
-            }
+            {"id": "l1", "user_number": 1, "token_hash": "a" * 64}
         ]
         dump["import_proposals"] = [
-            {
-                "id": "prop-1",
-                "user_number": 1,
-                "source": "health",
-                "external_id": "2026-11-04T12:30:00Z",
-                "activity_type": "RUNNING",
-                "started_at": "2026-11-04T12:30:00Z",
-                "status": "pending",
-            }
+            {"id": "prop-1", "user_number": 1, "status": "pending"}
         ]
-
-        counts = backup.validate_dump(dump)
-        self.assertEqual(counts["device_links"], 1)
-        self.assertEqual(counts["import_proposals"], 1)
-
-    def test_ancien_dump_sans_montre(self):
-        # Un dump de format 4 (avant la montre) n'a pas ces tables : il doit
-        # rester restaurable, avec des liens et des propositions vides.
-        dump = make_dump()
-        del dump["device_links"]
-        del dump["import_proposals"]
         dump["_meta"] = {
-            "format": 4,
+            "format": 5,
             "counts": {
-                table: len(dump[table])
-                for table in backup.TABLES
-                if table not in ("device_links", "import_proposals")
+                **{t: len(dump[t]) for t in backup.TABLES},
+                "device_links": 1,
+                "import_proposals": 1,
             },
         }
 
         counts = backup.validate_dump(dump)
-        self.assertEqual(counts["device_links"], 0)
-        self.assertEqual(counts["import_proposals"], 0)
+        self.assertEqual(counts["weekly_runs"], 0)
+        self.assertNotIn("device_links", counts)
+        self.assertNotIn("import_proposals", counts)
 
-    def test_lien_sans_empreinte_refuse(self):
-        # Un jeton en clair dans un dump serait une capacité d'écriture qui
-        # traîne dans un fichier.
-        dump = make_dump()
-        dump["device_links"] = [
-            {"id": "l1", "user_number": 1, "token_hash": "jeton-en-clair"}
-        ]
-        with self.assertRaisesRegex(ValueError, "token_hash invalide"):
-            backup.validate_dump(dump)
-
-    def test_proposition_statut_inconnu(self):
-        dump = make_dump()
-        dump["import_proposals"] = [
-            {
-                "id": "prop-1",
-                "user_number": 1,
-                "external_id": "2026-11-04T12:30:00Z",
-                "started_at": "2026-11-04T12:30:00Z",
-                "status": "peut-être",
-            }
-        ]
-        with self.assertRaisesRegex(ValueError, "statut invalide"):
-            backup.validate_dump(dump)
-
-    def test_proposition_personne_inconnue(self):
-        dump = make_dump()
-        dump["import_proposals"] = [
-            {
-                "id": "prop-1",
-                "user_number": 99,
-                "external_id": "2026-11-04T12:30:00Z",
-                "started_at": "2026-11-04T12:30:00Z",
-                "status": "pending",
-            }
-        ]
-        with self.assertRaisesRegex(ValueError, "user_number 99 absent"):
-            backup.validate_dump(dump)
+    def test_tables_montre_retirees(self):
+        self.assertNotIn("device_links", backup.TABLES)
+        self.assertNotIn("import_proposals", backup.TABLES)
 
 
 class DeleteTest(unittest.TestCase):

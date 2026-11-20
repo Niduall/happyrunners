@@ -9,13 +9,11 @@ import {
   Settings,
   Bell,
   History,
-  Watch,
 } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
 import { SecurityModal } from './SecurityModal'
 import { NotificationsModal } from './NotificationsModal'
-import { WatchLinkModal } from './WatchLinkModal'
 import { useAuth } from '../hooks/useAuth'
 import { usePushNotifications } from '../hooks/usePushNotifications'
 
@@ -37,7 +35,6 @@ export function UserMenu() {
   const [editing, setEditing] = useState(false)
   const [securityOpen, setSecurityOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [watchOpen, setWatchOpen] = useState(false)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [nameError, setNameError] = useState('')
@@ -170,16 +167,6 @@ export function UserMenu() {
                 <Bell className="w-4 h-4" />
                 Notifications
               </button>
-              <button
-                onClick={() => {
-                  setWatchOpen(true)
-                  setOpen(false)
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
-              >
-                <Watch className="w-4 h-4" />
-                Montre et applications
-              </button>
               {adminLockEnabled && (
                 <button
                   onClick={() => {
@@ -285,13 +272,6 @@ export function UserMenu() {
             void push.setPreference(key, value)
           }
           onClose={() => setNotificationsOpen(false)}
-        />
-      )}
-
-      {watchOpen && (
-        <WatchLinkModal
-          userNumber={user.id}
-          onClose={() => setWatchOpen(false)}
         />
       )}
     </>

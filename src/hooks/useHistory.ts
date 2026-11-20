@@ -6,9 +6,7 @@ import {
   getHistoryAttendances,
   getHistoryVotes,
   getParcours,
-  getPendingProposals,
   getWeeklyRuns,
-  setProposalStatus,
 } from '../services/supabaseService'
 import {
   buildHistoryWeeks,
@@ -17,11 +15,9 @@ import {
   type HistoryStats,
   type HistoryWeek,
 } from '../services/history'
-import { weekKeyForRunDate } from '../services/weekKey'
 import { clearRunReminderDismissal } from '../services/runReminderDismissal'
 import { useTargetWednesday } from './useTargetWednesday'
 import type {
-  ImportProposal,
   ParcoursSummary,
   ProfileIdentity,
   WeeklyRunSource,
@@ -47,7 +43,6 @@ export function useHistory(userNumber: number | null) {
   const { weekKey } = useTargetWednesday()
   const [weeks, setWeeks] = useState<HistoryWeek[]>([])
   const [parcours, setParcours] = useState<ParcoursSummary[]>([])
-  const [proposals, setProposals] = useState<ImportProposal[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [savingWeek, setSavingWeek] = useState<string | null>(null)
@@ -102,21 +97,9 @@ export function useHistory(userNumber: number | null) {
         console.warn('[HISTORY] Annuaire indisponible:', err)
       }
 
-      // Ce que la montre a proposé. Une panne de ce tuyau ne doit jamais
-      // casser l'historique : on affiche simplement « rien à valider ».
-      let pending: ImportProposal[] = []
-      if (userNumber != null) {
-        try {
-          pending = await getPendingProposals(userNumber)
-        } catch (err) {
-          console.warn('[HISTORY] Propositions indisponibles:', err)
-        }
-      }
-
       if (isStale()) return
 
       setParcours(parcoursList)
-      setProposals(pending)
       setWeeks(
         buildHistoryWeeks({
           weekKeys,
@@ -224,89 +207,6 @@ export function useHistory(userNumber: number | null) {
     [userNumber, refresh]
   )
 
-  /**
-   * La proposition à afficher : celle de la semaine encore ouverte.
-   * Une proposition d'une semaine clôturée n'est plus validable — la règle
-   * du mercredi 14h s'applique aussi à la montre.
-   */
-  const openProposal = useMemo(() => {
-    if (editableWeekKey === null) return null
-    return (
-      proposals.find(
-        (proposal) =>
-          weekKeyForRunDate(new Date(proposal.started_at)) === editableWeekKey
-      ) ?? null
-    )
-  }, [proposals, editableWeekKey])
-
-  /**
-   * Valide la proposition : c'est le seul endroit où une sortie issue de la
-   * montre entre dans le classement. La distance est convertie en kilomètres
-   * (une décimale, comme la saisie manuelle) ; le D+ n'est pas fourni par le
-   * téléphone, donc il reste inconnu — on ne compte que le connu.
-   */
-  const acceptProposal = useCallback(
-    async (proposal: ImportProposal): Promise<boolean> => {
-      if (userNumber == null) {
-        setError('Connecte-toi pour valider une sortie')
-        return false
-      }
-      if (proposal.distance_m == null) {
-        setError('Cette proposition ne contient pas de distance')
-        return false
-      }
-
-      const weekKeyToSave = weekKeyForRunDate(new Date(proposal.started_at))
-      if (weekKeyToSave === null) {
-        setError(
-          'Seule une sortie du mercredi peut être comptée dans l’historique'
-        )
-        return false
-      }
-      if (refuseIfFrozen(weekKeyToSave)) return false
-
-      setSavingWeek(weekKeyToSave)
-      try {
-        await declareWeeklyRun({
-          weekKey: weekKeyToSave,
-          userNumber,
-          parcoursId: null,
-          parcoursName: 'Sortie importée',
-          distanceKm: Math.round(proposal.distance_m / 100) / 10,
-          elevationGainM: null,
-          source: 'health',
-        })
-        await setProposalStatus(proposal.id, 'accepted')
-        clearRunReminderDismissal(userNumber, weekKeyToSave)
-        await refresh()
-        return true
-      } catch (err) {
-        console.error('[HISTORY] Erreur validation montre:', err)
-        setError(err instanceof Error ? err.message : 'Validation impossible')
-        return false
-      } finally {
-        setSavingWeek(null)
-      }
-    },
-    [userNumber, refresh, refuseIfFrozen]
-  )
-
-  /** Écarte une proposition : elle ne reviendra pas, la montre ne la renvoie pas. */
-  const ignoreProposal = useCallback(
-    async (proposal: ImportProposal): Promise<boolean> => {
-      try {
-        await setProposalStatus(proposal.id, 'ignored')
-        await refresh()
-        return true
-      } catch (err) {
-        console.error('[HISTORY] Erreur ignorance montre:', err)
-        setError(err instanceof Error ? err.message : 'Action impossible')
-        return false
-      }
-    },
-    [refresh]
-  )
-
   const stats: HistoryStats = useMemo(
     () => computeHistoryStats(weeks, userNumber),
     [weeks, userNumber]
@@ -322,9 +222,6 @@ export function useHistory(userNumber: number | null) {
     declare,
     retract,
     editableWeekKey,
-    openProposal,
-    acceptProposal,
-    ignoreProposal,
     refresh,
   }
 }

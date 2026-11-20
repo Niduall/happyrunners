@@ -10,11 +10,9 @@ import {
   getHistoryAttendances,
   getHistoryVotes,
   getParcours,
-  getPendingProposals,
   getWeeklyRuns,
-  setProposalStatus,
 } from '../services/supabaseService'
-import type { ImportProposal, WeeklyRun } from '../types/supabase'
+import type { WeeklyRun } from '../types/supabase'
 
 // Le compte connecté et la semaine sont figés : les dates affichées ne
 // dépendent pas du jour où la suite tourne.
@@ -44,8 +42,6 @@ vi.mock('../services/supabaseService', async (importOriginal) => {
     getWeeklyRuns: vi.fn(),
     getParcours: vi.fn(),
     getAllProfiles: vi.fn(),
-    getPendingProposals: vi.fn(),
-    setProposalStatus: vi.fn(),
     declareWeeklyRun: vi.fn(),
     deleteWeeklyRun: vi.fn(),
   }
@@ -58,8 +54,6 @@ const mockParcours = vi.mocked(getParcours)
 const mockProfiles = vi.mocked(getAllProfiles)
 const mockDeclare = vi.mocked(declareWeeklyRun)
 const mockDelete = vi.mocked(deleteWeeklyRun)
-const mockPending = vi.mocked(getPendingProposals)
-const mockProposalStatus = vi.mocked(setProposalStatus)
 
 const PROFILES = [
   { user_number: 1, first_name: 'Alice', last_name: 'Martin' },
@@ -145,8 +139,6 @@ beforeEach(() => {
   mockProfiles.mockResolvedValue(PROFILES)
   mockDeclare.mockResolvedValue(undefined)
   mockDelete.mockResolvedValue(undefined)
-  mockPending.mockResolvedValue([])
-  mockProposalStatus.mockResolvedValue(undefined)
 })
 
 describe('Historique — semaines passées', () => {
@@ -638,126 +630,5 @@ describe('Historique — déclaration du parcours', () => {
     await waitFor(() =>
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     )
-  })
-})
-
-describe('Historique — proposition de la montre', () => {
-  /**
-   * La semaine mockée est celle du 11 novembre, donc la semaine encore
-   * modifiable est la précédente (le 4 novembre) : `pastWeekKeys` exclut la
-   * semaine courante. Une proposition du 4 novembre avant 14h appartient bien
-   * à cette semaine-là.
-   */
-  function proposal(over: Partial<ImportProposal> = {}): ImportProposal {
-    return {
-      id: 'prop-1',
-      user_number: 1,
-      source: 'health',
-      external_id: '2026-11-04T12:30:00',
-      activity_type: 'RUNNING',
-      started_at: '2026-11-04T12:30:00',
-      duration_s: 2520,
-      distance_m: 8200,
-      status: 'pending',
-      created_at: '2026-11-04T13:00:00Z',
-      ...over,
-    }
-  }
-
-  it('propose la sortie et ne l’enregistre qu’après validation', async () => {
-    mockPending.mockResolvedValue([proposal()])
-    const user = userEvent.setup()
-
-    renderHistory()
-
-    expect(
-      await screen.findByText('Ta montre propose une sortie')
-    ).toBeInTheDocument()
-    expect(screen.getByText(/mercredi 4 novembre/)).toBeInTheDocument()
-    expect(screen.getByText(/8,2 km/)).toBeInTheDocument()
-    expect(screen.getByText(/42 min/)).toBeInTheDocument()
-
-    // Avant le clic, rien n'est écrit dans le classement.
-    expect(mockDeclare).not.toHaveBeenCalled()
-
-    await user.click(screen.getByRole('button', { name: 'Valider' }))
-
-    await waitFor(() =>
-      expect(mockDeclare).toHaveBeenCalledWith({
-        weekKey: '2026-11-04',
-        userNumber: 1,
-        parcoursId: null,
-        parcoursName: 'Sortie importée',
-        distanceKm: 8.2,
-        elevationGainM: null,
-        source: 'health',
-      })
-    )
-    expect(mockProposalStatus).toHaveBeenCalledWith('prop-1', 'accepted')
-  })
-
-  it('ignore une proposition sans écrire de sortie', async () => {
-    mockPending.mockResolvedValue([proposal()])
-    const user = userEvent.setup()
-
-    renderHistory()
-
-    await screen.findByText('Ta montre propose une sortie')
-    await user.click(screen.getByRole('button', { name: 'Ignorer' }))
-
-    await waitFor(() =>
-      expect(mockProposalStatus).toHaveBeenCalledWith('prop-1', 'ignored')
-    )
-    expect(mockDeclare).not.toHaveBeenCalled()
-  })
-
-  it('n’affiche pas la proposition si la semaine a déjà une sortie', async () => {
-    mockPending.mockResolvedValue([proposal()])
-    mockRuns.mockResolvedValue([
-      declaredRun({ week_key: '2026-11-04', parcours_name: 'Forêt' }),
-    ])
-
-    renderHistory()
-
-    await screen.findByText('Mercredi 4 novembre')
-    expect(
-      screen.queryByText('Ta montre propose une sortie')
-    ).not.toBeInTheDocument()
-  })
-
-  it('ignore une proposition d’une semaine déjà clôturée', async () => {
-    // Une sortie du 28 octobre appartient à une semaine close : la montre ne
-    // doit pas pouvoir réécrire un classement passé.
-    mockPending.mockResolvedValue([
-      proposal({
-        external_id: '2026-10-28T12:30:00',
-        started_at: '2026-10-28T12:30:00',
-      }),
-    ])
-
-    renderHistory()
-
-    await screen.findByText('Mercredi 4 novembre')
-    expect(
-      screen.queryByText('Ta montre propose une sortie')
-    ).not.toBeInTheDocument()
-  })
-
-  it('n’affiche pas une sortie d’un autre jour que le mercredi', async () => {
-    // Un run du mardi 3 novembre tombe dans la semaine du 4 : sans la règle du
-    // mercredi, il serait proposé alors que le groupe n'a pas couru ce jour-là.
-    mockPending.mockResolvedValue([
-      proposal({
-        external_id: '2026-11-03T18:00:00',
-        started_at: '2026-11-03T18:00:00',
-      }),
-    ])
-
-    renderHistory()
-
-    await screen.findByText('Mercredi 4 novembre')
-    expect(
-      screen.queryByText('Ta montre propose une sortie')
-    ).not.toBeInTheDocument()
   })
 })

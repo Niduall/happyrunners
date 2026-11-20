@@ -38,7 +38,7 @@ BACKUP_DIR = ROOT / "backups"
 # Taille d'une page PostgREST. Le plafond par défaut de Supabase est 1000 :
 # sans pagination, une table plus grande serait exportée tronquée en silence.
 PAGE_SIZE = 1000
-FORMAT_VERSION = 5
+FORMAT_VERSION = 6
 
 # L'ordre compte à la restauration :
 # participations référence parcours, qui référence user_profiles ; les
@@ -50,8 +50,6 @@ TABLES = [
     "participations",
     "weekly_runs",
     "weekly_run_skips",
-    "device_links",
-    "import_proposals",
     "messages",
     "message_reactions",
     "push_subscriptions",
@@ -68,8 +66,6 @@ TABLE_ORDER = {
     "participations": "id.asc",
     "weekly_runs": "week_key.asc,user_number.asc",
     "weekly_run_skips": "week_key.asc,user_number.asc",
-    "device_links": "id.asc",
-    "import_proposals": "started_at.asc,id.asc",
     "messages": "created_at.asc,id.asc",
     "message_reactions": "message_id.asc,user_number.asc",
     "push_subscriptions": "id.asc",
@@ -85,8 +81,6 @@ TABLE_KEYS = {
     "participations": ("id",),
     "weekly_runs": ("week_key", "user_number"),
     "weekly_run_skips": ("week_key", "user_number"),
-    "device_links": ("id",),
-    "import_proposals": ("id",),
     "messages": ("id",),
     "message_reactions": ("message_id", "user_number"),
     "push_subscriptions": ("id",),
@@ -105,8 +99,6 @@ SHORT_LABELS = {
     "participations": "votes",
     "weekly_runs": "hist",
     "weekly_run_skips": "skip",
-    "device_links": "link",
-    "import_proposals": "prop",
     "messages": "msg",
     "message_reactions": "react",
     "push_subscriptions": "push",
@@ -322,8 +314,12 @@ def validate_dump(dump: dict, allow_empty: bool = False) -> dict[str, int]:
     # On les accepte : la table manquante sera simplement vide.
     dump.setdefault("weekly_runs", [])
     dump.setdefault("weekly_run_skips", [])
-    dump.setdefault("device_links", [])
-    dump.setdefault("import_proposals", [])
+
+    # Un dump de format 5 contient en plus `device_links` et
+    # `import_proposals`, deux tables supprimées avec le lien montre. On les
+    # ignore au lieu de les restaurer : le schéma ne les connaît plus.
+    for obsolete in ("device_links", "import_proposals"):
+        dump.pop(obsolete, None)
 
     for table in TABLES:
         if table not in dump:
@@ -493,7 +489,7 @@ def validate_dump(dump: dict, allow_empty: bool = False) -> dict[str, int]:
             raise ValueError(
                 f"weekly_runs : parcours_id {parcours_id} absent de parcours"
             )
-        if row.get("source", "manual") not in ("manual", "gpx", "strava", "health"):
+        if row.get("source", "manual") not in ("manual", "gpx", "strava"):
             raise ValueError(
                 f"weekly_runs : source inconnue {row.get('source')!r}"
             )
@@ -523,33 +519,6 @@ def validate_dump(dump: dict, allow_empty: bool = False) -> dict[str, int]:
             raise ValueError(
                 "weekly_run_skips : sortie et « je n'ai pas couru » pour "
                 f"({row['week_key']}, {row['user_number']})"
-            )
-
-    for row in dump["device_links"]:
-        if row.get("user_number") not in users:
-            raise ValueError(
-                "device_links : user_number "
-                f"{row.get('user_number')} absent de user_profiles"
-            )
-        # Seule l'empreinte est sauvegardée : un jeton en clair dans un dump
-        # serait une capacité d'écriture qui traîne dans un fichier.
-        token_hash = row.get("token_hash")
-        if not isinstance(token_hash, str) or len(token_hash) != 64:
-            raise ValueError("device_links : token_hash invalide")
-
-    for row in dump["import_proposals"]:
-        if row.get("user_number") not in users:
-            raise ValueError(
-                "import_proposals : user_number "
-                f"{row.get('user_number')} absent de user_profiles"
-            )
-        if not row.get("external_id"):
-            raise ValueError("import_proposals : external_id manquant")
-        if not row.get("started_at"):
-            raise ValueError("import_proposals : started_at manquant")
-        if row.get("status") not in ("pending", "accepted", "ignored"):
-            raise ValueError(
-                f"import_proposals : statut invalide {row.get('status')!r}"
             )
 
     # Un fichier tronqué à l'écriture ou édité à la main se voit ici.

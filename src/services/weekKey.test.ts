@@ -7,7 +7,6 @@ import {
   isRunDay,
   hasRunStarted,
   weeksBetween,
-  weekKeyForRunDate,
 } from './weekKey'
 
 /** Helper : date locale à jour/mois/année + heure */
@@ -173,30 +172,6 @@ describe('stabilité', () => {
     const apres = getCurrentWeekKey(at(2026, 10, 7, 14))
     expect(avant).not.toBe(apres)
     expect(apres).toBe('2026-10-14')
-  })
-})
-
-describe('weekKeyForRunDate — seul un mercredi compte', () => {
-  it('mercredi 12h30 : le mercredi du jour', () => {
-    expect(weekKeyForRunDate(at(2026, 11, 18, 12))).toBe('2026-11-18')
-  })
-
-  it('mercredi 18h : encore le mercredi du jour, malgré la bascule de 14h', () => {
-    expect(weekKeyForRunDate(new Date(2026, 10, 18, 18, 30))).toBe(
-      '2026-11-18'
-    )
-  })
-
-  it('mardi : aucune semaine, la sortie ne compte pas', () => {
-    expect(weekKeyForRunDate(at(2026, 11, 17, 19))).toBeNull()
-  })
-
-  it('vendredi : aucune semaine, même si le mercredi suivant arrive', () => {
-    expect(weekKeyForRunDate(at(2026, 11, 20, 18))).toBeNull()
-  })
-
-  it('dimanche : aucune semaine', () => {
-    expect(weekKeyForRunDate(at(2026, 11, 22, 9))).toBeNull()
   })
 })
 

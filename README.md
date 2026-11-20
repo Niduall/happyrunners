@@ -11,7 +11,6 @@ Application PWA pour organiser les sorties running du mercredi midi avec les col
 - 🗺️ **Parcours** : import GPX (Strava inclus) + carte Leaflet
 - ✅ **Présence** : « Je viens » / « Pas aujourd'hui » par semaine
 - 🗳️ **Vote** : un parcours par personne et par semaine, égalité signalée
-- ⌚ **Montre** : le téléphone propose ta sortie, tu la valides dans l'historique
 - 🔐 **PIN** : 4 chiffres, optionnel, gérable depuis le menu du profil
 - 📱 **PWA** : installable iOS/Android, fonctionne hors ligne
 
@@ -80,11 +79,12 @@ python3 backup.py restore <fichier> --allow-empty
 ```
 
 `save` pagine par 1 000 lignes : aucune table n'est tronquée. Il couvre les
-douze tables, y compris le chat (`messages`, `message_reactions`), le push
-(`push_subscriptions`, `notification_preferences`), l'historique
-(`weekly_runs`, `weekly_run_skips`) et la montre (`device_links`,
-`import_proposals`). Un dump antérieur à l'historique ou à la montre reste
-restaurable : la table manquante est simplement recréée vide. `restore` valide le
+dix tables, y compris le chat (`messages`, `message_reactions`), le push
+(`push_subscriptions`, `notification_preferences`) et l'historique
+(`weekly_runs`, `weekly_run_skips`). Un dump antérieur à l'historique reste
+restaurable : la table manquante est simplement recréée vide. Un dump de
+format 5 contenait `device_links` et `import_proposals`, retirées depuis : ces
+tables sont ignorées à la restauration. `restore` valide le
 fichier avant de supprimer quoi que ce soit (tables, comptes, clés
 étrangères), prend automatiquement une sauvegarde
 `happyrunners-pre-restore-<date>.json`, puis vérifie les comptes après
@@ -274,30 +274,22 @@ mercredis** : présents, vote indicatif et sorties **réellement courues**.
 Table : `weekly_runs`, clé `(week_key, user_number)`. Le nom du parcours, la
 distance et le dénivelé sont figés à la déclaration pour survivre à la
 suppression ou au renommage d'un parcours.
-## Montre et applications
+## Pas de lien avec une montre
 
-Une montre n'a pas besoin d'un compte développeur ni d'une clé Garmin. Le
-téléphone lit le carnet de santé et pousse la séance ; l'application propose,
-**la personne valide**.
+Le projet a exploré un import automatique depuis le téléphone (Edge Function
+`ingest`, jeton personnel, propositions à valider). Le code a existé, a été
+vérifié sur la base de test, puis **retiré** : il n'existe aucune voie gratuite
+et simple pour envoyer les séances d'une montre vers HappyRunners.
 
-1. Menu du profil → **Montre et applications** → **Créer mon adresse**.
-2. Copier l'adresse affichée (elle contient un jeton personnel).
-3. Dans une application de santé du téléphone, coller cette adresse comme
-   destination :
-   - **Android** : Health Connect (Android 14+), avec *Health Connect Webhook*.
-     Vérifier que Garmin Connect écrit bien dans Health Connect
-     (Réglages → Health Connect).
-   - **iPhone** : Apple Santé, avec *Health Webhook* ou un Raccourci.
-     Garmin Connect → Apple Santé doit être activé.
-4. Après une sortie, ouvrir `/historique` : une carte « Ta montre propose une
-   sortie » apparaît pour la semaine encore ouverte. **Valider** déclare la
-   sortie (`source = 'health'`, distance en km, pas de D+ : Health Connect ne
-   le fournit pas) ; **Ignorer** l'écarte définitivement.
-   **Seules les sorties du mercredi sont proposées** : c'est le jour du groupe,
-   et l'historique ne compte qu'une sortie par personne et par semaine. Un run
-   du mardi ou du vendredi n'apparaît pas.
+- **iPhone** : HealthKit n'a pas d'API web. Il faudrait une application native
+  ou un Raccourci qui poste lui-même, avec un service payant pour la plupart
+  des gens.
+- **Android** : Health Connect n'expose rien en web ; il faut une application
+  tierce, distribuée hors du Play Store ou payante.
+- **Strava** : depuis le 1er juin 2026, l'API exige un abonnement Strava actif
+  côté développeur, ce que le projet ne peut pas financer.
 
-L'adresse est personnelle : la partager permettrait d'écrire des sorties sur
-ce profil. Le jeton n'est conservé en base que **haché** ; le régénérer ou
-« Déconnecter » révoque l'ancienne adresse. Les applications payantes
-éventuelles sont à la charge de chaque personne, jamais du projet.
+La solution retenue est **l'import GPX** : dans `/historique`, une sortie
+« autre » accepte un fichier GPX (ou un export JSON Strava) et en tire la
+distance et le D+. La personne exporte depuis sa montre, puis dépose le
+fichier. Aucun compte tiers, aucun secret, aucune dépense.

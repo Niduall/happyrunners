@@ -29,8 +29,8 @@ envisagées, avec leur priorité et leur coût. Elle ne remplace pas `AGENTS.md`
 |---|---|---|---|
 | **Sauvegardes planifiées** | Job quotidien qui exécute `backup.py save` et conserve un artefact chiffré, au lieu de dépendre d’une action manuelle. | M | ✅ Livré |
 
-`backup.py` couvre désormais les **douze tables** (chat, push, historique et
-montre compris), et
+`backup.py` couvre désormais les **dix tables** (chat, push et historique
+compris), et
 `.github/workflows/backup.yml` sauvegarde la prod chaque jour à 3 h UTC dans
 un artefact chiffré conservé 30 jours.
 
@@ -52,16 +52,27 @@ un artefact chiffré conservé 30 jours.
 |---|---|---|---|
 | **Historique des sorties** | Page `/historique` : 12 mercredis passés, présents, et **une sortie par personne et par semaine** (`weekly_runs`, clé `week_key,user_number`). Chacun déclare son propre parcours (liste ou « autre »), peut le corriger ou le retirer — le retrait reste possible même après la clôture ; déclarer remet la présence à « going ». Une semaine se fige au mercredi suivant 14h : seule la sortie la plus récente reste déclarable et corrigeable, et les cartes figées portent une mention « Semaine clôturée ». Les semaines sans présence ni sortie sont masquées (avec un compteur pour les déplier), sauf la semaine ouverte où l'on vient déclarer. L'accueil rappelle la sortie manquante dès 12h30 le jour du run, et un bouton « Je n'ai pas couru » coupe ce rappel **par personne** (`weekly_run_skips`, la réponse suit la personne d'un appareil à l'autre) ; la modale ne présélectionne rien sans indice. Nom, km et D+ sont figés à la déclaration, les stats personnelles comptent les valeurs connues. Le vote reste un simple indice. Source `manual` ou `gpx` selon que les chiffres ont été saisis ou lus dans un fichier ; `strava` reste à venir. | M | ✅ Livré |
 
-## Livré — Montre et applications (18 novembre 2026)
+## Exploré puis retiré — Montre et applications (18–20 novembre 2026)
 
 | Tâche | Pourquoi | Effort | État |
 |---|---|---|---|
-| **Le téléphone pousse ses séances** | Une application de santé du téléphone (Health Connect Webhook sur Android, Health Webhook ou un Raccourci sur iPhone) poste les séances d'entraînement sur l'Edge Function `ingest`, avec une adresse personnelle. La fonction dépose une proposition `pending` dans `import_proposals` ; **elle n'écrit jamais dans le classement**. L'historique affiche la proposition de la semaine encore ouverte, et « Valider » déclare la sortie (`source = 'health'`, distance en km, D+ inconnu) ; « Ignorer » l'écarte. Gratuit côté projet, sans clé à générer chez Garmin : le jeton est créé par l'app, stocké **haché** en base (`device_links.token_hash`) et en clair uniquement sur le téléphone. Aucun agrégateur, aucun compte développeur ; les applications payantes éventuelles sont à la charge de chaque personne. **Seules les sorties du mercredi sont proposées** (`weekKeyForRunDate`) : c'est le jour du groupe, et l'historique ne compte qu'une sortie par personne et par semaine ; une sortie du mercredi reste sur ce mercredi même après 14h. | M | ✅ Livré |
+| **Le téléphone pousse ses séances** | Une application de santé du téléphone poste ses séances sur une Edge Function `ingest` avec une adresse personnelle ; la fonction dépose une proposition `pending`, et « Valider » dans `/historique` déclare la sortie (`source = 'health'`). Le jeton n'était stocké que **haché** en base. | M | ❌ Retiré |
 
-À vérifier sur un vrai téléphone Android : Garmin Connect écrit-il bien des
-**séances d'entraînement** typées dans Health Connect (Android 14+), et pas
-seulement des échantillons de distance ? Le chemin iPhone (Garmin Connect →
-Apple Santé → Health Webhook) est confirmé pour les « Workouts ».
+Le code a fonctionné sur la base de test (proposition reçue, carte affichée,
+validation écrite), puis a été **retiré** : il n'existe aucune voie gratuite et
+simple pour envoyer les séances d'une montre vers HappyRunners.
+
+- **iPhone** : HealthKit n'a pas d'API web ; il faut une application native ou
+  un Raccourci, et la plupart des relais sont payants.
+- **Android** : Health Connect n'expose rien en web ; l'application tierce est
+  hors Play Store ou payante.
+- **Strava** : depuis le 1er juin 2026, l'API exige un abonnement développeur
+  actif, que le projet ne peut pas financer.
+
+La solution retenue est **l'import GPX** dans une sortie « autre », déjà livré :
+la personne exporte depuis sa montre et dépose le fichier. Aucun compte tiers,
+aucun secret, aucune dépense. Le travail de la tâche 37 reste dans l'historique
+git, avec un commit qui explique le retrait.
 
 ## À faire ensuite
 
@@ -92,17 +103,17 @@ Apple Santé → Health Webhook) est confirmé pour les « Workouts ».
 
 ## Exploré plus tard — montres et plateformes
 
-Idées notées le 16 novembre 2026, revues le 17 et le 18 novembre 2026. La voie
-retenue — le téléphone pousse vers l'Edge Function `ingest` — est **livrée**
-(voir plus haut). Les autres pistes restent écartées pour les raisons
-ci-dessous : elles demandent des comptes développeur, des secrets serveur ou
-une application native, donc un autre projet que cette PWA.
+Idées notées le 16 novembre 2026, revues le 18 et le 20 novembre 2026. La voie
+du téléphone qui pousse vers `ingest` a été essayée puis **retirée** (voir plus
+haut). Les pistes ci-dessous restent écartées pour les mêmes raisons : elles
+demandent des comptes développeur, des secrets serveur ou une application
+native, donc un autre projet que cette PWA.
 
 | Piste | Ce qu'il faudrait | Réalité à connaître |
 |---|---|---|
 | **Import GPX / FIT depuis une montre** | Un simple champ fichier dans la déclaration de sortie. GPX est déjà lu (`gpxParser`) ; le FIT de Garmin demanderait un parseur dédié. | La plus simple, et elle règle 90 % du besoin : la personne exporte depuis sa montre et dépose le fichier. Aucun compte tiers, aucun secret. Le GPX d'une sortie « autre » est **livré** ; il reste le FIT. |
 | **Strava comme passerelle** | OAuth standard (client id + **secret** dans une Edge Function), scope `activity:read`, une requête par personne et par semaine. Garmin Connect synchronise déjà ses activités vers Strava. | Envisagée puis **écartée** : l'app API est payante (~80 $/an) et sa politique réserve les données au propriétaire (2.3, 6.1) tout en interdisant les proxys et agrégateurs (5.16). Incompatible avec un historique visible par le groupe. |
-| **Apple Health** | Aucune API web : HealthKit exige une app native iOS. Le chemin réaliste est une application de santé qui poste les séances vers HappyRunners. | **Livré par le téléphone** : Garmin Connect → Apple Santé → Health Webhook (ou un Raccourci) poste sur `ingest`. Une intégration directe dans la PWA reste impossible : elle demanderait une app native. |
+| **Apple Health** | Aucune API web : HealthKit exige une app native iOS. Le relais par une application de santé a été essayé (voir « Exploré puis retiré »). | Une intégration directe dans la PWA reste impossible : elle demanderait une app native. Les relais gratuits et simples n'existent pas, et les payants sont à la charge de chaque personne — le projet ne les finance pas. |
 | **Garmin Personal API** | Depuis 2026, chaque personne peut créer sa **propre** clé dans Garmin Connect Web (Réglages → Personal API Token), échangée contre un jeton de 24 h. Endpoints activités et téléchargement du fichier. | Faisable techniquement, déconseillé ici : la clé donne aussi accès au sommeil, à la fréquence cardiaque et au poids ; elle **expire en 30 à 365 jours** (renouvellement manuel) ; Garmin précise qu'elle n'est pas prévue pour une application servant plusieurs personnes. Et la stocker dans une base à RLS ouverte serait pire que le PIN. |
 | **Garmin Business API** | Programme partenaire : société, dossier, approbation, OAuth multi-utilisateurs. | Surdimensionné pour un groupe de collègues, et l'ouverture aux nouveaux dossiers a été suspendue puis rouverte. À ne pas viser. |
 | **Application sur montre** | watchOS ou Wear OS : une app native, donc Swift/Kotlin, un compte développeur Apple (99 $/an) et une revalidation. | Une PWA ne tourne pas sur une montre. C'est un second produit, pas une tâche de cette feuille de route. |
@@ -129,10 +140,9 @@ une application native, donc un autre projet que cette PWA.
   (`source = 'gpx'`), les chiffres seuls sont gardés. Aucune migration.
 - « Je n'ai pas couru » **par personne** (`weekly_run_skips`) : la réponse suit
   la personne d'un téléphone à l'autre, et déclarer une sortie l'efface.
-- **Montre et applications** : le téléphone poste ses séances sur l'Edge
-  Function `ingest` avec une adresse personnelle ; la proposition attend une
-  validation dans `/historique` et n'écrit jamais seule dans le classement.
-  Jeton stocké **haché** en base, en clair uniquement sur le téléphone.
+- **Import GPX** : la voie retenue pour les sorties issues d'une montre.
+  L'envoi automatique depuis le téléphone a été exploré puis retiré ; ne pas le
+  reproposer sans une voie gratuite et simple.
 - Chat sur 30 jours glissants, envoi optimiste, non-lus, polling 5 s / 30 s.
 - Réactions à palette fixe et **liste des personnes ayant réagi** au clic sur
   une pastille.

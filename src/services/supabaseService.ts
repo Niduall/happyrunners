@@ -21,9 +21,6 @@ import type {
   WeeklyRun,
   WeeklyRunInsert,
   WeeklyRunSource,
-  DeviceLink,
-  ImportProposal,
-  ImportProposalStatus,
 } from '../types/supabase'
 import type { PushSubscriptionRecord } from './push'
 
@@ -860,106 +857,6 @@ export async function saveNotificationPreferences(
     },
     { onConflict: 'user_number' }
   )
-
-  if (error) throw error
-}
-
-// ===== MONTRE (import depuis le téléphone) =====
-
-/**
- * Colonnes du lien : tout sauf `token_hash`. Le navigateur n'a aucune raison
- * de lire une empreinte, et l'omettre évite qu'elle finisse dans un log ou un
- * écran par accident.
- */
-const DEVICE_LINK_COLUMNS = 'id, user_number, label, created_at, last_seen_at, updated_at'
-
-/** Le lien actif d'une personne, s'il existe. */
-export async function getDeviceLink(
-  userNumber: number
-): Promise<DeviceLink | null> {
-  const { data, error } = await supabase
-    .from('device_links')
-    .select(DEVICE_LINK_COLUMNS)
-    .eq('user_number', userNumber)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error) throw error
-  return (data as DeviceLink | null) ?? null
-}
-
-/**
- * Crée le lien d'une personne.
- *
- * On remplace l'ancien : régénérer un jeton doit révoquer le précédent, sinon
- * un téléphone perdu continuerait à poster. `tokenHash` est l'empreinte
- * SHA-256 du jeton — jamais le jeton.
- */
-export async function saveDeviceLink(
-  userNumber: number,
-  tokenHash: string,
-  label = 'Montre'
-): Promise<DeviceLink> {
-  const { error: deleteError } = await supabase
-    .from('device_links')
-    .delete()
-    .eq('user_number', userNumber)
-
-  if (deleteError) throw deleteError
-
-  const { data, error } = await supabase
-    .from('device_links')
-    .insert({ user_number: userNumber, token_hash: tokenHash, label })
-    .select(DEVICE_LINK_COLUMNS)
-    .single()
-
-  if (error) throw error
-  return data as DeviceLink
-}
-
-/** Révoque tous les liens d'une personne (« Déconnecter ma montre »). */
-export async function deleteDeviceLinks(userNumber: number): Promise<void> {
-  const { error } = await supabase
-    .from('device_links')
-    .delete()
-    .eq('user_number', userNumber)
-
-  if (error) throw error
-}
-
-/**
- * Propositions encore en attente.
- *
- * Une erreur ici ne doit jamais casser l'historique : l'appelant décide. La
- * fonction ne filtre pas par semaine — la règle du mercredi vit côté client.
- */
-export async function getPendingProposals(
-  userNumber: number
-): Promise<ImportProposal[]> {
-  const { data, error } = await supabase
-    .from('import_proposals')
-    .select(
-      'id, user_number, source, external_id, activity_type, started_at, duration_s, distance_m, status, created_at'
-    )
-    .eq('user_number', userNumber)
-    .eq('status', 'pending')
-    .order('started_at', { ascending: false })
-    .limit(10)
-
-  if (error) throw error
-  return (data ?? []) as ImportProposal[]
-}
-
-/** Marque une proposition comme validée ou ignorée. */
-export async function setProposalStatus(
-  proposalId: string,
-  status: ImportProposalStatus
-): Promise<void> {
-  const { error } = await supabase
-    .from('import_proposals')
-    .update({ status })
-    .eq('id', proposalId)
 
   if (error) throw error
 }

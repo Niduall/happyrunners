@@ -79,9 +79,6 @@ npm run build      # 0 erreur TypeScript
 | `src/hooks/useHistory.ts` | chargement groupé des 12 semaines + `declare` |
 | `src/hooks/useLastRun.ts` | sortie encore déclarable pour le rappel de l'accueil + « je n'ai pas couru » |
 | `src/components/DeclareRunModal.tsx` | déclaration du parcours personnel (liste ou « autre ») |
-| `src/services/watchLink.ts` | jeton de la montre : génération base64url, empreinte SHA-256, adresse d'envoi, stockage local |
-| `src/components/WatchLinkModal.tsx` | écran « Montre et applications » : créer, copier ou révoquer l'adresse |
-| `supabase/functions/ingest/index.ts` | Edge Function qui reçoit les séances du téléphone et les dépose en propositions |
 | `src/components/ChatComposer.tsx` | saisie du chat (Entrée envoie, Maj+Entrée à la ligne) |
 | `src/components/ChatMessageBubble.tsx` | bulle, état d'envoi, suppression par l'auteur |
 | `src/components/MessagesButton.tsx` | entrée Messages de l'en-tête + pastille de non-lus |
@@ -387,98 +384,6 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   `migrations/2026-11-12_tache35_historique.sql` **avant** de déployer
   l'interface. `useHistory` interroge `weekly_runs` : sans la table, la page
   entière échoue. Test d'abord, prod ensuite.
-
-### Montre et applications (tâche 37)
-- **Le téléphone pousse, l'application reçoit.** Une application de santé du
-  téléphone (Health Connect Webhook sur Android, Health Webhook ou un
-  Raccourci sur iPhone) lit les séances d'entraînement et poste son JSON sur
-  `https://<ref>.supabase.co/functions/v1/ingest?t=<jeton>`. Aucune clé
-  tierce, aucun compte développeur, aucun agrégateur payant.
-- **La synchro propose, la personne valide.** L'Edge Function n'écrit
-  **jamais** dans `weekly_runs` : elle dépose une ligne `pending` dans
-  `import_proposals`. Le classement ne bouge qu'après un clic sur
-  « Valider » dans `/historique`. C'est la règle du projet, pas un réglage.
-- **Le jeton en clair ne quitte jamais l'appareil.** `device_links` ne garde
-  que son **empreinte SHA-256** (64 hexadécimaux, unique). Le clair vit dans
-  `localStorage` (`watch_token_<user_number>`) et dans l'application de santé.
-  `hashWatchToken` (client) et `sha256Hex` (`ingest`) doivent rester
-  strictement identiques : c'est le seul lien entre le téléphone et le profil.
-- **Ce n'est pas une authentification.** La RLS est ouverte et la clé anon est
-  dans le bundle ; un jeton connu permet d'écrire des sorties pour ce profil,
-  exactement comme la clé anon le permet déjà. Le jeton évite qu'une montre
-  écrive chez quelqu'un d'autre, il ne prouve pas une identité. Ne pas le
-  présenter autrement.
-- **Régénérer révoque l'ancien lien** (`saveDeviceLink` supprime puis insère) :
-  un téléphone perdu cesse de poster. « Déconnecter » supprime la ligne et le
-  jeton local. Si un lien existe en base mais que cet appareil n'a plus le
-  jeton, l'écran propose d'en créer un nouveau et prévient que l'ancien cessera
-  de fonctionner — il ne peut pas réafficher un secret qu'il n'a pas.
-- **`external_id` = l'heure de début ISO de la séance.** La contrainte
-  `UNIQUE (user_number, external_id)` et l'upsert `ignoreDuplicates` évitent
-  qu'une synchronisation toutes les 15 minutes crée cinquante doublons de la
-  même course.
-- **Pas de `week_key` dans `import_proposals`** : la règle du mercredi 14h vit
-  dans `weekKey.ts`, testée. La dupliquer en SQL créerait deux vérités.
-  `useHistory` rattache une proposition à sa semaine avec
-  `weekKeyForRunDate(started_at)`, qui **ne retient qu'un mercredi** : un run du
-  mardi ou du vendredi renvoie `null` et n'est jamais proposé. Le groupe court
-  le mercredi, et l'historique ne compte qu'une sortie par personne et par
-  semaine — accepter un autre jour ferait compter une sortie qui n'est pas
-  celle du groupe, ou pousserait un run du vendredi sur le mercredi suivant.
-  Une sortie du mercredi reste sur ce mercredi même après 14h (comme la
-  déclaration manuelle). Les propositions des autres jours restent `pending` en
-  base, invisibles, et partent avec la purge des 90 jours : ne pas les afficher
-  « pour ne pas les perdre » sans rediscuter de la règle.
-- **Seules les propositions de la semaine encore ouverte sont validables.**
-  C'est la même règle que la déclaration manuelle : `editableWeekKey`
-  (`weekKeys[0]`, la semaine qui vient de se terminer). Une proposition d'une
-  semaine clôturée n'est pas affichée. La carte est aussi masquée si une
-  sortie existe déjà pour cette semaine : « Valider » ne doit pas écraser un
-  choix volontaire.
-- **Valider écrit `source = 'health'`**, `parcours_name = 'Sortie importée'`,
-  `parcours_id = NULL`, la distance convertie en kilomètres (une décimale) et
-  **`elevation_gain_m = NULL`** : Health Connect ne fournit pas le D+. On ne
-  compte que le connu, jamais un chiffre inventé. La proposition passe ensuite
-  à `accepted` ; « Ignorer » la passe à `ignored` et n'écrit aucune sortie.
-- **L'Edge Function accepte trois formes** : l'enveloppe
-  `{ timestamp, exercise_sessions: [...] }`, un tableau nu, ou une séance
-  seule. Les applications de santé changent de forme ; une synchronisation ne
-  doit pas être perdue pour une enveloppe différente. Seuls les types de course
-  (`RUNNING`, `RUN`, `TRAIL_RUNNING`, `TREADMILL_RUN`, `JOGGING`) sont retenus,
-  et une séance sans distance est ignorée : elle n'apporterait rien.
-- **Ménage opportuniste** : chaque réception supprime les propositions de plus
-  de 90 jours de la personne. Pas de cron ; si le téléphone n'envoie plus rien,
-  rien n'est purgé et ce n'est pas grave.
-- **Achats éventuels à la charge de chaque personne**, jamais du projet :
-  Health Connect Webhook existe en APK gratuit (ou 7,99 € sur le Play Store) ;
-  côté iPhone, un Raccourci est gratuit, Health Webhook est payant. Ne pas
-  intégrer ces achats dans le budget du projet.
-- ⚠️ **Ordre de déploiement obligatoire** : appliquer
-  `migrations/2026-11-17_tache37_montre.sql` **avant** de déployer
-  l'interface. `useHistory` appelle `getPendingProposals` ; sans la table,
-  l'historique tombe. Test d'abord, prod ensuite.
-
-#### Déploiement de l'Edge Function `ingest`
-1. **SQL** : appliquer `migrations/2026-11-17_tache37_montre.sql` dans le SQL
-   Editor, d'abord sur la base de test, puis sur la prod.
-2. **Edge Function** : Dashboard → Edge Functions → Deploy a new function →
-   via l'éditeur, nom `ingest`, coller `supabase/functions/ingest/index.ts`.
-   **Désactiver la vérification JWT** : le téléphone n'a pas de JWT Supabase,
-   l'authentification c'est le jeton en paramètre. Aucun secret à ajouter :
-   `SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` sont fournis par la
-   plateforme.
-3. **Test** : créer une adresse depuis « Montre et applications », puis
-
-   ```bash
-   curl -i -X POST "https://<ref>.supabase.co/functions/v1/ingest?t=<jeton>" \
-     -H 'Content-Type: application/json' \
-     -d '{"exercise_sessions":[{"type":"RUNNING","start_time":"2026-11-04T12:30:00Z","end_time":"2026-11-04T13:10:00Z","distance_meters":8200}]}'
-   ```
-
-   Réponse attendue `{"ok":true,"inserted":1,...}` et une carte « Ta montre
-   propose une sortie » dans `/historique`, sur la semaine encore ouverte.
-   Un jeton inconnu répond `404 unknown_token`, jamais `401` : un jeton qui
-   n'existe pas ne doit pas confirmer qu'il a existé un jour.
 
 ### Mise à jour de la PWA
 - Un onglet ouvert **ne se met jamais à jour seul** : il enregistre le service
@@ -801,7 +706,7 @@ base vide. Ne jamais décrire le schéma dans la prose ci-dessous : c'est ainsi
 que ce document avait fini par annoncer un `participations(local_user_id)`
 qui n'existait plus depuis la migration `user_number`.
 
-### Les 12 tables qui comptent
+### Les 10 tables qui comptent
 | Table | Clé | Particularité |
 |---|---|---|
 | `user_profiles` | `user_number` (SEQUENCE) | identifiant **stable**, indépendant du nom |
@@ -814,8 +719,6 @@ qui n'existait plus depuis la migration `user_number`.
 | `notification_preferences` | `user_number` | un booléen par catégorie ; ligne absente = tout activé |
 | `weekly_runs` | `(week_key, user_number)` | sortie **réellement courue** par une personne ; nom, km et D+ figés |
 | `weekly_run_skips` | `(week_key, user_number)` | « je n'ai pas couru » : une réponse par **personne**, pas par appareil |
-| `device_links` | `id` uuid, `token_hash` unique | lien montre ↔ profil : **empreinte SHA-256 seulement**, jamais le jeton |
-| `import_proposals` | `id` uuid, `UNIQUE(user_number, external_id)` | ce que la montre a proposé, `pending` jusqu'à validation humaine |
 
 ### Points non négociables
 - `participations.parcours_id` est en **`ON DELETE CASCADE`** : supprimer un
@@ -832,18 +735,6 @@ qui n'existait plus depuis la migration `user_number`.
 - **`weekly_run_skips` est une réponse, pas une sortie** : elle ne crée aucune
   ligne dans `weekly_runs` et n'entre dans aucun total de km. Elle suit la
   personne d'un appareil à l'autre, et déclarer une sortie la supprime.
-- **La montre ne stocke qu'une empreinte** : `device_links.token_hash` est un
-  SHA-256 hexadécimal de 64 caractères, unique. Un jeton en clair en base
-  serait une capacité d'écriture qui traîne dans une sauvegarde. La table ne
-  contient pas non plus de nom d'appareil sensible : le libellé est libre et
-  facultatif.
-- **`import_proposals` n'écrit rien dans le classement** : une ligne `pending`
-  attend un geste humain. `accepted` et `ignored` sont des états terminaux
-  pour l'interface ; une proposition ignorée n'est pas renvoyée par la montre
-  grâce à l'unicité `(user_number, external_id)`.
-- **`weekly_runs.source` accepte `health`** depuis la tâche 37. Une sortie
-  validée depuis la montre reste distinguable d'une saisie manuelle ou d'un
-  GPX ; le CHECK est élargi par la migration, pas seulement côté TypeScript.
 - **`updated_at` est tenu par la base** : les triggers `trg_parcours_touch`,
   `trg_attendances_touch` et `trg_participations_touch` appellent
   `touch_updated_at()` à chaque `UPDATE`. Ne pas compter sur le client pour
@@ -882,10 +773,12 @@ python3 backup.py restore <fichier> --dry-run
 python3 backup.py save --env .env.test  # cible la base de test
 ```
 
-`save` pagine par 1 000 lignes et couvre les **douze tables**, chat, push,
-historique et montre compris. Un dump de format 2 (sans `weekly_runs`), 3
-(sans `weekly_run_skips`) ou 4 (sans `device_links` ni `import_proposals`)
-reste restaurable : la table manquante est simplement vide. `restore` valide le
+`save` pagine par 1 000 lignes et couvre les **dix tables**, chat, push et
+historique compris. Un dump de format 2 (sans `weekly_runs`), 3 (sans
+`weekly_run_skips`) ou 4 (sans les tables de la montre) reste restaurable : la
+table manquante est simplement vide. Un dump de format 5 contenait
+`device_links` et `import_proposals` : elles sont **ignorées** à la
+restauration, le schéma ne les connaît plus. `restore` valide le
 fichier, sauvegarde l'état courant, supprime dans l'ordre inverse et vérifie
 les comptes. Il refuse aussi un dump contenant un vote sans présence `going`
 (ancien vote orphelin), avant toute suppression. Il sort en **code 2** tant que
@@ -941,10 +834,9 @@ Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour l
 | `src/hooks/useHistory.test.tsx` | verrouillage : seule la semaine la plus récente est déclarable ou retirable |
 | `src/hooks/useLastRun.test.tsx` | semaine déclarable sur l'accueil, sortie existante, déclaration, « je n'ai pas couru » |
 | `src/services/runReminderDismissal.test.ts` | réponse locale par profil et par semaine, effacement, repère illisible |
-| `src/services/watchLink.test.ts` | jeton base64url, SHA-256 de référence, URL encodée, stockage local par personne |
 | `src/pages/Home.lastRun.test.tsx` | rappel de la sortie à déclarer, modale sans présélection |
 | `src/components/DeclareRunModal.test.tsx` | GPX d'une sortie « autre » : lecture, fichier refusé, import conservé, retrait |
-| `src/pages/History.test.tsx` | mercredis, déclaration « autre », correction, retrait, semaine figée, proposition de la montre, Échap |
+| `src/pages/History.test.tsx` | mercredis, déclaration « autre », correction, retrait, semaine figée, Échap |
 | `src/components/RequireUser.test.tsx` | visiteur redirigé, connecté autorisé, attente du chargement |
 | `src/pages/Home.messages.test.tsx` | Messages absent sans identité, présent une fois connecté |
 | `src/config/vercelConfig.test.ts` | repli SPA de Vercel : toute route inconnue → `index.html` |
@@ -1083,15 +975,6 @@ les scénarios tournent **uniquement sur la base de test** (`.env.test`).
     `migrations/2026-11-16_tache36_je_nai_pas_couru.sql` d'abord sur la base de
     test, puis en prod, et seulement ensuite pousser. Sans la table, le
     chargement du rappel échoue et la carte de l'accueil ne s'affiche plus.
-7y. **La montre se migre avant l'interface, et `ingest` se déploie sans JWT** —
-    `useHistory` appelle `getPendingProposals`. Appliquer
-    `migrations/2026-11-17_tache37_montre.sql` d'abord sur la base de test,
-    puis en prod, et seulement ensuite pousser. La fonction `ingest` doit être
-    déployée avec la **vérification JWT désactivée** : le téléphone n'a pas de
-    JWT Supabase. Son authentification, c'est le jeton en `?t=`, comparé à
-    l'empreinte `device_links.token_hash`. Ne jamais stocker le jeton en clair
-    en base, et ne jamais faire écrire `ingest` dans `weekly_runs` : elle
-    propose, la personne valide.
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

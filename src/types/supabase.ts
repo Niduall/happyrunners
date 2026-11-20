@@ -176,10 +176,8 @@ export interface NotificationPreferences {
  * `manual` aujourd'hui ; `gpx` et `strava` sont prévus pour une preuve de
  * tracé. La colonne existe dès la première migration pour éviter un second
  * changement de schéma le jour où l'import arrivera.
- *
- * `health` = chiffres validés depuis ce que la montre a proposé (tâche 37).
  */
-export type WeeklyRunSource = 'manual' | 'gpx' | 'strava' | 'health'
+export type WeeklyRunSource = 'manual' | 'gpx' | 'strava'
 
 /**
  * Sortie réellement courue par une personne, une ligne par personne et par
@@ -228,42 +226,4 @@ export interface WeeklyRunSkip {
   week_key: string
   user_number: number
   declared_at: string
-}
-
-/**
- * Lien entre une application de santé du téléphone et un profil.
- *
- * Le client ne lit **jamais** `token_hash` : il ne connaît que le jeton en
- * clair de son propre appareil (localStorage). La colonne existe en base pour
- * que l'Edge Function puisse retrouver la personne.
- */
-export interface DeviceLink {
-  id: string
-  user_number: number
-  label: string
-  created_at: string
-  last_seen_at: string | null
-  updated_at: string
-}
-
-export type ImportProposalStatus = 'pending' | 'accepted' | 'ignored'
-
-/**
- * Ce que la montre a proposé, avant validation.
- *
- * Rien n'entre dans le classement sans accord : la ligne reste `pending`
- * jusqu'à ce que la personne clique « Valider ». `started_at` sert à retrouver
- * la semaine (règle du mercredi 14h, dans `weekKey.ts`).
- */
-export interface ImportProposal {
-  id: string
-  user_number: number
-  source: 'health'
-  external_id: string
-  activity_type: string
-  started_at: string
-  duration_s: number | null
-  distance_m: number | null
-  status: ImportProposalStatus
-  created_at: string
 }

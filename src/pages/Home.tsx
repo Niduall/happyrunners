@@ -90,6 +90,7 @@ export function Home() {
         ? {
             parcoursId: lastRun.myRun.parcours_id,
             parcoursName: lastRun.myRun.parcours_name,
+            source: lastRun.myRun.source,
             distanceKm: lastRun.myRun.distance_km,
             elevationGainM: lastRun.myRun.elevation_gain_m,
           }

@@ -65,20 +65,26 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {})
 })
 
-describe('DeclareRunModal — GPX d’une sortie « autre »', () => {
-  it('remplit la distance depuis le fichier et enregistre la source', async () => {
+describe('DeclareRunModal — chiffres d’une sortie « autre »', () => {
+  async function chooseOther(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('radio', { name: /Autre parcours/ }))
+    await user.type(screen.getByLabelText('Nom du parcours'), 'Boucle du parc')
+  }
+
+  it('pré-remplit la distance et le D+ depuis le fichier, source « gpx »', async () => {
     const user = userEvent.setup()
     const { container, onDeclare } = renderModal()
 
-    await user.click(screen.getByRole('radio', { name: /Autre parcours/ }))
-    await user.type(screen.getByLabelText('Nom du parcours'), 'Boucle du parc')
+    await chooseOther(user)
     await user.upload(
       gpxInput(container),
       new File([GPX], 'boucle.gpx', { type: 'application/gpx+xml' })
     )
 
-    // Les chiffres lus remplacent l'aide « sans GPX ».
-    expect(await screen.findByText(/1,1 km/)).toBeInTheDocument()
+    // Les champs sont remplis, mais restent modifiables.
+    expect(await screen.findByLabelText('Distance (km)')).toHaveValue('1,11')
+    expect(screen.getByLabelText('Dénivelé (m)')).toHaveValue('0')
+    expect(screen.getByText(/Chiffres lus dans/)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
@@ -92,19 +98,18 @@ describe('DeclareRunModal — GPX d’une sortie « autre »', () => {
     })
   })
 
-  it('refuse un fichier sans tracé et dit que la distance ne sera pas comptée', async () => {
+  it('refuse un fichier sans tracé et laisse saisir la distance à la main', async () => {
     const user = userEvent.setup()
     const { container, onDeclare } = renderModal()
 
-    await user.click(screen.getByRole('radio', { name: /Autre parcours/ }))
-    await user.type(screen.getByLabelText('Nom du parcours'), 'Boucle du parc')
+    await chooseOther(user)
     await user.upload(
       gpxInput(container),
       new File(['ceci n’est pas un GPX'], 'vide.gpx', { type: 'text/plain' })
     )
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Ce fichier ne contient pas de tracé lisible : la distance ne sera pas comptée.'
+      'Ce fichier ne contient pas de tracé lisible : indique la distance à la main.'
     )
     await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
@@ -119,17 +124,16 @@ describe('DeclareRunModal — GPX d’une sortie « autre »', () => {
     })
   })
 
-  it('garde l’import en place quand un second fichier est illisible', async () => {
+  it('garde les chiffres en place quand un second fichier est illisible', async () => {
     const user = userEvent.setup()
     const { container, onDeclare } = renderModal()
 
-    await user.click(screen.getByRole('radio', { name: /Autre parcours/ }))
-    await user.type(screen.getByLabelText('Nom du parcours'), 'Boucle du parc')
+    await chooseOther(user)
     await user.upload(
       gpxInput(container),
       new File([GPX], 'boucle.gpx', { type: 'application/gpx+xml' })
     )
-    expect(await screen.findByText(/1,1 km/)).toBeInTheDocument()
+    expect(await screen.findByLabelText('Distance (km)')).toHaveValue('1,11')
 
     await user.upload(
       gpxInput(container),
@@ -137,9 +141,9 @@ describe('DeclareRunModal — GPX d’une sortie « autre »', () => {
     )
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'l’import précédent est conservé'
+      'les chiffres saisis sont conservés'
     )
-    expect(screen.getByText(/1,1 km/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Distance (km)')).toHaveValue('1,11')
 
     await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
@@ -159,6 +163,7 @@ describe('DeclareRunModal — GPX d’une sortie « autre »', () => {
         myRun: {
           parcoursId: null,
           parcoursName: 'Boucle du parc',
+          source: 'gpx',
           distanceKm: 8.4,
           elevationGainM: 120,
         },
@@ -166,7 +171,8 @@ describe('DeclareRunModal — GPX d’une sortie « autre »', () => {
     )
 
     // Rouvrir la modale pour corriger ne doit pas effacer les kilomètres.
-    expect(screen.getByText(/8,4 km · 120 m D\+/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Distance (km)')).toHaveValue('8,4')
+    expect(screen.getByLabelText('Dénivelé (m)')).toHaveValue('120')
 
     await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
@@ -180,22 +186,70 @@ describe('DeclareRunModal — GPX d’une sortie « autre »', () => {
     })
   })
 
-  it('oublie l’import quand on le retire', async () => {
+  it('accepte une distance et un D+ saisis à la main, sans GPX', async () => {
     const user = userEvent.setup()
-    const { onDeclare } = renderModal(
-      target({
-        myRun: {
-          parcoursId: null,
-          parcoursName: 'Boucle du parc',
-          distanceKm: 8.4,
-          elevationGainM: 120,
-        },
-      })
+    const { onDeclare } = renderModal()
+
+    await chooseOther(user)
+    await user.type(screen.getByLabelText('Distance (km)'), '7,5')
+    await user.type(screen.getByLabelText('Dénivelé (m)'), '80')
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => expect(onDeclare).toHaveBeenCalled())
+    expect(onDeclare).toHaveBeenCalledWith({
+      parcoursId: null,
+      parcoursName: 'Boucle du parc',
+      distanceKm: 7.5,
+      elevationGainM: 80,
+      source: 'manual',
+    })
+  })
+
+  it('repasse en saisie manuelle quand on corrige les chiffres d’un GPX', async () => {
+    const user = userEvent.setup()
+    const { container, onDeclare } = renderModal()
+
+    await chooseOther(user)
+    await user.upload(
+      gpxInput(container),
+      new File([GPX], 'boucle.gpx', { type: 'application/gpx+xml' })
     )
+    expect(await screen.findByLabelText('Distance (km)')).toHaveValue('1,11')
 
-    await user.click(screen.getByRole('button', { name: 'Retirer le GPX' }))
-    expect(screen.getByText(/Sans GPX, la distance ne sera pas comptée/)).toBeInTheDocument()
+    const distanceField = screen.getByLabelText('Distance (km)')
+    await user.clear(distanceField)
+    await user.type(distanceField, '2,5')
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
+    await waitFor(() => expect(onDeclare).toHaveBeenCalled())
+    expect(onDeclare).toHaveBeenCalledWith({
+      parcoursId: null,
+      parcoursName: 'Boucle du parc',
+      distanceKm: 2.5,
+      elevationGainM: 0,
+      source: 'manual',
+    })
+  })
+
+  it('refuse une distance illisible sans enregistrer', async () => {
+    const user = userEvent.setup()
+    const { onDeclare } = renderModal()
+
+    await chooseOther(user)
+    await user.type(screen.getByLabelText('Distance (km)'), 'huit')
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Indique une distance en kilomètres (ex. : 8,4)'
+    )
+    expect(onDeclare).not.toHaveBeenCalled()
+  })
+
+  it('accepte une sortie sans aucun chiffre', async () => {
+    const user = userEvent.setup()
+    const { onDeclare } = renderModal()
+
+    await chooseOther(user)
     await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => expect(onDeclare).toHaveBeenCalled())

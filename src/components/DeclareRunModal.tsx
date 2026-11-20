@@ -3,19 +3,44 @@ import { Upload } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
 import { parseGPX } from '../services/gpxParser'
-import { formatElevation, formatKm } from '../services/history'
 import type { RunChoice } from '../hooks/useHistory'
-import type { ParcoursSummary } from '../types/supabase'
+import type { ParcoursSummary, WeeklyRunSource } from '../types/supabase'
 
 const OTHER = 'other'
+
+/** Bornes de saisie : au-delà, c'est une faute de frappe, pas une sortie. */
+const MAX_DISTANCE_KM = 500
+const MAX_ELEVATION_M = 20_000
 
 /**
  * Ce qu'un GPX apporte à une sortie « autre » : la distance et le D+.
  * Le tracé n'est pas conservé — la table n'a pas de colonne pour lui.
+ *
+ * Les chiffres restent modifiables après l'import : le fichier pré-remplit
+ * les champs, il ne les verrouille pas.
  */
 interface ImportedRun {
   distanceKm: number
   elevationGainM: number | null
+  name: string
+}
+
+/**
+ * « 8,4 » ou « 8.4 » → 8,4. Une chaîne vide vaut `null` (non renseigné) ;
+ * tout le reste est refusé plutôt que deviné.
+ */
+function parseNumber(text: string, max: number): number | null | 'invalid' {
+  const clean = text.trim().replace(',', '.')
+  if (clean === '') return null
+  if (!/^\d+(\.\d{1,2})?$/.test(clean)) return 'invalid'
+  const value = Number(clean)
+  return value > max ? 'invalid' : value
+}
+
+/** Valeur d'un champ : virgule française, deux décimales au plus. */
+function inputValue(value: number | null | undefined): string {
+  if (value == null) return ''
+  return String(Math.round(value * 100) / 100).replace('.', ',')
 }
 
 /**
@@ -30,6 +55,7 @@ export interface DeclareRunTarget {
   myRun: {
     parcoursId: string | null
     parcoursName: string
+    source?: WeeklyRunSource
     distanceKm?: number | null
     elevationGainM?: number | null
   } | null
@@ -87,21 +113,23 @@ export function DeclareRunModal({
   const [submitError, setSubmitError] = useState('')
   const [confirmRetract, setConfirmRetract] = useState(false)
   /**
-   * Distance et D+ lus dans un fichier GPX, pour une sortie « autre ».
-   * `null` = aucun fichier : la sortie reste sans distance.
+   * Distance et D+ d'une sortie « autre », saisis à la main ou pré-remplis
+   * par un GPX. `null` (champ vide) = valeur inconnue : on ne compte que le
+   * connu, jamais un chiffre inventé.
    *
-   * Une correction repart de l'import déjà enregistré : sans ça, rouvrir la
+   * Une correction repart des chiffres déjà enregistrés : sans ça, rouvrir la
    * modale pour renommer la sortie effacerait ses kilomètres.
    */
-  const [imported, setImported] = useState<ImportedRun | null>(() => {
-    if (!mine || myParcoursExists || mine.distanceKm == null) return null
-    return {
-      distanceKm: mine.distanceKm,
-      elevationGainM: mine.elevationGainM ?? null,
-    }
-  })
-  const [importName, setImportName] = useState('')
+  const [distance, setDistance] = useState(() =>
+    mine && !myParcoursExists ? inputValue(mine.distanceKm) : ''
+  )
+  const [elevation, setElevation] = useState(() =>
+    mine && !myParcoursExists ? inputValue(mine.elevationGainM) : ''
+  )
+  /** Le fichier lu dans cette ouverture, s'il y en a un. */
+  const [imported, setImported] = useState<ImportedRun | null>(null)
   const [gpxError, setGpxError] = useState('')
+  const hasNumbers = distance.trim() !== '' || elevation.trim() !== ''
 
   // Échap ferme la modale, sauf pendant l'écriture.
   useEffect(() => {
@@ -119,12 +147,11 @@ export function DeclareRunModal({
   }
 
   /**
-   * Lit le fichier et garde ses chiffres.
+   * Lit le fichier et **pré-remplit** les champs, sans les verrouiller.
    *
-   * Un fichier refusé ne touche pas à l'import en place : si on remplaçait un
-   * GPX valide par un fichier illisible, les kilomètres déjà lus ne doivent pas
-   * disparaître. Le message dit la conséquence : sans chiffres, la distance
-   * n'est pas comptée.
+   * Un fichier refusé ne touche pas aux chiffres déjà saisis : si on
+   * remplaçait un GPX valide par un fichier illisible, les kilomètres déjà
+   * lus ne doivent pas disparaître. Le message dit quoi faire ensuite.
    */
   const handleGpx = async (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.target
@@ -138,28 +165,55 @@ export function DeclareRunModal({
       const parsed = parseGPX(await file.text())
       if (!parsed || !(parsed.distance_km > 0)) {
         setGpxError(
-          imported
-            ? 'Ce fichier ne contient pas de tracé lisible : l’import précédent est conservé.'
-            : 'Ce fichier ne contient pas de tracé lisible : la distance ne sera pas comptée.'
+          hasNumbers
+            ? 'Ce fichier ne contient pas de tracé lisible : les chiffres saisis sont conservés.'
+            : 'Ce fichier ne contient pas de tracé lisible : indique la distance à la main.'
         )
         return
       }
-      setImported({
-        distanceKm: parsed.distance_km,
-        elevationGainM: parsed.elevation_gain_m ?? null,
-      })
-      setImportName(file.name)
+      const distanceKm = Math.round(parsed.distance_km * 100) / 100
+      const elevationGainM =
+        parsed.elevation_gain_m == null
+          ? null
+          : Math.round(parsed.elevation_gain_m)
+      setDistance(inputValue(distanceKm))
+      setElevation(inputValue(elevationGainM))
+      setImported({ distanceKm, elevationGainM, name: file.name })
     } catch {
-      setGpxError('Lecture du fichier impossible : la distance ne sera pas comptée.')
+      setGpxError(
+        hasNumbers
+          ? 'Lecture du fichier impossible : les chiffres saisis sont conservés.'
+          : 'Lecture du fichier impossible : indique la distance à la main.'
+      )
     } finally {
       input.value = ''
     }
   }
 
-  const clearImport = () => {
-    setImported(null)
-    setImportName('')
-    setGpxError('')
+  /**
+   * `gpx` seulement si les chiffres viennent encore du fichier. Corriger une
+   * valeur à la main en fait une saisie manuelle ; corriger le **nom** d'une
+   * sortie déjà importée garde sa provenance.
+   */
+  const sourceFor = (
+    distanceKm: number | null,
+    elevationGainM: number | null
+  ): WeeklyRunSource => {
+    if (
+      imported &&
+      imported.distanceKm === distanceKm &&
+      imported.elevationGainM === elevationGainM
+    ) {
+      return 'gpx'
+    }
+    if (
+      mine?.source === 'gpx' &&
+      (mine.distanceKm ?? null) === distanceKm &&
+      (mine.elevationGainM ?? null) === elevationGainM
+    ) {
+      return 'gpx'
+    }
+    return 'manual'
   }
 
   const handleRetract = async () => {
@@ -183,12 +237,26 @@ export function DeclareRunModal({
         setFormError('Indique le nom du parcours')
         return
       }
+
+      const distanceKm = parseNumber(distance, MAX_DISTANCE_KM)
+      if (distanceKm === 'invalid') {
+        setFormError('Indique une distance en kilomètres (ex. : 8,4)')
+        return
+      }
+      const parsedElevation = parseNumber(elevation, MAX_ELEVATION_M)
+      if (parsedElevation === 'invalid') {
+        setFormError('Indique un dénivelé en mètres (ex. : 120)')
+        return
+      }
+      const elevationGainM =
+        parsedElevation == null ? null : Math.round(parsedElevation)
+
       const ok = await onDeclare({
         parcoursId: null,
         parcoursName: label,
-        distanceKm: imported?.distanceKm ?? null,
-        elevationGainM: imported?.elevationGainM ?? null,
-        source: imported ? 'gpx' : 'manual',
+        distanceKm,
+        elevationGainM,
+        source: sourceFor(distanceKm, elevationGainM),
       })
       if (!ok) setSubmitError('Enregistrement impossible. Réessaie.')
       return
@@ -285,27 +353,78 @@ export function DeclareRunModal({
         </fieldset>
 
         {selected === OTHER && (
-          <div>
-            <label
-              htmlFor="history-other-label"
-              className="mb-1 block text-sm font-medium text-gray-700"
-            >
-              Nom du parcours
-            </label>
-            <Input
-              id="history-other-label"
-              type="text"
-              value={otherLabel}
-              onChange={(event) => {
-                setOtherLabel(event.target.value)
-                setFormError('')
-                setSubmitError('')
-              }}
-              placeholder="Ex. : boucle du parc"
-              maxLength={80}
-              autoFocus
-            />
-            <div className="mt-3">
+          <div className="space-y-3">
+            <div>
+              <label
+                htmlFor="history-other-label"
+                className="mb-1 block text-sm font-medium text-gray-700"
+              >
+                Nom du parcours
+              </label>
+              <Input
+                id="history-other-label"
+                type="text"
+                value={otherLabel}
+                onChange={(event) => {
+                  setOtherLabel(event.target.value)
+                  setFormError('')
+                  setSubmitError('')
+                }}
+                placeholder="Ex. : boucle du parc"
+                maxLength={80}
+                autoFocus
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="history-other-distance"
+                  className="mb-1 block text-sm font-medium text-gray-700"
+                >
+                  Distance (km)
+                </label>
+                <Input
+                  id="history-other-distance"
+                  type="text"
+                  inputMode="decimal"
+                  value={distance}
+                  onChange={(event) => {
+                    setDistance(event.target.value)
+                    setFormError('')
+                    setSubmitError('')
+                  }}
+                  placeholder="8,4"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="history-other-elevation"
+                  className="mb-1 block text-sm font-medium text-gray-700"
+                >
+                  Dénivelé (m)
+                </label>
+                <Input
+                  id="history-other-elevation"
+                  type="text"
+                  inputMode="numeric"
+                  value={elevation}
+                  onChange={(event) => {
+                    setElevation(event.target.value)
+                    setFormError('')
+                    setSubmitError('')
+                  }}
+                  placeholder="120"
+                />
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-500">
+              Facultatif. Sans distance, la sortie compte comme sortie mais
+              n’ajoute pas de kilomètres.
+            </p>
+
+            <div>
               <input
                 type="file"
                 accept=".gpx,.json"
@@ -314,39 +433,28 @@ export function DeclareRunModal({
                 id="history-other-gpx"
                 aria-label="Joindre un fichier GPX"
               />
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                  onClick={() =>
-                    document.getElementById('history-other-gpx')?.click()
-                  }
-                >
-                  <Upload className="h-4 w-4" />
-                  {imported ? 'Changer le GPX' : 'Joindre un GPX'}
-                </Button>
-                {imported && (
-                  <Button variant="ghost" size="sm" onClick={clearImport}>
-                    Retirer le GPX
-                  </Button>
-                )}
-              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() =>
+                  document.getElementById('history-other-gpx')?.click()
+                }
+              >
+                <Upload className="h-4 w-4" />
+                {imported ? 'Changer le GPX' : 'Joindre un GPX'}
+              </Button>
 
               {imported ? (
                 <p className="mt-2 text-sm text-gray-700">
-                  {formatKm(imported.distanceKm)}
-                  {imported.elevationGainM != null &&
-                  imported.elevationGainM > 0
-                    ? ` · ${formatElevation(imported.elevationGainM)} D+`
-                    : ''}
-                  {importName && (
-                    <span className="text-gray-500"> — {importName}</span>
-                  )}
+                  Chiffres lus dans{' '}
+                  <span className="text-gray-500">{imported.name}</span> —
+                  corrige-les si besoin.
                 </p>
               ) : (
                 <p className="mt-2 text-xs text-gray-500">
-                  Facultatif. Sans GPX, la distance ne sera pas comptée.
+                  Un fichier GPX remplit la distance et le dénivelé à ta
+                  place.
                 </p>
               )}
 

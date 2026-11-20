@@ -136,8 +136,10 @@ native, donc un autre projet que cette PWA.
 
 - Historique `/historique` : une sortie par personne et par mercredi, correction
   et retrait, semaines vides masquées, semaine clôturée annoncée.
-- **GPX d'une sortie « autre »** : le fichier remplit la distance et le D+
-  (`source = 'gpx'`), les chiffres seuls sont gardés. Aucune migration.
+- **Distance et D+ d'une sortie « autre »** : saisie à la main, ou pré-remplis
+  par un **GPX** (`source = 'gpx'`, les chiffres seuls sont gardés). Les deux
+  champs restent modifiables ; une correction repasse en `manual`. Aucune
+  migration.
 - « Je n'ai pas couru » **par personne** (`weekly_run_skips`) : la réponse suit
   la personne d'un téléphone à l'autre, et déclarer une sortie l'efface.
 - **Import GPX** : la voie retenue pour les sorties issues d'une montre.

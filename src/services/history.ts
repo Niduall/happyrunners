@@ -2,6 +2,7 @@ import type {
   ParcoursSummary,
   ProfileIdentity,
   WeeklyRun,
+  WeeklyRunSource,
 } from '../types/supabase'
 import type { HistoryAttendance, HistoryVote } from './supabaseService'
 import { summarizeVotes } from './voteTallies'
@@ -75,6 +76,12 @@ export interface HistoryRun {
   /** NULL pour une sortie « autre », non enregistrée */
   parcoursId: string | null
   parcoursName: string
+  /**
+   * D'où viennent la distance et le D+ : `gpx` quand un fichier les a
+   * fournis, `manual` sinon. Sert à conserver la provenance quand on rouvre
+   * la modale pour corriger.
+   */
+  source: WeeklyRunSource
   distanceKm: number | null
   elevationGainM: number | null
   declaredAt: string
@@ -160,6 +167,7 @@ export function buildHistoryWeeks({
         lastName: names.get(run.user_number)?.lastName ?? `#${run.user_number}`,
         parcoursId: run.parcours_id,
         parcoursName: run.parcours_name,
+        source: run.source,
         distanceKm: run.distance_km,
         elevationGainM: run.elevation_gain_m,
         declaredAt: run.declared_at,

@@ -24,6 +24,36 @@ Inventaire exhaustif, fichier par fichier : **`CARTOGRAPHIE.md` §2**.
 
 ---
 
+## Diagnostic rapide : où regarder
+
+Un **symptôme**, pas un sujet. Cette table donne le premier fichier à ouvrir ;
+elle ne remplace pas `CARTOGRAPHIE.md`, elle évite de parcourir tout `src/`
+avant d'avoir une piste. Si la cause n'est pas là, le fichier lu dit presque
+toujours où continuer.
+
+| Symptôme | Commencer par |
+|---|---|
+| « Bonjour undefined undefined », PIN redemandé, connexion en boucle | `src/hooks/useAuth.tsx` (Context), `src/services/pinTrust.ts` |
+| « Je viens » semble ignoré, boutons bloqués ~30 s | `src/hooks/useAttendance.ts` (`mutationRef`) |
+| Un vote ne compte pas, vote sans présence | `src/services/voteTallies.ts`, triggers `participations_require_going` |
+| Le tableau « Qui vient ? » n'affiche pas tout le groupe | `src/services/presenceRows.ts`, `src/hooks/useProfiles.ts` |
+| Page vide ou figée sans réseau | `src/services/offlineCache.ts`, `src/services/offlineStore.ts` |
+| L'app installée reste sur une ancienne version | `src/services/swUpdate.ts`, `workbox` dans `vite.config.ts` |
+| Météo fausse, heure décalée, prévision du mauvais jour | `src/services/weatherApi.ts` (`isoToEpoch`), `src/hooks/useWeather.ts` |
+| Chiffres ou noms faux dans l'historique | `src/services/history.ts`, instantanés de `weekly_runs` |
+| « Retirer ma sortie » sans effet | `src/hooks/useHistory.ts` (`retract`), `deleteWeeklyRun` |
+| Un message reste en « Envoi… » | `src/hooks/useMessages.ts` (`mutationRef`), `sendMessage` |
+| Pastille de non-lus qui ne s'éteint pas | `src/hooks/useUnreadMessages.ts`, `markAllRead` |
+| Réactions : mauvais auteur, palette mal placée | `src/components/ChatMessageBubble.tsx`, `src/services/messages.ts` |
+| Le chat zoome sur iPhone | `src/components/ChatComposer.tsx` (`text-base sm:text-sm`) |
+| Carte d'un parcours vide | `getParcoursPoints`, `src/components/LazyMapView.tsx` |
+| Parcours impossible à modifier ou supprimer | `src/services/adminCode.ts`, `src/pages/ParcoursList.tsx` |
+| Rappel du mardi sans notification | `supabase/functions/send-push/index.ts` (`run_reminder`), job `pg_cron`, `push_subscriptions` |
+| Sauvegarde en échec | `backup.py`, `test_backup.py`, `.github/workflows/backup.yml` |
+| « Invalid API key » / 401 | `.env` (`VITE_SUPABASE_ANON_KEY`), dashboard Supabase |
+
+---
+
 ## Machine à états Auth (`useAuth.tsx`)
 
 ### ⚠️ useAuth est un Context — un seul état partagé

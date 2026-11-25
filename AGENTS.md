@@ -65,6 +65,10 @@ npm run build      # 0 erreur TypeScript
 | `src/hooks/useWeather.ts` | Météo mercredi 12h30 |
 | `src/services/supabaseService.ts` | API Supabase |
 | `src/services/storage.ts` | cache utilisateur local (invalide les ids non entiers) |
+| `src/services/offlineCache.ts` | cache de lecture hors ligne : `readThrough`, instantanés localStorage |
+| `src/services/offlineStore.ts` | état de connexion partagé + date des données affichées |
+| `src/hooks/useOfflineStatus.ts` | lecture de cet état dans React (`useSyncExternalStore`) |
+| `src/components/OfflineBanner.tsx` | bandeau « Hors ligne · dernières données du … » |
 | `src/services/gpxParser.ts` | GPX (XML + JSON Strava) |
 | `src/services/weatherApi.ts` | Open-Meteo (16 jours, sans clé) |
 | `src/services/weatherCode.ts` | Codes WMO → emoji |
@@ -389,6 +393,45 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   `migrations/2026-11-12_tache35_historique.sql` **avant** de déployer
   l'interface. `useHistory` interroge `weekly_runs` : sans la table, la page
   entière échoue. Test d'abord, prod ensuite.
+
+### Hors ligne (cache de lecture)
+- **La coquille est précachée, les données ne l'étaient pas.** Workbox sert
+  `index.html` et les bundles sans réseau ; les lectures Supabase échouaient et
+  l'accueil restait vide. `readThrough` (`src/services/offlineCache.ts`) comble
+  ce trou : en ligne, il interroge la base et enregistre l'instantané ; hors
+  ligne, il sert le dernier instantané.
+- **Seules les lectures passent par le cache** : parcours, annuaire, présences,
+  votes, sorties déclarées et « je n'ai pas couru » — y compris les lectures
+  groupées de l'historique (`getHistoryAttendances`, `getHistoryVotes`). Les
+  messages du chat et les tracés GPX en sont exclus (volume et usage).
+- **Aucune écriture n'est rejouée.** Voter, déclarer une sortie, répondre à la
+  présence ou envoyer un message hors ligne échoue comme avant, et l'interface
+  le dit. Un cache qui prétendrait avoir enregistré une réponse serait pire
+  qu'une erreur franche. Ne pas ajouter de file d'attente sans rediscuter du
+  conflit « dernière écriture gagne ».
+- **Une erreur serveur n'est pas du hors ligne.** Le repli n'a lieu que si
+  `navigator.onLine` est faux, y compris quand le réseau tombe pendant la
+  requête. En ligne, une panne réelle remonte : on ne la masque pas derrière
+  des données périmées.
+- **La date affichée est celle des données**, pas celle du dernier essai. Le
+  store (`offlineStore.ts`) garde la plus ancienne lecture ; le bandeau dit
+  « Hors ligne · dernières données du lundi 23 novembre à 7h42 ». Une lecture
+  qui échoue ne rajeunit donc rien.
+- **Fraîcheur limitée par le polling** : l'instantané est réécrit par la
+  lecture suivante (30 s). Après une écriture réussie, il peut décrire l'état
+  d'avant pendant au plus un polling. C'est assumé : le hors ligne sert à
+  consulter, pas à remplacer la base.
+- **Un instantané de plus de 30 jours est ignoré** (et purgé) : mieux vaut une
+  page vide qu'un classement d'il y a deux mois présenté comme actuel. La
+  version du préfixe (`happyrunners:cache:v1:`) doit changer si la forme d'un
+  instantané change.
+- **La météo a son propre cache** (`weather_cache_<weekKey>`). Hors ligne, il
+  accepte une prévision plus vieille qu'une heure ; en ligne, la règle d'une
+  heure reste. Son horodatage est déjà affiché dans la carte, il n'entre donc
+  pas dans le bandeau.
+- **Le bandeau ne s'affiche que si le navigateur se sait déconnecté**, sur
+  l'accueil et sur l'historique — les deux écrans de lecture. Il est absent de
+  l'écran de connexion.
 
 ### Mise à jour de la PWA
 - Un onglet ouvert **ne se met jamais à jour seul** : il enregistre le service
@@ -830,6 +873,12 @@ Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour l
 | `src/pages/ParcoursList.admin.test.tsx` | portée du déverrouillage (page + personne) |
 | `src/services/schema.test.ts` | `schema.sql` rejouable et à jour |
 | `src/services/storage.test.ts` | cache utilisateur local |
+| `src/services/offlineCache.test.ts` | repli hors ligne : cache servi sans réseau, erreur serveur non masquée, instantané corrompu ou périmé, quota plein |
+| `src/services/offlineStore.test.ts` | date la plus ancienne, événements `online`/`offline`, désabonnement |
+| `src/components/OfflineBanner.test.tsx` | bandeau : en ligne, hors ligne daté, sans instantané |
+| `src/pages/Home.offline.test.tsx` | bandeau branché sur l'accueil, absent pour un visiteur |
+| `src/pages/History.offline.test.tsx` | bandeau branché sur l'historique |
+| `src/services/supabaseService.offline.test.ts` | les lectures servent le cache hors ligne sans appel réseau |
 | `src/services/gpxParser.test.ts` | XML/JSON GPX, distance, dénivelé, simplification, bounds |
 | `src/services/messages.test.ts` | fenêtre 30 j, validation, regroupement par jour, non-lus |
 | `src/hooks/useMessages.test.tsx` | polling, envoi optimiste, échec, purge, course polling/envoi |
@@ -980,6 +1029,10 @@ les scénarios tournent **uniquement sur la base de test** (`.env.test`).
     `migrations/2026-11-16_tache36_je_nai_pas_couru.sql` d'abord sur la base de
     test, puis en prod, et seulement ensuite pousser. Sans la table, le
     chargement du rappel échoue et la carte de l'accueil ne s'affiche plus.
+7y. **Le hors ligne ne rejoue aucune écriture** — `readThrough` ne sert que
+    des lectures ; répondre, voter, déclarer ou envoyer un message hors ligne
+    échoue et l'interface le dit. Ne pas transformer le cache en file d'attente
+    sans traiter le conflit « dernière écriture gagne ».
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

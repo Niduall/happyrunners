@@ -1,6 +1,6 @@
 # Feuille de route — HappyRunners
 
-Dernière mise à jour : **18 novembre 2026**
+Dernière mise à jour : **23 novembre 2026**
 
 Cette feuille de route garde les idées d’amélioration et les fonctionnalités
 envisagées, avec leur priorité et leur coût. Elle ne remplace pas `AGENTS.md`
@@ -74,13 +74,19 @@ la personne exporte depuis sa montre et dépose le fichier. Aucun compte tiers,
 aucun secret, aucune dépense. Le travail de la tâche 37 reste dans l'historique
 git, avec un commit qui explique le retrait.
 
+## Livré — Hors ligne réel (23 novembre 2026)
+
+| Tâche | Pourquoi | Effort | État |
+|---|---|---|---|
+| **Hors ligne réel** | La coquille était précachée, pas les données : sans réseau, l'accueil restait vide. Chaque lecture enregistre maintenant son dernier résultat, et un appareil hors ligne le relit au lieu d'attendre une réponse qui ne viendra pas. Un bandeau daté dit ce qu'on regarde. | M | ✅ Livré |
+
+Le cache couvre les parcours, l'annuaire, les présences, les votes, les sorties
+déclarées et « je n'ai pas couru », ainsi que la météo et les lectures groupées
+de l'historique. **Aucune écriture n'est rejouée** : répondre, voter, déclarer
+ou envoyer un message hors ligne échoue comme avant, et l'interface le dit. Un
+instantané de plus de 30 jours est ignoré plutôt que présenté comme actuel.
+
 ## À faire ensuite
-
-### Priorité 1 — fort impact
-
-| Idée | Détail | Effort |
-|---|---|---|
-| **Hors ligne réel** | Le README promet « fonctionne hors ligne », mais seule la coquille est précachée. Cacher le dernier état de Home et afficher un bandeau « données du … » quand le réseau manque. | M |
 
 ### Priorité 2 — confort et fiabilité
 
@@ -134,6 +140,10 @@ native, donc un autre projet que cette PWA.
 
 ## Déjà livré (ne pas reproposer)
 
+- **Hors ligne réel** : les lectures de l'accueil (parcours, annuaire,
+  présences, votes, sorties déclarées, météo) sont servies depuis un instantané
+  local daté quand l'appareil est hors ligne. Un bandeau dit l'âge des données.
+  Aucune écriture n'est rejouée.
 - Historique `/historique` : une sortie par personne et par mercredi, correction
   et retrait, semaines vides masquées, semaine clôturée annoncée.
 - **Distance et D+ d'une sortie « autre »** : saisie à la main, ou pré-remplis

@@ -7,6 +7,7 @@ import { RunActions } from '../components/RunActions'
 import { ParcoursVoteCard } from '../components/ParcoursVoteCard'
 import { ParticipantsTable, type PresenceRow } from '../components/ParticipantsTable'
 import { DeclareRunModal } from '../components/DeclareRunModal'
+import { OfflineBanner } from '../components/OfflineBanner'
 import { Button } from '../components/ui/Button'
 import { Card, CardContent } from '../components/ui/Card'
 import { LoginForm } from '../components/Auth'
@@ -242,6 +243,10 @@ export function Home() {
 
         {isAuthenticated && (
           <>
+            {/* Hors ligne : l'accueil relit son dernier instantané et le dit.
+                Le bandeau ne s'affiche que si le navigateur se sait déconnecté. */}
+            <OfflineBanner />
+
             {/* 1. Je viens ou pas ? La date n'est dite qu'ici. */}
             <div className="space-y-2">
               <AttendanceBanner

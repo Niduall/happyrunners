@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { fetchWeather, type WeatherForecast } from '../services/weatherApi'
+import { isOnline } from '../services/offlineStore'
 import { useTargetWednesday } from './useTargetWednesday'
 
 const CACHE_PREFIX = 'weather_cache'
@@ -34,28 +35,36 @@ export function useWeather(lat?: number, lon?: number) {
   weekKeyRef.current = weekKey
 
   /**
-   * Lit le cache s'il est encore valide.
+   * Lit le cache.
+   * @param allowExpired — hors ligne, une prévision plus vieille qu'une heure
+   *   reste plus utile qu'une carte d'erreur.
    * @returns true si des données ont été restaurées
    *
    * ⚠️ On ne passe PAS par setLoading ici : `useTargetWednesday` déclenche
    * un re-render périodique, ce qui remettait le spinner et faisait
    * clignoter la carte météo.
    */
-  const restoreFromCache = useCallback((): boolean => {
-    try {
-      const cached = localStorage.getItem(cacheKey)
-      if (!cached) return false
-      const entry: CacheEntry = JSON.parse(cached)
-      if (entry.weekKey === weekKey && Date.now() - entry.timestamp < CACHE_DURATION) {
+  const restoreFromCache = useCallback(
+    (allowExpired = false): boolean => {
+      try {
+        const cached = localStorage.getItem(cacheKey)
+        if (!cached) return false
+        const entry: CacheEntry = JSON.parse(cached)
+        if (entry.weekKey !== weekKey) return false
+
+        const expired = Date.now() - entry.timestamp >= CACHE_DURATION
+        if (expired && !allowExpired) return false
+
         setWeather(entry.data)
         setFetchedAt(entry.timestamp)
         return true
+      } catch {
+        // Cache corrompu ou localStorage indisponible
       }
-    } catch {
-      // Cache corrompu ou localStorage indisponible
-    }
-    return false
-  }, [cacheKey, weekKey])
+      return false
+    },
+    [cacheKey, weekKey]
+  )
 
   /**
    * Fetch réseau + écriture du cache.
@@ -86,6 +95,9 @@ export function useWeather(lat?: number, lon?: number) {
       } catch (err) {
         if (isStale()) return
         console.error('[METEO] fetch echoue', err)
+        // Hors ligne : une prévision ancienne vaut mieux qu'une carte
+        // d'erreur. En ligne, une panne reste une panne : on l'affiche.
+        if (!isOnline() && restoreFromCache(true)) return
         setError(err instanceof Error ? err.message : 'Erreur inconnue')
       } finally {
         // Même une requête silencieuse doit retirer le spinner : si elle a
@@ -93,7 +105,7 @@ export function useWeather(lat?: number, lon?: number) {
         if (!isStale()) setLoading(false)
       }
     },
-    [lat, lon, cacheKey, weekKey]
+    [lat, lon, cacheKey, weekKey, restoreFromCache]
   )
 
   // Premier chargement : cache d'abord, réseau seulement si nécessaire
@@ -104,7 +116,7 @@ export function useWeather(lat?: number, lon?: number) {
     setWeather(null)
     setFetchedAt(null)
 
-    const restored = restoreFromCache()
+    const restored = restoreFromCache(!isOnline())
 
     if (restored) {
       setLoading(false)

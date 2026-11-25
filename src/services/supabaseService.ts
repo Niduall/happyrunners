@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { readThrough } from './offlineCache'
 import { goingSet, summarizeVotes } from './voteTallies'
 import { normalizeMessageBody, type ReplyTarget } from './messages'
 import { hashPin } from './pin'
@@ -36,7 +37,7 @@ export type { AttendanceStatus }
 const PARCOURS_SUMMARY_COLUMNS =
   'id, name, description, distance_km, elevation_gain_m, created_by, created_at, updated_at'
 
-export async function getParcours(): Promise<ParcoursSummary[]> {
+async function fetchParcours(): Promise<ParcoursSummary[]> {
   const { data, error } = await supabase
     .from('parcours')
     .select(PARCOURS_SUMMARY_COLUMNS)
@@ -44,6 +45,15 @@ export async function getParcours(): Promise<ParcoursSummary[]> {
 
   if (error) throw error
   return (data || []) as ParcoursSummary[]
+}
+
+/**
+ * Liste des parcours, servie depuis le cache quand l'appareil est hors ligne.
+ * Les tracés (`points`) n'en font pas partie : la carte reste indisponible
+ * hors ligne, et c'est acceptable.
+ */
+export function getParcours(): Promise<ParcoursSummary[]> {
+  return readThrough('parcours', fetchParcours)
 }
 
 /** Charge uniquement le tracé d'un parcours, à la demande. */
@@ -169,7 +179,7 @@ export async function findProfileByName(
  * personnes qui n'ont pas encore répondu, sans charger leur PIN ni leurs
  * dates. `ProfileIdentity` évite de réécrire la forme à la main.
  */
-export async function getAllProfiles(): Promise<ProfileIdentity[]> {
+async function fetchAllProfiles(): Promise<ProfileIdentity[]> {
   const { data, error } = await supabase
     .from('user_profiles')
     .select('user_number,first_name,last_name')
@@ -177,6 +187,11 @@ export async function getAllProfiles(): Promise<ProfileIdentity[]> {
 
   if (error) throw error
   return (data || []) as ProfileIdentity[]
+}
+
+/** Annuaire complet, servi depuis le cache quand l'appareil est hors ligne. */
+export function getAllProfiles(): Promise<ProfileIdentity[]> {
+  return readThrough('profiles', fetchAllProfiles)
 }
 
 /**
@@ -236,7 +251,7 @@ interface AttendanceWithNames extends AttendanceInsert {
   updated_at: string
 }
 
-export async function getWeekAttendances(weekKey: string): Promise<Attendee[]> {
+async function fetchWeekAttendances(weekKey: string): Promise<Attendee[]> {
   const { data, error } = await supabase
     .from('attendances')
     .select('id,user_number,status,created_at,updated_at')
@@ -273,6 +288,11 @@ export async function getWeekAttendances(weekKey: string): Promise<Attendee[]> {
     lastName: names.get(row.user_number)?.lastName || `#${row.user_number}`,
     status: row.status as AttendanceStatus,
   }))
+}
+
+/** Réponses de la semaine, servies depuis le cache quand l'appareil est hors ligne. */
+export function getWeekAttendances(weekKey: string): Promise<Attendee[]> {
+  return readThrough(`attendances:${weekKey}`, () => fetchWeekAttendances(weekKey))
 }
 
 /**
@@ -313,7 +333,7 @@ export interface ParcoursTally {
 }
 
 /** Tous les votes d'une semaine, tous parcours confondus */
-export async function getWeekVotes(weekKey: string): Promise<WeekVote[]> {
+async function fetchWeekVotes(weekKey: string): Promise<WeekVote[]> {
   const { data, error } = await supabase
     .from('participations')
     .select('parcours_id,user_number,status')
@@ -327,6 +347,11 @@ export async function getWeekVotes(weekKey: string): Promise<WeekVote[]> {
     userNumber: row.user_number as number,
     status: row.status as 'yes' | 'no',
   }))
+}
+
+/** Votes de la semaine, servis depuis le cache quand l'appareil est hors ligne. */
+export function getWeekVotes(weekKey: string): Promise<WeekVote[]> {
+  return readThrough(`votes:${weekKey}`, () => fetchWeekVotes(weekKey))
 }
 
 /** Compteurs yes/no par parcours pour une semaine, présents uniquement */
@@ -410,7 +435,7 @@ export interface HistoryAttendance {
  * ferait 12 allers-retours, plus un par semaine pour les noms. Ici les lignes
  * arrivent ensemble, puis un seul `IN` ramène les profils.
  */
-export async function getHistoryAttendances(
+async function fetchHistoryAttendances(
   weekKeys: string[]
 ): Promise<HistoryAttendance[]> {
   if (weekKeys.length === 0) return []
@@ -457,6 +482,16 @@ export async function getHistoryAttendances(
   }))
 }
 
+/** Présences passées, servies depuis le cache quand l'appareil est hors ligne. */
+export function getHistoryAttendances(
+  weekKeys: string[]
+): Promise<HistoryAttendance[]> {
+  if (weekKeys.length === 0) return Promise.resolve([])
+  return readThrough(`history:attendances:${weekKeys.join(',')}`, () =>
+    fetchHistoryAttendances(weekKeys)
+  )
+}
+
 /** Un vote passé, rattaché à sa semaine. */
 export interface HistoryVote {
   weekKey: string
@@ -466,7 +501,7 @@ export interface HistoryVote {
 }
 
 /** Tous les votes des semaines demandées, en une requête. */
-export async function getHistoryVotes(
+async function fetchHistoryVotes(
   weekKeys: string[]
 ): Promise<HistoryVote[]> {
   if (weekKeys.length === 0) return []
@@ -491,10 +526,16 @@ export async function getHistoryVotes(
   }))
 }
 
+/** Votes passés, servis depuis le cache quand l'appareil est hors ligne. */
+export function getHistoryVotes(weekKeys: string[]): Promise<HistoryVote[]> {
+  if (weekKeys.length === 0) return Promise.resolve([])
+  return readThrough(`history:votes:${weekKeys.join(',')}`, () =>
+    fetchHistoryVotes(weekKeys)
+  )
+}
+
 /** Confirmations de parcours pour les semaines demandées. */
-export async function getWeeklyRuns(
-  weekKeys: string[]
-): Promise<WeeklyRun[]> {
+async function fetchWeeklyRuns(weekKeys: string[]): Promise<WeeklyRun[]> {
   if (weekKeys.length === 0) return []
 
   const { data, error } = await supabase
@@ -504,6 +545,12 @@ export async function getWeeklyRuns(
 
   if (error) throw error
   return (data || []) as WeeklyRun[]
+}
+
+/** Sorties déclarées, servies depuis le cache quand l'appareil est hors ligne. */
+export function getWeeklyRuns(weekKeys: string[]): Promise<WeeklyRun[]> {
+  if (weekKeys.length === 0) return Promise.resolve([])
+  return readThrough(`runs:${weekKeys.join(',')}`, () => fetchWeeklyRuns(weekKeys))
 }
 
 /**
@@ -581,7 +628,7 @@ export async function deleteWeeklyRun(params: {
  * Requête ciblée sur une seule ligne : le rappel de l'accueil ne vise qu'une
  * semaine et qu'une personne, inutile de charger les réponses du groupe.
  */
-export async function getWeeklyRunSkip(params: {
+async function fetchWeeklyRunSkip(params: {
   weekKey: string
   userNumber: number
 }): Promise<boolean> {
@@ -594,6 +641,16 @@ export async function getWeeklyRunSkip(params: {
 
   if (error) throw error
   return data != null
+}
+
+/** Réponse « je n'ai pas couru », servie depuis le cache hors ligne. */
+export function getWeeklyRunSkip(params: {
+  weekKey: string
+  userNumber: number
+}): Promise<boolean> {
+  return readThrough(`skip:${params.weekKey}:${params.userNumber}`, () =>
+    fetchWeeklyRunSkip(params)
+  )
 }
 
 /**

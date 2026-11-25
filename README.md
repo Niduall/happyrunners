@@ -12,7 +12,8 @@ Application PWA pour organiser les sorties running du mercredi midi avec les col
 - ✅ **Présence** : « Je viens » / « Pas aujourd'hui » par semaine
 - 🗳️ **Vote** : un parcours par personne et par semaine, égalité signalée
 - 🔐 **PIN** : 4 chiffres, optionnel, gérable depuis le menu du profil
-- 📱 **PWA** : installable iOS/Android, fonctionne hors ligne
+- 📱 **PWA** : installable iOS/Android ; la coquille et le dernier état de
+  l'accueil restent consultables hors ligne
 
 ## Stack
 

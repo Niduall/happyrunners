@@ -4,6 +4,7 @@ import { ArrowLeft, RefreshCw } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card, CardContent } from '../components/ui/Card'
 import { DeclareRunModal } from '../components/DeclareRunModal'
+import { OfflineBanner } from '../components/OfflineBanner'
 import { useAuth } from '../hooks/useAuth'
 import { HISTORY_WEEKS, useHistory, type RunChoice } from '../hooks/useHistory'
 import { cn } from '../lib/utils'
@@ -290,6 +291,9 @@ export function History() {
       </header>
 
       <main className="mx-auto max-w-3xl space-y-6 px-4 py-6">
+        {/* L'historique se lit hors ligne : il doit dire d'où viennent les chiffres. */}
+        <OfflineBanner />
+
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard
             label="Mes sorties"

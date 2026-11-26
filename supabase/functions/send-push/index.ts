@@ -46,6 +46,15 @@ const WEBHOOK_SECRET = (Deno.env.get('PUSH_WEBHOOK_SECRET') ?? '').trim()
 
 const REMINDER_TITLE = 'Run de demain'
 
+/**
+ * Le rappel est le seul texte utilisateur écrit en dur ici. Il reste en ASCII
+ * dans la source : ponctuation droite et accents échappés (`\u00e9`, `\u00e0`).
+ * La fonction est recopiée dans l'éditeur du dashboard Supabase ; un caractère
+ * non ASCII mal réencodé y arrivait vide sur l'écran verrouillé (apostrophe
+ * typographique, point médian). À l'exécution, le texte affiché reste bien
+ * « répondu » et « à 12h30 ».
+ */
+
 interface MessageRecord {
   id: string
   user_number: number
@@ -321,7 +330,7 @@ Deno.serve(async (request) => {
 
       const notification = JSON.stringify({
         title: REMINDER_TITLE,
-        body: `Tu n’as pas encore répondu pour ${frenchDate(week)} · 12h30. Dis-nous si tu viens !`,
+        body: `Tu n'as pas encore r\u00e9pondu pour ${frenchDate(week)} \u00e0 12h30. Dis-nous si tu viens !`,
         url: '/',
         tag: `run-reminder-${week}`,
       })
@@ -363,7 +372,7 @@ Deno.serve(async (request) => {
       rest<PreferenceRow[]>('notification_preferences?select=user_number,messages'),
     ])
 
-    const authorName = authorRows[0]?.first_name?.trim() || 'Quelqu’un'
+    const authorName = authorRows[0]?.first_name?.trim() || "Quelqu'un"
     const disabled = new Set(
       preferences.filter((row) => row.messages === false).map((row) => row.user_number)
     )

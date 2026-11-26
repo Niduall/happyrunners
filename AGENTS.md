@@ -576,6 +576,14 @@ Entier attribué par la base (1, 2, 3…), **jamais modifié**.
   (un tag par message), et ouvrir l'app depuis l'une d'elles appelle
   `registration.getNotifications()` pour fermer les autres. Sinon des
   notifications déjà lues restaient dans le centre.
+- **Le nettoyage ne dépend pas de `notificationclick`** : sur iPhone, WebKit
+  ne livre pas toujours cet événement (bug 268797) et `getNotifications()` y a
+  longtemps renvoyé une liste vide (bug 258922). `src/services/notificationCleanup.ts`
+  refait donc le travail **côté page** à l'ouverture, au retour au premier plan
+  (`visibilitychange`, `pageshow`) et sur le message `notifications-clicked`
+  envoyé par le worker. Ouvrir l'app vaut lecture du lot. Ne pas retirer cet
+  appel de `main.tsx` en le croyant redondant : c'est le seul chemin fiable sur
+  iPhone.
 - **Un abonnement par appareil** (`push_subscriptions`, endpoint unique) et
   **des préférences par personne** (`notification_preferences`). Une ligne de
   préférences absente vaut « tout activé ».
@@ -865,6 +873,8 @@ Fichiers à connaître (liste **non exhaustive** — `ls src/**/*.test.*` pour l
 | `src/services/pushDevice.test.ts` | marqueurs locaux : retrait explicite, profil abonné |
 | `src/services/pushConfigStore.test.ts` | configuration partagée avec le service worker, sans IndexedDB |
 | `src/services/pushSync.test.ts` | resynchronisation à l'ouverture, recréation d'un abonnement disparu |
+| `src/services/notificationCleanup.test.ts` | fermeture du lot côté page : ouverture, retour au premier plan, message du worker |
+| `src/services/pushHandler.test.ts` | clic sur une notification : fermeture du lot et message à la page |
 | `src/hooks/usePushNotifications.test.tsx` | états de l'écran, activation, préférences, resynchronisation |
 | `src/components/NotificationsModal.test.tsx` | catégories, états iPhone/navigateur, fermeture |
 | `src/hooks/useAuth.integration.test.tsx` | flux auth complet + partage d'état |
@@ -1035,6 +1045,12 @@ les scénarios tournent **uniquement sur la base de test** (`.env.test`).
     des lectures ; répondre, voter, déclarer ou envoyer un message hors ligne
     échoue et l'interface le dit. Ne pas transformer le cache en file d'attente
     sans traiter le conflit « dernière écriture gagne ».
+7z. **Sur iPhone, le nettoyage des notifications est fait par la page** —
+    `notificationclick` n'est pas toujours livré (WebKit 268797) et
+    `getNotifications()` du worker peut être vide (258922). `main.tsx` appelle
+    `startNotificationCleanup()` en production ; sans lui, les notifications
+    déjà lues restent dans le centre. Ne pas le supprimer en croyant que le
+    service worker suffit.
 8. **`npm run lint` + `npm test` + `npm run build` obligatoires** avant de présenter un changement
 
 ## Known Issues

@@ -13,11 +13,18 @@ interface NotificationClickEvent {
 
 type Listener = (event: NotificationClickEvent) => void
 
+interface WindowClientLike {
+  url: string
+  focus: () => Promise<void>
+  postMessage?: (message: unknown) => void
+  navigate?: (url: string) => Promise<unknown>
+}
+
 /**
  * Exécute `public/push-handler.js` avec un faux `self` de service worker.
  * Le fichier n'est pas un module : il s'enregistre au chargement.
  */
-function loadPushHandler() {
+function loadPushHandler(windows: WindowClientLike[] = []) {
   const listeners: Record<string, Listener> = {}
   const notifications: NotificationLike[] = [
     { close: vi.fn() },
@@ -28,7 +35,7 @@ function loadPushHandler() {
     showNotification: vi.fn(),
   }
   const clients = {
-    matchAll: vi.fn().mockResolvedValue([]),
+    matchAll: vi.fn().mockResolvedValue(windows),
     openWindow: vi.fn().mockResolvedValue(undefined),
   }
   const self = {
@@ -68,5 +75,30 @@ describe('push-handler — clic sur une notification', () => {
     for (const notification of notifications) {
       expect(notification.close).toHaveBeenCalled()
     }
+  })
+
+  it('demande aussi à la page ouverte de fermer le lot', async () => {
+    const page: WindowClientLike = {
+      url: 'https://happyrunners.test/messages',
+      focus: vi.fn().mockResolvedValue(undefined),
+      postMessage: vi.fn(),
+      navigate: vi.fn().mockResolvedValue(undefined),
+    }
+    const { listeners } = loadPushHandler([page])
+    let work: Promise<unknown> | undefined
+
+    const event: NotificationClickEvent = {
+      notification: { close: vi.fn(), data: { url: '/messages' } },
+      waitUntil: (promise) => {
+        work = promise
+      },
+    }
+
+    listeners.notificationclick(event)
+    await work
+
+    expect(page.postMessage).toHaveBeenCalledWith({
+      type: 'notifications-clicked',
+    })
   })
 })

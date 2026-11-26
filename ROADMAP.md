@@ -86,6 +86,12 @@ de l'historique. **Aucune écriture n'est rejouée** : répondre, voter, déclar
 ou envoyer un message hors ligne échoue comme avant, et l'interface le dit. Un
 instantané de plus de 30 jours est ignoré plutôt que présenté comme actuel.
 
+## Livré — Notifications qui restent dans le centre (26 novembre 2026)
+
+| Tâche | Pourquoi | Effort | État |
+|---|---|---|---|
+| **Nettoyage des notifications** | Cliquer sur une notification laissait les autres dans le centre, surtout sur iPhone. Le service worker ferme le lot quand `notificationclick` arrive, mais WebKit ne le livre pas toujours et `getNotifications()` peut y être vide. La page ferme désormais le lot à l'ouverture, au retour au premier plan et sur le message envoyé par le worker. | S | ✅ Livré |
+
 ## À faire ensuite
 
 ### Priorité 2 — confort et fiabilité
@@ -93,7 +99,6 @@ instantané de plus de 30 jours est ignoré plutôt que présenté comme actuel.
 | Idée | Détail | Effort |
 |---|---|---|
 | **Palette de réactions beaucoup plus large** | Aujourd'hui 5 emoji fixes (`like`, `love`, `laugh`, `run`, `fire`). Ouvrir un vrai choix, avec catégories et recherche si besoin. Deux contraintes à ne pas oublier : le `CHECK` de `message_reactions.reaction` doit être élargi par une migration (sinon l'insertion est refusée), et les pastilles doivent rester lisibles quand un message en accumule beaucoup. La clé primaire garde « une seule réaction par personne et par message ». | M |
-| **Notifications qui restent dans le centre** | Signalé le 18 novembre 2026 : cliquer sur une notification n'efface pas les autres. `public/push-handler.js` appelle pourtant `getNotifications()` puis `close()` sur chacune. À vérifier sur un vrai téléphone : worker encore ancien dans l'app installée (`skipWaiting` ne s'applique qu'après fermeture des onglets), notifications émises par une autre inscription de service worker, ou plateforme qui refuse la fermeture (iOS). Piste de repli : un `tag` commun à tout le groupe, ou un `tag` par conversation au lieu d'un par message. | S |
 | **Message épinglé** | Un message important (parcours du jour, consignes) reste en haut du fil. | S/M |
 | **Ligue et badges** | S'appuyer sur les sorties déclarées (une par personne et par mercredi) pour un classement et des badges. À cadrer : critères (régularité, km, D+, série), périodes, égalités. | M |
 | **Tracé des sorties « autre »** | Aujourd'hui le GPX joint ne garde que les chiffres : `weekly_runs` n'a pas de colonne `points`. Stocker le tracé ouvrirait la carte des sorties passées, au prix d'une migration et de quelques dizaines de Ko par sortie. À décider quand la carte servira vraiment. | M |

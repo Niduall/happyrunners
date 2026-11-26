@@ -202,6 +202,22 @@ self.addEventListener('pushsubscriptionchange', (event) => {
 })
 
 /**
+ * Demande à la page de fermer le lot elle aussi. Sur iPhone,
+ * `notificationclick` peut être livré alors que `getNotifications()` du worker
+ * ne voit pas les autres notifications : la page refait le nettoyage de son
+ * côté (`src/services/notificationCleanup.ts`).
+ */
+function askPageToClear(client) {
+  try {
+    if (client && typeof client.postMessage === 'function') {
+      client.postMessage({ type: 'notifications-clicked' })
+    }
+  } catch {
+    // Page fermée entre-temps : sans conséquence.
+  }
+}
+
+/**
  * Clic sur une notification : réutilise un onglet déjà ouvert sur la cible,
  * sinon en ouvre un. Sans ça, le clic peut laisser l'app sur l'accueil.
  */
@@ -227,7 +243,10 @@ self.addEventListener('notificationclick', (event) => {
       })
 
       const exact = clients.find((client) => client.url === target)
-      if (exact) return exact.focus()
+      if (exact) {
+        askPageToClear(exact)
+        return exact.focus()
+      }
 
       // Un autre onglet de l'app est déjà ouvert : on le réutilise plutôt
       // que d'en empiler un troisième.
@@ -236,11 +255,14 @@ self.addEventListener('notificationclick', (event) => {
       )
       if (sameApp) {
         await sameApp.focus()
+        askPageToClear(sameApp)
         if ('navigate' in sameApp) await sameApp.navigate(target)
         return undefined
       }
 
-      return self.clients.openWindow(target)
+      const opened = await self.clients.openWindow(target)
+      askPageToClear(opened)
+      return opened
     })()
   )
 })

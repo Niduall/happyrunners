@@ -49,6 +49,7 @@ toujours où continuer.
 | Carte d'un parcours vide | `getParcoursPoints`, `src/components/LazyMapView.tsx` |
 | Parcours impossible à modifier ou supprimer | `src/services/adminCode.ts`, `src/pages/ParcoursList.tsx` |
 | Rappel du mardi sans notification | `supabase/functions/send-push/index.ts` (`run_reminder`), job `pg_cron`, `push_subscriptions` |
+| Notifications déjà lues qui restent dans le centre | `src/services/notificationCleanup.ts`, `public/push-handler.js` |
 | Sauvegarde en échec | `backup.py`, `test_backup.py`, `.github/workflows/backup.yml` |
 | « Invalid API key » / 401 | `.env` (`VITE_SUPABASE_ANON_KEY`), dashboard Supabase |
 
